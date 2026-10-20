@@ -385,6 +385,7 @@ export interface AppSettings {
   document: string;
   email: string;
   phone: string;
+  website?: string;
   address: string;
   bankDetails?: {
     bankName: string;
@@ -417,6 +418,8 @@ export interface AppSettings {
     nfeSeries?: string;
     nfeNextNumber?: number;
     nfeEnvironment?: 'homologacao' | 'producao';
+    fiscalModuleEnabled?: boolean;
+    certificateExpiry?: string;
   };
   backup: {
     autoBackup: boolean;
@@ -444,6 +447,7 @@ export interface AppSettings {
     senderPassword?: string;
     smtpPassword?: string;
     templates?: Record<string, string>;
+    automations?: Record<string, boolean>;
   };
   documents: {
     printerMain: string;
@@ -458,6 +462,7 @@ export interface AppSettings {
     customFooter: boolean;
     barcode: boolean;
     authSeal: boolean;
+    documentStatuses?: Record<string, 'Ativo' | 'Inativo'>;
     printerMainConfig?: {
       quality: 'draft' | 'normal' | 'high';
       color: 'bw' | 'color';
@@ -471,6 +476,7 @@ export interface AppSettings {
   performance: {
     cacheSize: number; // in MB (simulated)
     dbOptimizationLastDate?: string;
+    dbFragmentation?: number;
     imageQuality: number; // 0-100
     autoCompression: boolean;
     lazyLoading: boolean;
@@ -481,6 +487,7 @@ export interface AppSettings {
     minifyAssets: boolean;
     cdn: boolean;
     dbPooling: boolean;
+    [key: string]: any;
   };
   // Data Security & Compliance
   dataSecurity?: {

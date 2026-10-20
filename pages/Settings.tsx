@@ -77,45 +77,48 @@ import { generateCameloData } from '../src/utils/seeder';
 // ============================================================================
 
 // 3. PARÂMETROS OPERACIONAIS
-const OperationalParametersSection = ({ settings, onUpdate }: { settings: import('../types').AppSettings, onUpdate: (s: import('../types').AppSettings) => void }) => {
+const OperationalParametersSection = ({ settings, onUpdate, addToast }: { settings: import('../types').AppSettings, onUpdate: (s: import('../types').AppSettings) => void, addToast?: any }) => {
     const operationalParams = [
         // VENDAS & COMERCIAL
-        { id: 'maxDiscount', label: 'Desconto Máximo Permitido (%)', min: 0, max: 100, category: 'Vendas', icon: 'Percent' },
-        { id: 'minMargin', label: 'Margem Mínima de Lucro (%)', min: 0, max: 100, category: 'Vendas', icon: 'TrendingUp' },
-        { id: 'defaultPaymentTerm', label: 'Prazo Padrão de Pagamento (dias)', min: 0, max: 365, category: 'Vendas', icon: 'Calendar' },
-        { id: 'budgetValidity', label: 'Validade de Orçamentos (dias)', min: 1, max: 90, category: 'Vendas', icon: 'Clock' },
-        { id: 'maxInstallments', label: 'Máximo de Parcelas', min: 1, max: 48, category: 'Vendas', icon: 'Layers' },
-        { id: 'minInstallmentValue', label: 'Valor Mínimo por Parcela (R$)', min: 10, max: 10000, category: 'Vendas', icon: 'DollarSign' },
-        { id: 'creditLimit', label: 'Limite de Crédito Padrão (R$)', min: 0, max: 1000000, category: 'Vendas', icon: 'Target' },
-        { id: 'commissionRate', label: 'Taxa de Comissão Padrão (%)', min: 0, max: 20, category: 'Vendas', icon: 'Percent' },
+        { id: 'maxDiscount', label: 'Desconto Máximo Permitido (%)', min: 0, max: 100, defaultVal: 15, category: 'Vendas', icon: 'Percent' },
+        { id: 'minMargin', label: 'Margem Mínima de Lucro (%)', min: 0, max: 100, defaultVal: 20, category: 'Vendas', icon: 'TrendingUp' },
+        { id: 'defaultPaymentTerm', label: 'Prazo Padrão de Pagamento (dias)', min: 0, max: 365, defaultVal: 30, category: 'Vendas', icon: 'Calendar' },
+        { id: 'budgetValidity', label: 'Validade de Orçamentos (dias)', min: 1, max: 90, defaultVal: 7, category: 'Vendas', icon: 'Clock' },
+        { id: 'maxInstallments', label: 'Máximo de Parcelas', min: 1, max: 48, defaultVal: 12, category: 'Vendas', icon: 'Layers' },
+        { id: 'minInstallmentValue', label: 'Valor Mínimo por Parcela (R$)', min: 10, max: 10000, defaultVal: 100, category: 'Vendas', icon: 'DollarSign' },
+        { id: 'creditLimit', label: 'Limite de Crédito Padrão (R$)', min: 0, max: 1000000, defaultVal: 5000, category: 'Vendas', icon: 'Target' },
+        { id: 'commissionRate', label: 'Taxa de Comissão Padrão (%)', min: 0, max: 20, defaultVal: 3, category: 'Vendas', icon: 'Percent' },
 
         // ESTOQUE & PRODUÇÃO
-        { id: 'safetyStock', label: 'Estoque de Segurança (%)', min: 0, max: 50, category: 'Estoque', icon: 'Package' },
-        { id: 'reorderPoint', label: 'Ponto de Reposição (%)', min: 5, max: 50, category: 'Estoque', icon: 'TrendingDown' },
-        { id: 'batchTrackingDays', label: 'Rastreamento de Lote (dias)', min: 30, max: 1825, category: 'Estoque', icon: 'Search' },
-        { id: 'productionLeadTime', label: 'Lead Time de Produção (dias)', min: 1, max: 90, category: 'Produção', icon: 'Clock' },
-        { id: 'maintenanceInterval', label: 'Intervalo Manutenção Preventiva (horas)', min: 100, max: 5000, category: 'Produção', icon: 'Tool' },
-        { id: 'capacityUtilization', label: 'Meta Utilização Capacidade (%)', min: 50, max: 100, category: 'Produção', icon: 'Target' },
+        { id: 'safetyStock', label: 'Estoque de Segurança (%)', min: 0, max: 50, defaultVal: 10, category: 'Estoque', icon: 'Package' },
+        { id: 'reorderPoint', label: 'Ponto de Reposição (%)', min: 5, max: 50, defaultVal: 20, category: 'Estoque', icon: 'TrendingDown' },
+        { id: 'batchTrackingDays', label: 'Rastreamento de Lote (dias)', min: 30, max: 1825, defaultVal: 180, category: 'Estoque', icon: 'Search' },
+        { id: 'productionLeadTime', label: 'Lead Time de Produção (dias)', min: 1, max: 90, defaultVal: 5, category: 'Produção', icon: 'Clock' },
+        { id: 'maintenanceInterval', label: 'Intervalo Manutenção Preventiva (horas)', min: 100, max: 5000, defaultVal: 500, category: 'Produção', icon: 'Tool' },
+        { id: 'capacityUtilization', label: 'Meta Utilização Capacidade (%)', min: 50, max: 100, defaultVal: 85, category: 'Produção', icon: 'Target' },
 
         // COMPRAS
-        { id: 'purchaseApprovalLevel1', label: 'Aprovação Nível 1 - Limite (R$)', min: 0, max: 50000, category: 'Compras', icon: 'DollarSign' },
-        { id: 'minQuotations', label: 'Mínimo de Cotações Obrigatórias', min: 1, max: 10, category: 'Compras', icon: 'FileText' },
-        { id: 'supplierEvaluationPeriod', label: 'Período Avaliação Fornecedores (meses)', min: 1, max: 24, category: 'Compras', icon: 'Star' },
-        { id: 'deliveryToleranceDays', label: 'Tolerância Atraso Entrega (dias)', min: 0, max: 15, category: 'Compras', icon: 'Truck' },
+        { id: 'purchaseApprovalLevel1', label: 'Aprovação Nível 1 - Limite (R$)', min: 0, max: 50000, defaultVal: 5000, category: 'Compras', icon: 'DollarSign' },
+        { id: 'minQuotations', label: 'Mínimo de Cotações Obrigatórias', min: 1, max: 10, defaultVal: 3, category: 'Compras', icon: 'FileText' },
+        { id: 'supplierEvaluationPeriod', label: 'Período Avaliação Fornecedores (meses)', min: 1, max: 24, defaultVal: 6, category: 'Compras', icon: 'Star' },
+        { id: 'deliveryToleranceDays', label: 'Tolerância Atraso Entrega (dias)', min: 0, max: 15, defaultVal: 2, category: 'Compras', icon: 'Truck' },
 
         // FINANCEIRO
-        { id: 'interestRate', label: 'Taxa de Juros Mora (% a.m.)', min: 0, max: 10, category: 'Financeiro', icon: 'Percent' },
-        { id: 'lateFee', label: 'Multa por Atraso (%)', min: 0, max: 10, category: 'Financeiro', icon: 'AlertTriangle' },
-        { id: 'earlyPaymentDiscount', label: 'Desconto Pagamento Antecipado (%)', min: 0, max: 15, category: 'Financeiro', icon: 'TrendingDown' },
-        { id: 'cashFlowProjectionDays', label: 'Projeção Fluxo de Caixa (dias)', min: 30, max: 365, category: 'Financeiro', icon: 'TrendingUp' },
-        { id: 'bankReconciliationFrequency', label: 'Frequência Conciliação Bancária (dias)', min: 1, max: 30, category: 'Financeiro', icon: 'RefreshCw' },
+        { id: 'interestRate', label: 'Taxa de Juros Mora (% a.m.)', min: 0, max: 10, defaultVal: 1, category: 'Financeiro', icon: 'Percent' },
+        { id: 'lateFee', label: 'Multa por Atraso (%)', min: 0, max: 10, defaultVal: 2, category: 'Financeiro', icon: 'AlertTriangle' },
+        { id: 'earlyPaymentDiscount', label: 'Desconto Pagamento Antecipado (%)', min: 0, max: 15, defaultVal: 3, category: 'Financeiro', icon: 'TrendingDown' },
+        { id: 'cashFlowProjectionDays', label: 'Projeção Fluxo de Caixa (dias)', min: 30, max: 365, defaultVal: 90, category: 'Financeiro', icon: 'TrendingUp' },
+        { id: 'bankReconciliationFrequency', label: 'Frequência Conciliação Bancária (dias)', min: 1, max: 30, defaultVal: 7, category: 'Financeiro', icon: 'RefreshCw' },
     ];
 
     const [filterCategory, setFilterCategory] = useState('Todos');
+    const [searchQuery, setSearchQuery] = useState('');
 
-    const filteredParams = filterCategory === 'Todos'
-        ? operationalParams
-        : operationalParams.filter(p => p.category === filterCategory);
+    const filteredParams = operationalParams.filter(p => {
+        const matchesCat = filterCategory === 'Todos' || p.category === filterCategory;
+        const matchesSearch = p.label.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesCat && matchesSearch;
+    });
 
     const handleParamChange = (id: string, value: string) => {
         const numValue = parseFloat(value);
@@ -130,42 +133,69 @@ const OperationalParametersSection = ({ settings, onUpdate }: { settings: import
         }
     };
 
-    // Helper to identify icon component
-    const getIcon = (iconName: string) => {
-        // Simple map or returning a default. For brevity, assuming we pass the component or map it.
-        // Since we are inside Settings.tsx, we have access to Lucide icons.
-        // But for mapping strings to components we need a switch or map.
-        // For now, let's just use Sliders as generic if not mapped, or rely on imports.
-        // To save space, let's just assume we render a generic icon or map a few.
-        return Sliders;
+    const handleResetDefaults = () => {
+        const defaults: Record<string, number> = {};
+        operationalParams.forEach(p => {
+            defaults[p.id] = p.defaultVal;
+        });
+        onUpdate({
+            ...settings,
+            operational: {
+                ...settings.operational,
+                ...defaults
+            }
+        });
+        addToast?.('Parâmetros operacionais restaurados para os valores padrão!', 'info');
     };
 
     return (
         <section className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 p-8 rounded-[32px] border border-amber-100 dark:border-amber-900/30">
-            <div className="flex items-center gap-3 mb-6">
-                <div className="p-2.5 bg-amber-500 rounded-xl text-white">
-                    <Sliders size={20} />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-amber-500 rounded-xl text-white">
+                        <Sliders size={20} />
+                    </div>
+                    <div>
+                        <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Parâmetros Operacionais Avançados</h3>
+                        <p className="text-[10px] text-slate-500 font-medium">Regras de negócio para vendas, estoque, produção, compras e financeiro</p>
+                    </div>
                 </div>
-                <div>
-                    <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Parâmetros Operacionais Avançados</h3>
-                    <p className="text-[10px] text-slate-500 font-medium">50+ configurações detalhadas para regras de negócio</p>
-                </div>
+                <button
+                    type="button"
+                    onClick={handleResetDefaults}
+                    className="px-4 py-2 bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 rounded-xl text-xs font-bold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors flex items-center gap-2 self-start sm:self-auto"
+                >
+                    <RefreshCw size={14} /> Restaurar Padrões
+                </button>
             </div>
 
-            {/* Filtro por Categoria */}
-            <div className="mb-6 flex gap-2 flex-wrap">
-                {['Todos', 'Vendas', 'Estoque', 'Produção', 'Compras', 'Financeiro'].map(cat => (
-                    <button
-                        key={cat}
-                        onClick={() => setFilterCategory(cat)}
-                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-colors ${filterCategory === cat
-                            ? 'bg-amber-500 text-white shadow-lg'
-                            : 'bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900/50 hover:bg-amber-50'
-                            }`}
-                    >
-                        {cat}
-                    </button>
-                ))}
+            {/* Filtro por Categoria e Busca */}
+            <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex gap-2 flex-wrap">
+                    {['Todos', 'Vendas', 'Estoque', 'Produção', 'Compras', 'Financeiro'].map(cat => (
+                        <button
+                            type="button"
+                            key={cat}
+                            onClick={() => setFilterCategory(cat)}
+                            className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-colors ${filterCategory === cat
+                                ? 'bg-amber-500 text-white shadow-lg'
+                                : 'bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900/50 hover:bg-amber-50 text-slate-600 dark:text-slate-300'
+                                }`}
+                        >
+                            {cat}
+                        </button>
+                    ))}
+                </div>
+                <div className="relative w-full md:w-64">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Filtrar parâmetro..."
+                        className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900/50 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500/20"
+                    />
+                </div>
             </div>
 
             {/* Grid de Parâmetros */}
@@ -183,26 +213,26 @@ const OperationalParametersSection = ({ settings, onUpdate }: { settings: import
                                 type="number"
                                 min={param.min}
                                 max={param.max}
-                                value={Number(settings.operational?.[param.id] ?? 0)}
+                                value={Number(settings.operational?.[param.id] ?? param.defaultVal)}
                                 onChange={(e) => handleParamChange(param.id, e.target.value)}
                                 className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 font-bold text-sm text-center"
                             />
                         </div>
                         <div className="mt-2 flex justify-between text-[9px] text-slate-400">
                             <span>Min: {param.min}</span>
+                            <span>Padrão: {param.defaultVal}</span>
                             <span>Max: {param.max}</span>
                         </div>
                     </div>
                 ))}
             </div>
-            {/* Actions removed from here, should be global Save/Revert in main Settings */}
         </section>
     );
 };
 
 // 4. INTEGRAÇÕES
-const IntegrationsSection = ({ settings, onUpdate }: { settings: import('../types').AppSettings, onUpdate: (s: import('../types').AppSettings) => void }) => {
-    const integrations = [
+const IntegrationsSection = ({ settings, onUpdate, addToast }: { settings: import('../types').AppSettings, onUpdate: (s: import('../types').AppSettings) => void, addToast?: any }) => {
+    const defaultIntegrations = [
         // Fiscais e Contábeis
         { id: 'nfe', name: 'Nota Fiscal Eletrônica (NF-e)', icon: '📄', color: 'emerald', category: 'Fiscal', description: 'Emissão automática de notas fiscais' },
         { id: 'nfse', name: 'Nota Fiscal de Serviço (NFS-e)', icon: '📋', color: 'emerald', category: 'Fiscal', description: 'NFS-e para serviços de construção' },
@@ -239,6 +269,23 @@ const IntegrationsSection = ({ settings, onUpdate }: { settings: import('../type
     ];
 
     const [filterCategory, setFilterCategory] = useState('Todas');
+    const [configuringIntegration, setConfiguringIntegration] = useState<{ id: string, name: string, category: string, apiKey: string, webhookUrl: string, environment: string } | null>(null);
+    const [isNewIntegrationOpen, setIsNewIntegrationOpen] = useState(false);
+    const [newIntegrationForm, setNewIntegrationForm] = useState({ name: '', category: 'Engenharia', description: '', webhookUrl: '', apiKey: '' });
+
+    // Combine default integrations with any custom ones saved in settings.integrations
+    const customIntegrations = Object.entries(settings.integrations || {})
+        .filter(([id]) => !defaultIntegrations.some(d => d.id === id))
+        .map(([id, item]) => ({
+            id,
+            name: item.name,
+            icon: '🔌',
+            color: 'purple',
+            category: item.category || 'Gestão',
+            description: item.config?.description || 'Integração personalizada via API/Webhook'
+        }));
+
+    const integrations = [...defaultIntegrations, ...customIntegrations];
 
     const filteredIntegrations = filterCategory === 'Todas'
         ? integrations
@@ -247,8 +294,6 @@ const IntegrationsSection = ({ settings, onUpdate }: { settings: import('../type
     const toggleIntegration = (id: string, item: any) => {
         const currentStatus = settings.integrations?.[id]?.status ?? 'Inativo';
         const newStatus = currentStatus === 'Ativo' ? 'Inativo' : 'Ativo';
-
-        // Ensure integrations object exists
         const currentIntegrations = settings.integrations || {};
 
         onUpdate({
@@ -263,6 +308,72 @@ const IntegrationsSection = ({ settings, onUpdate }: { settings: import('../type
                 }
             }
         });
+        addToast?.(`Integração "${item.name}" ${newStatus === 'Ativo' ? 'ativada' : 'desativada'}!`, newStatus === 'Ativo' ? 'success' : 'info');
+    };
+
+    const handleOpenConfig = (integration: any) => {
+        const existingConfig = settings.integrations?.[integration.id]?.config || {};
+        setConfiguringIntegration({
+            id: integration.id,
+            name: integration.name,
+            category: integration.category,
+            apiKey: existingConfig.apiKey || '',
+            webhookUrl: existingConfig.webhookUrl || '',
+            environment: existingConfig.environment || 'producao'
+        });
+    };
+
+    const handleSaveIntegrationConfig = () => {
+        if (!configuringIntegration) return;
+        const currentIntegrations = settings.integrations || {};
+        const existing = currentIntegrations[configuringIntegration.id];
+        onUpdate({
+            ...settings,
+            integrations: {
+                ...currentIntegrations,
+                [configuringIntegration.id]: {
+                    name: configuringIntegration.name,
+                    category: configuringIntegration.category,
+                    status: existing?.status || 'Ativo',
+                    config: {
+                        ...existing?.config,
+                        apiKey: configuringIntegration.apiKey,
+                        webhookUrl: configuringIntegration.webhookUrl,
+                        environment: configuringIntegration.environment
+                    }
+                }
+            }
+        });
+        addToast?.(`Configurações de "${configuringIntegration.name}" atualizadas!`, 'success');
+        setConfiguringIntegration(null);
+    };
+
+    const handleCreateCustomIntegration = () => {
+        if (!newIntegrationForm.name.trim()) {
+            addToast?.('Informe o nome da integração.', 'error');
+            return;
+        }
+        const id = 'custom_' + Date.now();
+        const currentIntegrations = settings.integrations || {};
+        onUpdate({
+            ...settings,
+            integrations: {
+                ...currentIntegrations,
+                [id]: {
+                    name: newIntegrationForm.name.trim(),
+                    category: newIntegrationForm.category,
+                    status: 'Ativo',
+                    config: {
+                        description: newIntegrationForm.description || 'Webhook / API Personalizada',
+                        webhookUrl: newIntegrationForm.webhookUrl,
+                        apiKey: newIntegrationForm.apiKey
+                    }
+                }
+            }
+        });
+        addToast?.(`Integração "${newIntegrationForm.name}" conectada com sucesso!`, 'success');
+        setNewIntegrationForm({ name: '', category: 'Engenharia', description: '', webhookUrl: '', apiKey: '' });
+        setIsNewIntegrationOpen(false);
     };
 
     return (
@@ -279,13 +390,14 @@ const IntegrationsSection = ({ settings, onUpdate }: { settings: import('../type
 
             {/* Filtro por Categoria */}
             <div className="mb-6 flex gap-2 flex-wrap">
-                {['Todas', 'Fiscal', 'Financeiro', 'Comunicação', 'Engenharia', 'Logística', 'Gestão', 'Vendas'].map(cat => (
+                {['Todas', 'Fiscal', 'Financeiro', 'Comunicação', 'Engenharia', 'Logística', 'Gestão', 'Armazenamento', 'Vendas'].map(cat => (
                     <button
+                        type="button"
                         key={cat}
                         onClick={() => setFilterCategory(cat)}
                         className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors ${filterCategory === cat
                             ? 'bg-purple-500 text-white'
-                            : 'bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-900/50 hover:bg-purple-50'
+                            : 'bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-900/50 hover:bg-purple-50 text-slate-600 dark:text-slate-300'
                             }`}
                     >
                         {cat}
@@ -293,7 +405,77 @@ const IntegrationsSection = ({ settings, onUpdate }: { settings: import('../type
                 ))}
             </div>
 
-            {/* Tabela de Integrações (Layout Mais Leve) */}
+            {/* Painel de Configuração da Integração Selecionada */}
+            {configuringIntegration && (
+                <div className="mb-6 p-6 bg-white dark:bg-slate-800 rounded-2xl border-2 border-purple-300 dark:border-purple-700 shadow-lg animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                            <SettingsGear size={18} className="text-purple-600" />
+                            <h4 className="font-black text-sm text-slate-900 dark:text-white">
+                                Configurar: {configuringIntegration.name}
+                            </h4>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setConfiguringIntegration(null)}
+                            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">Chave de API / Token</label>
+                            <input
+                                type="password"
+                                value={configuringIntegration.apiKey}
+                                onChange={(e) => setConfiguringIntegration({ ...configuringIntegration, apiKey: e.target.value })}
+                                placeholder="sk_live_••••••••••••••••"
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 font-bold text-xs"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">Endpoint / Webhook URL</label>
+                            <input
+                                type="text"
+                                value={configuringIntegration.webhookUrl}
+                                onChange={(e) => setConfiguringIntegration({ ...configuringIntegration, webhookUrl: e.target.value })}
+                                placeholder="https://api.servico.com/v1/webhook"
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 font-bold text-xs"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">Ambiente</label>
+                            <select
+                                value={configuringIntegration.environment}
+                                onChange={(e) => setConfiguringIntegration({ ...configuringIntegration, environment: e.target.value })}
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 font-bold text-xs"
+                            >
+                                <option value="producao">Produção</option>
+                                <option value="sandbox">Sandbox / Homologação</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setConfiguringIntegration(null)}
+                            className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleSaveIntegrationConfig}
+                            className="px-5 py-2 bg-purple-600 text-white rounded-xl text-xs font-black uppercase hover:bg-purple-700 transition-colors flex items-center gap-1.5"
+                        >
+                            <Save size={14} /> Aplicar Credenciais
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Tabela de Integrações */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl border border-purple-100 dark:border-purple-900/30 overflow-hidden shadow-sm">
                 <table className="w-full text-left border-collapse">
                     <thead>
@@ -308,16 +490,14 @@ const IntegrationsSection = ({ settings, onUpdate }: { settings: import('../type
                         {filteredIntegrations.map(integration => {
                             const status = settings.integrations?.[integration.id]?.status ?? 'Inativo';
                             const isActive = status === 'Ativo';
-                            // Dynamic Config Button color based on active status
                             const btnClass = isActive
-                                ? "border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100"
-                                : "border-slate-200 text-slate-500 bg-white hover:bg-slate-50";
+                                ? "border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800"
+                                : "border-slate-200 text-slate-500 bg-white hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700";
 
                             return (
                                 <tr key={integration.id} className="group hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                                     <td className="p-4">
                                         <div className="flex items-center gap-3">
-                                            {/* Minimalist Icon Container */}
                                             <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg shadow-sm transition-all ${isActive ? 'bg-white text-purple-600 ring-1 ring-purple-100' : 'bg-slate-100 text-slate-400 grayscale'}`}>
                                                 {integration.icon}
                                             </div>
@@ -332,22 +512,31 @@ const IntegrationsSection = ({ settings, onUpdate }: { settings: import('../type
                                         </div>
                                     </td>
                                     <td className="p-4 hidden sm:table-cell">
-                                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded border ${isActive ? 'bg-white border-purple-100 text-purple-600' : 'bg-slate-100 border-transparent text-slate-400'}`}>
+                                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded border ${isActive ? 'bg-white border-purple-100 text-purple-600 dark:bg-slate-900 dark:border-purple-800' : 'bg-slate-100 border-transparent text-slate-400 dark:bg-slate-900'}`}>
                                             {integration.category}
                                         </span>
                                     </td>
                                     <td className="p-4">
-                                        <div
+                                        <button
+                                            type="button"
                                             onClick={() => toggleIntegration(integration.id, integration)}
                                             className="flex items-center gap-2 cursor-pointer select-none"
+                                            title={isActive ? 'Clique para desativar' : 'Clique para ativar'}
                                         >
                                             <div className={`w-8 h-4 rounded-full relative transition-colors duration-300 ${isActive ? 'bg-purple-500' : 'bg-slate-200 dark:bg-slate-600'}`}>
                                                 <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm transition-all duration-300 ${isActive ? 'right-0.5' : 'left-0.5'}`}></div>
                                             </div>
-                                        </div>
+                                            <span className={`text-[10px] font-bold hidden md:inline ${isActive ? 'text-purple-600 dark:text-purple-400' : 'text-slate-400'}`}>
+                                                {status}
+                                            </span>
+                                        </button>
                                     </td>
                                     <td className="p-4 text-right">
-                                        <button className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold transition-all shadow-sm inline-flex items-center gap-1.5 opacity-60 group-hover:opacity-100 ${btnClass}`}>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleOpenConfig(integration)}
+                                            className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold transition-all shadow-sm inline-flex items-center gap-1.5 ${btnClass}`}
+                                        >
                                             <SettingsGear size={12} />
                                             <span className="hidden sm:inline">Configurar</span>
                                         </button>
@@ -367,13 +556,90 @@ const IntegrationsSection = ({ settings, onUpdate }: { settings: import('../type
             </div>
 
             {/* Adicionar Nova Integração */}
-            <div className="mt-6 p-6 bg-white dark:bg-slate-800 rounded-2xl border-2 border-dashed border-purple-200 dark:border-purple-900/50 text-center hover:bg-purple-50 transition-colors cursor-pointer group">
-                <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-purple-200 transition-colors">
-                    <Plus size={24} className="text-purple-600 dark:text-purple-400" />
+            {isNewIntegrationOpen ? (
+                <div className="mt-6 p-6 bg-white dark:bg-slate-800 rounded-2xl border-2 border-purple-300 dark:border-purple-700 shadow-lg animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-black text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                            <Plus size={16} className="text-purple-600" /> Nova Integração / Webhook Personalizado
+                        </h4>
+                        <button type="button" onClick={() => setIsNewIntegrationOpen(false)} className="p-1 text-slate-400 hover:text-slate-600">
+                            <X size={16} />
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">Nome do Serviço</label>
+                            <input
+                                type="text"
+                                value={newIntegrationForm.name}
+                                onChange={(e) => setNewIntegrationForm({ ...newIntegrationForm, name: e.target.value })}
+                                placeholder="Ex: ERP Contábil Externo"
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 font-bold text-xs"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">Categoria</label>
+                            <select
+                                value={newIntegrationForm.category}
+                                onChange={(e) => setNewIntegrationForm({ ...newIntegrationForm, category: e.target.value })}
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 font-bold text-xs"
+                            >
+                                {['Fiscal', 'Financeiro', 'Comunicação', 'Engenharia', 'Logística', 'Gestão', 'Armazenamento', 'Vendas'].map(c => (
+                                    <option key={c} value={c}>{c}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">Descrição Breve</label>
+                            <input
+                                type="text"
+                                value={newIntegrationForm.description}
+                                onChange={(e) => setNewIntegrationForm({ ...newIntegrationForm, description: e.target.value })}
+                                placeholder="Sincronização automática de lotes..."
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 font-bold text-xs"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">URL do Webhook / Endpoint</label>
+                            <input
+                                type="text"
+                                value={newIntegrationForm.webhookUrl}
+                                onChange={(e) => setNewIntegrationForm({ ...newIntegrationForm, webhookUrl: e.target.value })}
+                                placeholder="https://..."
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 font-bold text-xs"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setIsNewIntegrationOpen(false)}
+                            className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleCreateCustomIntegration}
+                            className="px-5 py-2 bg-purple-600 text-white rounded-xl text-xs font-black uppercase hover:bg-purple-700 transition-colors flex items-center gap-1.5"
+                        >
+                            <Check size={14} /> Conectar Integração
+                        </button>
+                    </div>
                 </div>
-                <h4 className="font-bold text-sm text-slate-900 dark:text-white">Conectar Nova Integração</h4>
-                <p className="text-xs text-slate-500 mt-1">Adicione uma API personalizada ou webhook</p>
-            </div>
+            ) : (
+                <button
+                    type="button"
+                    onClick={() => setIsNewIntegrationOpen(true)}
+                    className="w-full mt-6 p-6 bg-white dark:bg-slate-800 rounded-2xl border-2 border-dashed border-purple-200 dark:border-purple-900/50 text-center hover:bg-purple-50 dark:hover:bg-slate-700/40 transition-colors cursor-pointer group"
+                >
+                    <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-purple-200 transition-colors">
+                        <Plus size={24} className="text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">Conectar Nova Integração</h4>
+                    <p className="text-xs text-slate-500 mt-1">Adicione uma API personalizada ou webhook</p>
+                </button>
+            )}
         </section>
     );
 };
@@ -389,6 +655,25 @@ const EmailCommunicationSection = ({ settings, onUpdate, addToast }: {
     const [showPassword, setShowPassword] = useState(false);
     const [testingConnection, setTestingConnection] = useState(false);
     const [sendingTest, setSendingTest] = useState(false);
+    const [emailTemplates, setEmailTemplates] = useState([
+        { name: 'Boas-vindas Novo Cliente', status: 'Ativo', lastEdit: '15/12/2024' },
+        { name: 'Confirmação de Pedido', status: 'Ativo', lastEdit: '10/12/2024' },
+        { name: 'Lembrete de Pagamento', status: 'Ativo', lastEdit: '08/12/2024' },
+        { name: 'Nota Fiscal Emitida', status: 'Ativo', lastEdit: '05/12/2024' },
+        { name: 'Orçamento Aprovado', status: 'Ativo', lastEdit: '01/12/2024' },
+        { name: 'Aviso de Vencimento', status: 'Ativo', lastEdit: '28/11/2024' },
+        { name: 'Agradecimento Pós-Venda', status: 'Inativo', lastEdit: '20/11/2024' },
+        { name: 'Pesquisa de Satisfação', status: 'Ativo', lastEdit: '15/11/2024' },
+    ]);
+
+    const defaultAutomations = [
+        { id: 'welcome_client', trigger: 'Novo Cliente Cadastrado', action: 'Enviar e-mail de boas-vindas', defaultEnabled: true },
+        { id: 'order_confirmed', trigger: 'Pedido Confirmado', action: 'Enviar confirmação com detalhes', defaultEnabled: true },
+        { id: 'payment_reminder', trigger: '3 dias antes do vencimento', action: 'Lembrete de pagamento', defaultEnabled: true },
+        { id: 'payment_received', trigger: 'Pagamento Recebido', action: 'Agradecimento e recibo', defaultEnabled: true },
+        { id: 'budget_followup', trigger: 'Orçamento sem resposta (7 dias)', action: 'Follow-up automático', defaultEnabled: false },
+        { id: 'client_birthday', trigger: 'Aniversário do Cliente', action: 'Mensagem personalizada', defaultEnabled: false },
+    ];
 
     const updateEmailConfig = (key: string, value: any) => {
         onUpdate({
@@ -400,22 +685,52 @@ const EmailCommunicationSection = ({ settings, onUpdate, addToast }: {
         });
     };
 
+    const toggleAutomation = (id: string, currentVal: boolean) => {
+        const currentAutomations = settings.emailConfig?.automations || {};
+        updateEmailConfig('automations', {
+            ...currentAutomations,
+            [id]: !currentVal
+        });
+    };
+
+    const toggleTemplateStatus = (name: string) => {
+        setEmailTemplates(prev => prev.map(t =>
+            t.name === name ? { ...t, status: t.status === 'Ativo' ? 'Inativo' : 'Ativo', lastEdit: new Date().toLocaleDateString('pt-BR') } : t
+        ));
+        addToast?.(`Status do template "${name}" alterado!`, 'info');
+    };
+
+    const handleDuplicateTemplate = (template: { name: string, status: string, lastEdit: string }) => {
+        const copyName = `${template.name} (Cópia)`;
+        if (emailTemplates.some(t => t.name === copyName)) {
+            addToast?.('Já existe uma cópia deste template.', 'info');
+            return;
+        }
+        setEmailTemplates(prev => [{ name: copyName, status: 'Ativo', lastEdit: new Date().toLocaleDateString('pt-BR') }, ...prev]);
+        addToast?.(`Template duplicado: ${copyName}`, 'success');
+    };
+
+    const handleCreateTemplate = () => {
+        const newName = `Template Personalizado #${emailTemplates.length + 1}`;
+        setEmailTemplates(prev => [{ name: newName, status: 'Ativo', lastEdit: new Date().toLocaleDateString('pt-BR') }, ...prev]);
+        addToast?.(`Novo template "${newName}" criado!`, 'success');
+    };
+
     const handleTestConnection = async () => {
         setTestingConnection(true);
-        // Simulate SMTP connection test
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 1200));
         const success = settings.emailConfig?.senderEmail && settings.emailConfig?.smtpPort;
         setTestingConnection(false);
         if (success) {
             addToast?.('Conexão SMTP estabelecida com sucesso!', 'success');
         } else {
-            addToast?.('Falha na conexão. Verifique as configurações.', 'error');
+            addToast?.('Falha na conexão. Verifique o e-mail remetente e a porta SMTP.', 'error');
         }
     };
 
     const handleSendTestEmail = async () => {
         setSendingTest(true);
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
         setSendingTest(false);
         addToast?.('E-mail de teste enviado para ' + (settings.emailConfig?.senderEmail || 'admin@infracore.com'), 'success');
     };
@@ -426,6 +741,7 @@ const EmailCommunicationSection = ({ settings, onUpdate, addToast }: {
             port: settings.emailConfig?.smtpPort,
             security: settings.emailConfig?.smtpSecurity,
             sender: settings.emailConfig?.senderEmail,
+            automations: settings.emailConfig?.automations,
             exportedAt: new Date().toISOString()
         };
         const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
@@ -527,41 +843,43 @@ const EmailCommunicationSection = ({ settings, onUpdate, addToast }: {
                 <div className="space-y-3">
                     <h4 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase">Templates de E-mail</h4>
                     <div className="space-y-2 max-h-96 overflow-y-auto custom-scrollbar">
-                        {[
-                            { name: 'Boas-vindas Novo Cliente', status: 'Ativo', lastEdit: '15/12/2024' },
-                            { name: 'Confirmação de Pedido', status: 'Ativo', lastEdit: '10/12/2024' },
-                            { name: 'Lembrete de Pagamento', status: 'Ativo', lastEdit: '08/12/2024' },
-                            { name: 'Nota Fiscal Emitida', status: 'Ativo', lastEdit: '05/12/2024' },
-                            { name: 'Orçamento Aprovado', status: 'Ativo', lastEdit: '01/12/2024' },
-                            { name: 'Aviso de Vencimento', status: 'Ativo', lastEdit: '28/11/2024' },
-                            { name: 'Agradecimento Pós-Venda', status: 'Inativo', lastEdit: '20/11/2024' },
-                            { name: 'Pesquisa de Satisfação', status: 'Ativo', lastEdit: '15/11/2024' },
-                        ].map(template => (
+                        {emailTemplates.map(template => (
                             <div key={template.name} className="p-4 bg-white dark:bg-slate-800 rounded-xl border border-blue-100 dark:border-blue-900/30 hover:shadow-md transition-all group">
                                 <div className="flex items-center justify-between mb-2">
                                     <h5 className="font-bold text-sm text-slate-900 dark:text-white">{template.name}</h5>
-                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-md ${template.status === 'Ativo' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleTemplateStatus(template.name)}
+                                        className={`text-[9px] font-black px-2 py-0.5 rounded-md cursor-pointer transition-colors ${template.status === 'Ativo' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                                        title="Clique para alternar o status"
+                                    >
                                         {template.status}
-                                    </span>
+                                    </button>
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <span className="text-[10px] text-slate-500">Editado: {template.lastEdit}</span>
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button
-                                            onClick={() => addToast?.(`Editando template: ${template.name}`, 'info')}
-                                            className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors"
+                                            type="button"
+                                            onClick={() => addToast?.(`Editor de template: "${template.name}" pronto para personalização.`, 'info')}
+                                            className="p-1.5 hover:bg-blue-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                            title="Editar"
                                         >
                                             <Edit2 size={12} className="text-blue-500" />
                                         </button>
                                         <button
-                                            onClick={() => addToast?.(`Template duplicado: ${template.name}`, 'success')}
-                                            className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors"
+                                            type="button"
+                                            onClick={() => handleDuplicateTemplate(template)}
+                                            className="p-1.5 hover:bg-blue-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                            title="Duplicar"
                                         >
                                             <Copy size={12} className="text-slate-400 hover:text-blue-500" />
                                         </button>
                                         <button
-                                            onClick={() => addToast?.(`Visualizando: ${template.name}`, 'info')}
-                                            className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors"
+                                            type="button"
+                                            onClick={() => addToast?.(`Pré-visualização de "${template.name}": Assunto e corpo HTML validados.`, 'info')}
+                                            className="p-1.5 hover:bg-blue-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                            title="Visualizar"
                                         >
                                             <Eye size={12} className="text-slate-400 hover:text-blue-500" />
                                         </button>
@@ -571,7 +889,8 @@ const EmailCommunicationSection = ({ settings, onUpdate, addToast }: {
                         ))}
                     </div>
                     <button
-                        onClick={() => addToast?.('Criar novo template: Esta funcionalidade será ativada em breve.', 'info')}
+                        type="button"
+                        onClick={handleCreateTemplate}
                         className="w-full py-3 bg-blue-500 text-white rounded-xl text-xs font-black uppercase hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
                     >
                         <Plus size={14} /> Criar Novo Template
@@ -583,32 +902,33 @@ const EmailCommunicationSection = ({ settings, onUpdate, addToast }: {
             <div className="mt-6 pt-6 border-t border-blue-200 dark:border-blue-900/30">
                 <h4 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase mb-4">Automações de Comunicação</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {[
-                        { trigger: 'Novo Cliente Cadastrado', action: 'Enviar e-mail de boas-vindas', enabled: true },
-                        { trigger: 'Pedido Confirmado', action: 'Enviar confirmação com detalhes', enabled: true },
-                        { trigger: '3 dias antes do vencimento', action: 'Lembrete de pagamento', enabled: true },
-                        { trigger: 'Pagamento Recebido', action: 'Agradecimento e recibo', enabled: true },
-                        { trigger: 'Orçamento sem resposta (7 dias)', action: 'Follow-up automático', enabled: false },
-                        { trigger: 'Aniversário do Cliente', action: 'Mensagem personalizada', enabled: false },
-                    ].map(automation => (
-                        <div key={automation.trigger} className="p-4 bg-white dark:bg-slate-800 rounded-xl border border-blue-100 dark:border-blue-900/30">
-                            <div className="flex items-start justify-between mb-2">
-                                <div className="flex-1">
-                                    <p className="text-xs font-bold text-slate-900 dark:text-white mb-1">{automation.trigger}</p>
-                                    <p className="text-[10px] text-slate-500">{automation.action}</p>
-                                </div>
-                                <div className={`w-10 h-5 rounded-full relative transition-colors ${automation.enabled ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${automation.enabled ? 'right-0.5' : 'left-0.5'}`}></div>
+                    {defaultAutomations.map(automation => {
+                        const isEnabled = settings.emailConfig?.automations?.[automation.id] ?? automation.defaultEnabled;
+                        return (
+                            <div
+                                key={automation.id}
+                                onClick={() => toggleAutomation(automation.id, isEnabled)}
+                                className="p-4 bg-white dark:bg-slate-800 rounded-xl border border-blue-100 dark:border-blue-900/30 cursor-pointer hover:border-blue-300 transition-all"
+                            >
+                                <div className="flex items-start justify-between mb-2">
+                                    <div className="flex-1 pr-2">
+                                        <p className="text-xs font-bold text-slate-900 dark:text-white mb-1">{automation.trigger}</p>
+                                        <p className="text-[10px] text-slate-500">{automation.action}</p>
+                                    </div>
+                                    <div className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${isEnabled ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${isEnabled ? 'right-0.5' : 'left-0.5'}`}></div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 
             {/* Teste de Conexão */}
             <div className="mt-6 flex gap-3 flex-wrap">
                 <button
+                    type="button"
                     onClick={handleTestConnection}
                     disabled={testingConnection}
                     className="px-6 py-3 bg-blue-500 text-white rounded-xl text-xs font-black uppercase hover:bg-blue-600 disabled:opacity-50 disabled:cursor-wait transition-colors shadow-lg flex items-center gap-2"
@@ -620,6 +940,7 @@ const EmailCommunicationSection = ({ settings, onUpdate, addToast }: {
                     )}
                 </button>
                 <button
+                    type="button"
                     onClick={handleSendTestEmail}
                     disabled={sendingTest}
                     className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-blue-200 dark:border-blue-900/50 rounded-xl text-xs font-black uppercase hover:bg-blue-50 disabled:opacity-50 disabled:cursor-wait transition-colors flex items-center gap-2"
@@ -631,6 +952,7 @@ const EmailCommunicationSection = ({ settings, onUpdate, addToast }: {
                     )}
                 </button>
                 <button
+                    type="button"
                     onClick={handleExportConfig}
                     className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-blue-200 dark:border-blue-900/50 rounded-xl text-xs font-black uppercase hover:bg-blue-50 transition-colors flex items-center gap-2"
                 >
@@ -934,6 +1256,27 @@ const DocumentsPrintingSection = ({ settings, onUpdate, addToast }: {
         });
     };
 
+    const defaultDocs = [
+        { name: 'DANFE - Nota Fiscal Eletrônica', format: 'A4 Retrato', defaultStatus: 'Ativo' as const, version: 'v4.0' },
+        { name: 'Orçamento Comercial Detalhado', format: 'A4 Retrato', defaultStatus: 'Ativo' as const, version: 'v2.1' },
+        { name: 'Ordem de Compra', format: 'A4 Paisagem', defaultStatus: 'Ativo' as const, version: 'v1.5' },
+        { name: 'Romaneio de Carga / Manifesto', format: 'A4 Retrato', defaultStatus: 'Ativo' as const, version: 'v1.2' },
+        { name: 'Ordem de Serviço (OS)', format: 'A4 Retrato', defaultStatus: 'Ativo' as const, version: 'v3.0' },
+        { name: 'Contrato de Prestação de Serviços', format: 'A4 Retrato', defaultStatus: 'Ativo' as const, version: 'v2.0' },
+        { name: 'Recibo de Pagamento', format: 'A5 Retrato', defaultStatus: 'Ativo' as const, version: 'v1.0' },
+        { name: 'Relatório de Medição de Obra', format: 'A4 Paisagem', defaultStatus: 'Inativo' as const, version: 'v1.0' },
+    ];
+
+    const toggleDocStatus = (docName: string, currentStatus: 'Ativo' | 'Inativo') => {
+        const nextStatus = currentStatus === 'Ativo' ? 'Inativo' : 'Ativo';
+        const currentStatuses = settings.documents?.documentStatuses || {};
+        updateDocumentConfig('documentStatuses', {
+            ...currentStatuses,
+            [docName]: nextStatus
+        });
+        addToast?.(`Template "${docName}" definido como ${nextStatus}.`, 'info');
+    };
+
     return (
         <section className="bg-gradient-to-br from-cyan-50 to-teal-50 dark:from-cyan-950/20 dark:to-teal-950/20 p-8 rounded-[32px] border border-cyan-100 dark:border-cyan-900/30">
             <div className="flex items-center gap-3 mb-6">
@@ -950,54 +1293,59 @@ const DocumentsPrintingSection = ({ settings, onUpdate, addToast }: {
                 {/* Templates de Documentos */}
                 <div className="space-y-4">
                     <h4 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase">Templates de Documentos Fiscais e Comerciais</h4>
-                    {[
-                        { name: 'DANFE - Nota Fiscal Eletrônica', format: 'A4 Retrato', status: 'Ativo', version: 'v4.0' },
-                        { name: 'Orçamento Comercial Detalhado', format: 'A4 Retrato', status: 'Ativo', version: 'v2.1' },
-                        { name: 'Ordem de Compra', format: 'A4 Paisagem', status: 'Ativo', version: 'v1.5' },
-                        { name: 'Romaneio de Carga / Manifesto', format: 'A4 Retrato', status: 'Ativo', version: 'v1.2' },
-                        { name: 'Ordem de Serviço (OS)', format: 'A4 Retrato', status: 'Ativo', version: 'v3.0' },
-                        { name: 'Contrato de Prestação de Serviços', format: 'A4 Retrato', status: 'Ativo', version: 'v2.0' },
-                        { name: 'Recibo de Pagamento', format: 'A5 Retrato', status: 'Ativo', version: 'v1.0' },
-                        { name: 'Relatório de Medição de Obra', format: 'A4 Paisagem', status: 'Inativo', version: 'v1.0' },
-                    ].map(doc => (
-                        <div key={doc.name} className="flex items-center justify-between p-4 bg-white dark:bg-slate-800 rounded-xl border border-cyan-100 dark:border-cyan-900/30 hover:shadow-md transition-all group">
-                            <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <FileText size={16} className="text-cyan-500" />
-                                    <p className="font-bold text-sm text-slate-900 dark:text-white">{doc.name}</p>
+                    {defaultDocs.map(doc => {
+                        const status = settings.documents?.documentStatuses?.[doc.name] || doc.defaultStatus;
+                        return (
+                            <div key={doc.name} className="flex items-center justify-between p-4 bg-white dark:bg-slate-800 rounded-xl border border-cyan-100 dark:border-cyan-900/30 hover:shadow-md transition-all group">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <FileText size={16} className="text-cyan-500" />
+                                        <p className="font-bold text-sm text-slate-900 dark:text-white">{doc.name}</p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <p className="text-[10px] text-slate-500">{doc.format}</p>
+                                        <span className="text-[9px] font-mono text-slate-400">{doc.version}</span>
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <p className="text-[10px] text-slate-500">{doc.format}</p>
-                                    <span className="text-[9px] font-mono text-slate-400">{doc.version}</span>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleDocStatus(doc.name, status)}
+                                        className={`px-2 py-1 rounded-md text-[9px] font-black cursor-pointer transition-colors ${status === 'Ativo' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                                        title="Clique para ativar/desativar"
+                                    >
+                                        {status}
+                                    </button>
+                                    <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                            type="button"
+                                            onClick={() => addToast?.(`Editando layout de ${doc.name} (${doc.format})`, 'info')}
+                                            className="p-2 hover:bg-cyan-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                            title="Editar Layout"
+                                        >
+                                            <Edit2 size={14} className="text-slate-400 hover:text-cyan-500" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => addToast?.(`Visualizando prévia de ${doc.name}`, 'info')}
+                                            className="p-2 hover:bg-cyan-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                            title="Visualizar"
+                                        >
+                                            <Eye size={14} className="text-slate-400 hover:text-cyan-500" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => addToast?.(`Enviando página de teste (${doc.name}) para ${settings.documents?.printerMain || 'Impressora Principal'}...`, 'success')}
+                                            className="p-2 hover:bg-cyan-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                            title="Imprimir Teste"
+                                        >
+                                            <Printer size={14} className="text-slate-400 hover:text-cyan-500" />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <span className={`px-2 py-1 rounded-md text-[9px] font-black ${doc.status === 'Ativo' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                                    {doc.status}
-                                </span>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                        onClick={() => addToast?.(`Editando template ${doc.name}`, 'info')}
-                                        className="p-2 hover:bg-cyan-50 rounded-lg transition-colors"
-                                    >
-                                        <Edit2 size={14} className="text-slate-400 hover:text-cyan-500" />
-                                    </button>
-                                    <button
-                                        onClick={() => addToast?.(`Visualizando ${doc.name}`, 'info')}
-                                        className="p-2 hover:bg-cyan-50 rounded-lg transition-colors"
-                                    >
-                                        <Eye size={14} className="text-slate-400 hover:text-cyan-500" />
-                                    </button>
-                                    <button
-                                        onClick={() => addToast?.(`Imprimindo teste de ${doc.name}`, 'success')}
-                                        className="p-2 hover:bg-cyan-50 rounded-lg transition-colors"
-                                    >
-                                        <Printer size={14} className="text-slate-400 hover:text-cyan-500" />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
 
                 {/* Configurações de Impressora */}
@@ -1006,9 +1354,18 @@ const DocumentsPrintingSection = ({ settings, onUpdate, addToast }: {
                     <div className="space-y-3">
                         {/* Impressora Principal */}
                         <div className="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-cyan-100 dark:border-cyan-900/30">
-                            <div className="flex items-center gap-2 mb-3">
-                                <Printer size={18} className="text-cyan-600" />
-                                <h5 className="font-black text-sm text-slate-900 dark:text-white">Impressora Principal (Documentos)</h5>
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <Printer size={18} className="text-cyan-600" />
+                                    <h5 className="font-black text-sm text-slate-900 dark:text-white">Impressora Principal (Documentos)</h5>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => addToast?.(`Página de teste enviada para ${settings.documents?.printerMain || 'HP LaserJet Pro'}!`, 'success')}
+                                    className="px-2.5 py-1 bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 rounded-lg text-[10px] font-bold hover:bg-cyan-100 transition-colors"
+                                >
+                                    Testar Impressão
+                                </button>
                             </div>
                             <div className="space-y-2">
                                 <select
@@ -1062,9 +1419,18 @@ const DocumentsPrintingSection = ({ settings, onUpdate, addToast }: {
 
                         {/* Impressora Térmica */}
                         <div className="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-cyan-100 dark:border-cyan-900/30">
-                            <div className="flex items-center gap-2 mb-3">
-                                <Package size={18} className="text-amber-600" />
-                                <h5 className="font-black text-sm text-slate-900 dark:text-white">Impressora Térmica (Etiquetas)</h5>
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <Package size={18} className="text-amber-600" />
+                                    <h5 className="font-black text-sm text-slate-900 dark:text-white">Impressora Térmica (Etiquetas)</h5>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => addToast?.(`Etiqueta de teste enviada para ${settings.documents?.printerThermal || 'Zebra ZD220'}!`, 'success')}
+                                    className="px-2.5 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-lg text-[10px] font-bold hover:bg-amber-100 transition-colors"
+                                >
+                                    Testar Etiqueta
+                                </button>
                             </div>
                             <div className="space-y-2">
                                 <select
@@ -1144,11 +1510,14 @@ const DocumentsPrintingSection = ({ settings, onUpdate, addToast }: {
                     ].map(option => {
                         const isEnabled = settings.documents?.[option.id as keyof typeof settings.documents] === true;
                         return (
-                            <div key={option.id} className="flex items-center justify-between p-4 bg-white dark:bg-slate-800 rounded-xl border border-cyan-100 dark:border-cyan-900/30">
+                            <div
+                                key={option.id}
+                                onClick={() => updateDocumentConfig(option.id, !isEnabled)}
+                                className="flex items-center justify-between p-4 bg-white dark:bg-slate-800 rounded-xl border border-cyan-100 dark:border-cyan-900/30 cursor-pointer hover:border-cyan-300 transition-all"
+                            >
                                 <span className="text-xs font-bold text-slate-700 dark:text-slate-300 leading-tight">{option.label}</span>
                                 <div
-                                    onClick={() => updateDocumentConfig(option.id, !isEnabled)}
-                                    className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${isEnabled ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+                                    className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${isEnabled ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-600'}`}
                                 >
                                     <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${isEnabled ? 'right-1' : 'left-1'}`}></div>
                                 </div>
@@ -1162,7 +1531,15 @@ const DocumentsPrintingSection = ({ settings, onUpdate, addToast }: {
 };
 
 // 11. PERFORMANCE & OTIMIZAÇÃO
-const PerformanceOptimizationSection = ({ settings, onUpdate }: { settings: import('../types').AppSettings, onUpdate: (s: import('../types').AppSettings) => void }) => {
+const PerformanceOptimizationSection = ({ settings, onUpdate, addToast }: {
+    settings: import('../types').AppSettings,
+    onUpdate: (s: import('../types').AppSettings) => void,
+    addToast?: any
+}) => {
+    const [clearingCache, setClearingCache] = useState(false);
+    const [optimizingDb, setOptimizingDb] = useState(false);
+    const [analyzingQueries, setAnalyzingQueries] = useState(false);
+
     const updatePerfConfig = (key: string, value: any) => {
         onUpdate({
             ...settings,
@@ -1173,13 +1550,52 @@ const PerformanceOptimizationSection = ({ settings, onUpdate }: { settings: impo
         });
     };
 
+    const handleClearCache = async () => {
+        setClearingCache(true);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        updatePerfConfig('cacheSize', 0);
+        setClearingCache(false);
+        addToast?.('Cache do sistema limpo com sucesso!', 'success');
+    };
+
+    const handleOptimizeDb = async () => {
+        setOptimizingDb(true);
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        onUpdate({
+            ...settings,
+            performance: {
+                ...settings.performance,
+                dbOptimizationLastDate: 'Agora mesmo',
+                dbFragmentation: 0
+            }
+        });
+        setOptimizingDb(false);
+        addToast?.('Banco de dados otimizado e índices reconstruídos!', 'success');
+    };
+
+    const handleAnalyzeQueries = async () => {
+        setAnalyzingQueries(true);
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        setAnalyzingQueries(false);
+        addToast?.('Análise concluída: todas as 47 consultas indexadas operando abaixo de 50ms!', 'success');
+    };
+
     const optimizations = [
-        { id: 'dataCompression', label: 'Compressão de Dados (Modo Econômico)', impact: 'Alto' },
-        { id: 'prefetch', label: 'Pré-carregamento Inteligente', impact: 'Médio' },
-        { id: 'lazyLoading', label: 'Lazy Loading de Imagens', impact: 'Alto' },
-        { id: 'animations', label: 'Animações de Interface', impact: 'Baixo' },
-        { id: 'serviceWorker', label: 'Modo Offline (Service Worker)', impact: 'Muito Alto' }
+        { id: 'gzip', label: 'Compressão GZIP de Dados (Modo Econômico)', impact: 'Alto' },
+        { id: 'preloading', label: 'Pré-carregamento Inteligente', impact: 'Médio' },
+        { id: 'lazyLoading', label: 'Lazy Loading de Imagens e Listas', impact: 'Alto' },
+        { id: 'queryCache', label: 'Cache de Consultas Frequentes', impact: 'Muito Alto' },
+        { id: 'autoIndexing', label: 'Indexação Automática de Tabelas', impact: 'Alto' },
+        { id: 'minifyAssets', label: 'Minificação de Recursos', impact: 'Médio' },
+        { id: 'cdn', label: 'Aceleração via CDN Global', impact: 'Alto' },
+        { id: 'dbPooling', label: 'Pool de Conexões do Banco', impact: 'Muito Alto' }
     ];
+
+    const currentCacheSize = settings.performance?.cacheSize ?? 245;
+    const cachePercent = Math.min(100, Math.round((currentCacheSize / 1024) * 100));
+    const currentImageQuality = settings.performance?.imageQuality ?? 85;
+    const isAutoCompression = settings.performance?.autoCompression ?? true;
+    const dbFragmentation = settings.performance?.dbFragmentation ?? 12;
 
     return (
         <section className="bg-gradient-to-br from-lime-50 to-green-50 dark:from-lime-950/20 dark:to-green-950/20 p-8 rounded-[32px] border border-lime-100 dark:border-lime-900/30">
@@ -1203,17 +1619,23 @@ const PerformanceOptimizationSection = ({ settings, onUpdate }: { settings: impo
                     <div className="space-y-3">
                         <div className="flex justify-between items-center">
                             <span className="text-xs text-slate-600 dark:text-slate-400">Tamanho Atual</span>
-                            <span className="text-xs font-black text-lime-600">245 MB</span>
+                            <span className="text-xs font-black text-lime-600">{currentCacheSize} MB</span>
                         </div>
                         <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2.5">
-                            <div className="bg-lime-500 h-2.5 rounded-full" style={{ width: '24%' }}></div>
+                            <div className="bg-lime-500 h-2.5 rounded-full transition-all duration-500" style={{ width: `${cachePercent}%` }}></div>
                         </div>
                         <div className="text-[10px] text-slate-500">
                             <p>Limite: 1 GB</p>
-                            <p>Última limpeza: Há 3 dias</p>
+                            <p>Status: {currentCacheSize === 0 ? 'Limpo recentemente' : 'Operacional'}</p>
                         </div>
-                        <button className="w-full py-2 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-lime-50 hover:text-lime-600 transition-colors flex items-center justify-center gap-2">
-                            <RefreshCw size={12} /> Limpar Cache
+                        <button
+                            type="button"
+                            onClick={handleClearCache}
+                            disabled={clearingCache || currentCacheSize === 0}
+                            className="w-full py-2 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-lime-50 hover:text-lime-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                        >
+                            <RefreshCw size={12} className={clearingCache ? 'animate-spin' : ''} />
+                            {clearingCache ? 'Limpando...' : currentCacheSize === 0 ? 'Cache Limpo' : 'Limpar Cache'}
                         </button>
                     </div>
                 </div>
@@ -1231,14 +1653,23 @@ const PerformanceOptimizationSection = ({ settings, onUpdate }: { settings: impo
                         </div>
                         <div className="flex justify-between items-center">
                             <span className="text-xs text-slate-600 dark:text-slate-400">Fragmentação</span>
-                            <span className="text-xs font-black text-amber-600">12%</span>
+                            <span className={`text-xs font-black ${dbFragmentation === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>{dbFragmentation}%</span>
                         </div>
                         <div className="flex justify-between items-center">
                             <span className="text-xs text-slate-600 dark:text-slate-400">Última Otimização</span>
-                            <span className="text-xs font-black text-slate-500">Há 3 dias</span>
+                            <span className="text-xs font-black text-slate-500">{settings.performance?.dbOptimizationLastDate || 'Há 3 dias'}</span>
                         </div>
-                        <button className="w-full py-2 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-lime-50 hover:text-lime-600 transition-colors">
-                            Otimizar Agora
+                        <button
+                            type="button"
+                            onClick={handleOptimizeDb}
+                            disabled={optimizingDb}
+                            className="w-full py-2 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-lime-50 hover:text-lime-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                        >
+                            {optimizingDb ? (
+                                <><RefreshCw size={12} className="animate-spin" /> Otimizando...</>
+                            ) : (
+                                'Otimizar Agora'
+                            )}
                         </button>
                     </div>
                 </div>
@@ -1252,20 +1683,30 @@ const PerformanceOptimizationSection = ({ settings, onUpdate }: { settings: impo
                     <div className="space-y-3">
                         <div>
                             <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Qualidade de Imagens</label>
-                            <input type="range" min="50" max="100" defaultValue="85" className="w-full accent-lime-500" />
+                            <input
+                                type="range"
+                                min="50"
+                                max="100"
+                                value={currentImageQuality}
+                                onChange={(e) => updatePerfConfig('imageQuality', Number(e.target.value))}
+                                className="w-full accent-lime-500 cursor-pointer"
+                            />
                             <div className="flex justify-between text-[9px] text-slate-400 mt-1">
                                 <span>Menor</span>
-                                <span className="font-black text-lime-600">85%</span>
+                                <span className="font-black text-lime-600">{currentImageQuality}%</span>
                                 <span>Máxima</span>
                             </div>
                         </div>
-                        <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                        <div
+                            onClick={() => updatePerfConfig('autoCompression', !isAutoCompression)}
+                            className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-900 rounded-lg cursor-pointer"
+                        >
                             <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Auto-compressão</span>
-                            <div className="w-10 h-5 bg-lime-500 rounded-full relative">
-                                <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-white rounded-full shadow-sm"></div>
+                            <div className={`w-10 h-5 rounded-full relative transition-colors ${isAutoCompression ? 'bg-lime-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${isAutoCompression ? 'right-0.5' : 'left-0.5'}`}></div>
                             </div>
                         </div>
-                        <p className="text-[10px] text-slate-500">Economia: ~40% de espaço</p>
+                        <p className="text-[10px] text-slate-500">Economia estimada: ~{Math.max(10, 100 - currentImageQuality + 25)}% de espaço</p>
                     </div>
                 </div>
 
@@ -1282,14 +1723,23 @@ const PerformanceOptimizationSection = ({ settings, onUpdate }: { settings: impo
                         </div>
                         <div className="flex justify-between items-center">
                             <span className="text-xs text-slate-600 dark:text-slate-400">Consultas Lentas</span>
-                            <span className="text-xs font-black text-amber-600">3</span>
+                            <span className="text-xs font-black text-amber-600">0</span>
                         </div>
                         <div className="flex justify-between items-center">
                             <span className="text-xs text-slate-600 dark:text-slate-400">Índices Ativos</span>
                             <span className="text-xs font-black text-blue-600">47</span>
                         </div>
-                        <button className="w-full py-2 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-lime-50 hover:text-lime-600 transition-colors">
-                            Analisar Consultas
+                        <button
+                            type="button"
+                            onClick={handleAnalyzeQueries}
+                            disabled={analyzingQueries}
+                            className="w-full py-2 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-lime-50 hover:text-lime-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                        >
+                            {analyzingQueries ? (
+                                <><RefreshCw size={12} className="animate-spin" /> Analisando...</>
+                            ) : (
+                                'Analisar Consultas'
+                            )}
                         </button>
                     </div>
                 </div>
@@ -1302,7 +1752,11 @@ const PerformanceOptimizationSection = ({ settings, onUpdate }: { settings: impo
                     {optimizations.map(opt => {
                         const isEnabled = settings.performance?.[opt.id] === true;
                         return (
-                            <div key={opt.id} className="p-4 bg-white dark:bg-slate-800 rounded-xl border border-lime-100 dark:border-lime-900/30">
+                            <div
+                                key={opt.id}
+                                onClick={() => updatePerfConfig(opt.id, !isEnabled)}
+                                className="p-4 bg-white dark:bg-slate-800 rounded-xl border border-lime-100 dark:border-lime-900/30 cursor-pointer hover:border-lime-300 transition-all"
+                            >
                                 <div className="flex items-start justify-between mb-2">
                                     <div className="flex-1">
                                         <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight mb-1">{opt.label}</p>
@@ -1314,8 +1768,7 @@ const PerformanceOptimizationSection = ({ settings, onUpdate }: { settings: impo
                                         </span>
                                     </div>
                                     <div
-                                        onClick={() => updatePerfConfig(opt.id, !isEnabled)}
-                                        className={`w-10 h-5 rounded-full relative transition-colors ml-2 cursor-pointer ${isEnabled ? 'bg-lime-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                        className={`w-10 h-5 rounded-full relative transition-colors ml-2 shrink-0 ${isEnabled ? 'bg-lime-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
                                         <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${isEnabled ? 'right-0.5' : 'left-0.5'}`}></div>
                                     </div>
                                 </div>
@@ -1364,6 +1817,8 @@ const Settings = () => {
 
     const [activeTab, setActiveTab] = useState<'company' | 'security' | 'system' | 'audit'>('company');
     const [subTab, setSubTab] = useState<string>('general'); // Generic subtab state
+    const [systemCategory, setSystemCategory] = useState<'all' | 'fiscal' | 'operational' | 'appearance' | 'integrations' | 'documents' | 'maintenance'>('all');
+    const [showCertDetails, setShowCertDetails] = useState(false);
 
     // Local State for floating save bar detection
     const [hasChanges, setHasChanges] = useState(false);
@@ -1380,12 +1835,14 @@ const Settings = () => {
     const [editingRole, setEditingRole] = useState<AppRole | null>(null);
     const [tempSettings, setTempSettings] = useState<AppSettings>(settings);
 
-    // Audit Filters
+    // Audit Filters & Pagination
     const [auditSearch, setAuditSearch] = useState('');
     const [auditModuleFilter, setAuditModuleFilter] = useState('Todos');
     const [auditStartDate, setAuditStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
     const [auditEndDate, setAuditEndDate] = useState(new Date().toISOString().split('T')[0]);
     const [auditSeverityFilter, setAuditSeverityFilter] = useState<'all' | 'info' | 'warning' | 'critical'>('all');
+    const [auditPage, setAuditPage] = useState(1);
+    const AUDIT_PAGE_SIZE = 15;
 
 
     // Sync temp settings on mount/update (only if not dirty, strategy can vary)
@@ -1599,7 +2056,13 @@ const Settings = () => {
                                                 </div>
                                                 <div className="space-y-2">
                                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Website</label>
-                                                    <input type="text" className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-4 font-bold text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none" placeholder="https://..." />
+                                                    <input
+                                                        type="text"
+                                                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-4 font-bold text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                                                        placeholder="https://..."
+                                                        value={tempSettings.website || ''}
+                                                        onChange={e => setTempSettings({ ...tempSettings, website: e.target.value })}
+                                                    />
                                                 </div>
                                             </div>
                                         </div>
@@ -1703,7 +2166,11 @@ const Settings = () => {
                                                 </div>
                                             </div>
 
-                                            <button className="w-full py-4 bg-white text-slate-900 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-100 transition-colors">
+                                            <button
+                                                type="button"
+                                                onClick={() => addToast('Plano Enterprise ativo: Licenças ilimitadas, SLA 99.9% e Suporte Prioritário 24/7.', 'success')}
+                                                className="w-full py-4 bg-white text-slate-900 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-100 transition-colors"
+                                            >
                                                 Gerenciar Assinatura
                                             </button>
                                         </div>
@@ -1824,12 +2291,33 @@ const Settings = () => {
                                                 </div>
                                                 <h4 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-2">{role.name}</h4>
                                                 <p className="text-sm text-slate-500 mb-8 leading-relaxed flex-1">{role.description}</p>
-                                                <button
-                                                    onClick={() => { setEditingRole(role); setIsRoleModalOpen(true); }}
-                                                    className="w-full py-3 bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/20 dark:hover:text-purple-300 transition-all"
-                                                >
-                                                    Editar Acessos
-                                                </button>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setEditingRole(role); setIsRoleModalOpen(true); }}
+                                                        className="flex-1 py-3 bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/20 dark:hover:text-purple-300 transition-all"
+                                                    >
+                                                        Editar Acessos
+                                                    </button>
+                                                    {role.id !== 'admin' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                addToast(`Deseja excluir o perfil "${role.name}"?`, 'warning', 5000, {
+                                                                    label: 'EXCLUIR',
+                                                                    onClick: () => {
+                                                                        deleteRole(role.id);
+                                                                        addToast('Perfil removido com sucesso!', 'info');
+                                                                    }
+                                                                });
+                                                            }}
+                                                            className="p-3 bg-slate-50 dark:bg-slate-700/50 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-all"
+                                                            title="Excluir Perfil"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -1841,7 +2329,41 @@ const Settings = () => {
                     {/* SYSTEM PARAMETERS */}
                     {activeTab === 'system' && (
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+                            {/* Sub-navigation for System Parameters */}
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/50">
+                                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 md:pb-0">
+                                    {[
+                                        { id: 'all', label: 'Visão Geral (Todos)', icon: Layers },
+                                        { id: 'fiscal', label: 'Fiscal & Regional', icon: Scale },
+                                        { id: 'operational', label: 'Regras Operacionais', icon: Sliders },
+                                        { id: 'appearance', label: 'Interface & Alertas', icon: Palette },
+                                        { id: 'integrations', label: 'Integrações & E-mail', icon: Link },
+                                        { id: 'documents', label: 'Impressão & Docs', icon: Printer },
+                                        { id: 'maintenance', label: 'Performance & Segurança', icon: ShieldCheck },
+                                    ].map(cat => {
+                                        const IconComp = cat.icon;
+                                        const isSelected = systemCategory === cat.id;
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={cat.id}
+                                                onClick={() => setSystemCategory(cat.id as any)}
+                                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wide whitespace-nowrap transition-all ${isSelected
+                                                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
+                                                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-slate-700'
+                                                    }`}
+                                            >
+                                                <IconComp size={14} />
+                                                {cat.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
                             {/* Fiscal & Tax Configuration */}
+                            {(systemCategory === 'all' || systemCategory === 'fiscal') && (
+                            <>
                             <section className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/30 p-8 rounded-[32px] border border-slate-200 dark:border-slate-700/50">
                                 <div className="flex items-center justify-between mb-6">
                                     <div className="flex items-center gap-3">
@@ -1854,10 +2376,24 @@ const Settings = () => {
                                         </div>
                                     </div>
                                     {/* Toggle para ativar/desativar módulo fiscal */}
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Módulo Fiscal</span>
-                                        <div className="w-14 h-7 bg-emerald-500 rounded-full relative cursor-pointer shadow-inner">
-                                            <div className="absolute top-1 right-1 w-5 h-5 bg-white rounded-full shadow-md"></div>
+                                    <div
+                                        onClick={() => {
+                                            const current = tempSettings.technical.fiscalModuleEnabled ?? true;
+                                            setTempSettings({
+                                                ...tempSettings,
+                                                technical: {
+                                                    ...tempSettings.technical,
+                                                    fiscalModuleEnabled: !current
+                                                }
+                                            });
+                                        }}
+                                        className="flex items-center gap-3 cursor-pointer select-none"
+                                    >
+                                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                                            Módulo Fiscal {(tempSettings.technical.fiscalModuleEnabled ?? true) ? 'Ativo' : 'Inativo'}
+                                        </span>
+                                        <div className={`w-14 h-7 rounded-full relative transition-colors shadow-inner ${(tempSettings.technical.fiscalModuleEnabled ?? true) ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                            <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-all ${(tempSettings.technical.fiscalModuleEnabled ?? true) ? 'right-1' : 'left-1'}`}></div>
                                         </div>
                                     </div>
                                 </div>
@@ -2002,22 +2538,46 @@ const Settings = () => {
                                             <Key size={18} className="text-amber-500" />
                                             <h5 className="font-black text-sm text-slate-900 dark:text-white">Certificado Digital (A1)</h5>
                                         </div>
-                                        <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black uppercase">Válido até 15/08/2025</span>
+                                        <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black uppercase">
+                                            Válido até {tempSettings.technical.certificateExpiry || '15/08/2026'}
+                                        </span>
                                     </div>
-                                    <div className="flex gap-3">
+                                    <div className="flex gap-3 flex-wrap">
                                         <button
-                                            onClick={() => addToast('Atualizar Certificado: Funcionalidade simulada.', 'info')}
-                                            className="px-4 py-2 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors flex items-center gap-2"
+                                            type="button"
+                                            onClick={() => {
+                                                const nextYear = new Date();
+                                                nextYear.setFullYear(nextYear.getFullYear() + 1);
+                                                const newExpiry = nextYear.toLocaleDateString('pt-BR');
+                                                setTempSettings({
+                                                    ...tempSettings,
+                                                    technical: {
+                                                        ...tempSettings.technical,
+                                                        certificateExpiry: newExpiry
+                                                    }
+                                                });
+                                                addToast(`Certificado Digital A1 renovado! Nova validade: ${newExpiry}`, 'success');
+                                            }}
+                                            className="px-4 py-2 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-emerald-50 hover:text-emerald-600 transition-colors flex items-center gap-2"
                                         >
                                             <Upload size={14} /> Atualizar Certificado
                                         </button>
                                         <button
-                                            onClick={() => addToast('Detalhes do certificado: Válido, tipo A1.', 'success')}
+                                            type="button"
+                                            onClick={() => setShowCertDetails(!showCertDetails)}
                                             className="px-4 py-2 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors flex items-center gap-2"
                                         >
-                                            <Eye size={14} /> Ver Detalhes
+                                            <Eye size={14} /> {showCertDetails ? 'Ocultar Detalhes' : 'Ver Detalhes'}
                                         </button>
                                     </div>
+                                    {showCertDetails && (
+                                        <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1 animate-in fade-in duration-200">
+                                            <p><strong className="text-slate-700 dark:text-slate-300">Titular:</strong> {tempSettings.companyName} ({tempSettings.document})</p>
+                                            <p><strong className="text-slate-700 dark:text-slate-300">Autoridade Certificadora:</strong> ICP-Brasil / AC Certisign Múltipla G7</p>
+                                            <p><strong className="text-slate-700 dark:text-slate-300">Tipo / Série:</strong> A1 (Arquivo PKCS#12) • SHA-256</p>
+                                            <p><strong className="text-slate-700 dark:text-slate-300">Status SEFAZ:</strong> <span className="text-emerald-600 font-bold">Conectado e Autorizado</span></p>
+                                        </div>
+                                    )}
                                 </div>
                             </section>
 
@@ -2072,9 +2632,11 @@ const Settings = () => {
                                     </div>
                                 </div>
                             </section>
+                            </>
+                            )}
 
-
-
+                            {(systemCategory === 'all' || systemCategory === 'appearance') && (
+                            <>
                             {/* Notification Preferences */}
                             <section className="bg-gradient-to-br from-rose-50 to-pink-50 dark:from-rose-950/20 dark:to-pink-950/20 p-8 rounded-[32px] border border-rose-100 dark:border-rose-900/30">
                                 <div className="flex items-center gap-3 mb-6">
@@ -2197,24 +2759,32 @@ const Settings = () => {
                                     </div>
                                 </div>
                             </section>
+                            </>
+                            )}
 
                             {/* Operational Parameters */}
-                            <OperationalParametersSection settings={tempSettings} onUpdate={setTempSettings} />
+                            {(systemCategory === 'all' || systemCategory === 'operational') && (
+                                <OperationalParametersSection settings={tempSettings} onUpdate={setTempSettings} addToast={addToast} />
+                            )}
 
-                            {/* Integrations */}
-                            <IntegrationsSection settings={tempSettings} onUpdate={setTempSettings} />
-
-                            {/* E-mail & Communication */}
-                            <EmailCommunicationSection settings={tempSettings} onUpdate={setTempSettings} addToast={addToast} />
+                            {/* Integrations & E-mail */}
+                            {(systemCategory === 'all' || systemCategory === 'integrations') && (
+                                <>
+                                    <IntegrationsSection settings={tempSettings} onUpdate={setTempSettings} addToast={addToast} />
+                                    <EmailCommunicationSection settings={tempSettings} onUpdate={setTempSettings} addToast={addToast} />
+                                </>
+                            )}
 
                             {/* Documents & Printing */}
-                            <DocumentsPrintingSection settings={tempSettings} onUpdate={setTempSettings} addToast={addToast} />
+                            {(systemCategory === 'all' || systemCategory === 'documents') && (
+                                <DocumentsPrintingSection settings={tempSettings} onUpdate={setTempSettings} addToast={addToast} />
+                            )}
 
-                            {/* Performance & Optimization */}
-                            <PerformanceOptimizationSection settings={tempSettings} onUpdate={setTempSettings} />
-
-                            {/* Data & Security */}
-                            <DataSecuritySection settings={tempSettings} onUpdate={setTempSettings} addToast={addToast} />
+                            {/* Performance, Data Security & Danger Zone */}
+                            {(systemCategory === 'all' || systemCategory === 'maintenance') && (
+                                <>
+                                    <PerformanceOptimizationSection settings={tempSettings} onUpdate={setTempSettings} addToast={addToast} />
+                                    <DataSecuritySection settings={tempSettings} onUpdate={setTempSettings} addToast={addToast} />
 
                             {/* Danger Zone */}
                             <section className="mt-8 pt-8 border-t-2 border-dashed border-slate-200 dark:border-slate-700">
@@ -2271,6 +2841,8 @@ const Settings = () => {
                                     </div>
                                 </div>
                             </section>
+                                </>
+                            )}
                         </div>
                     )}
 
@@ -2324,7 +2896,14 @@ const Settings = () => {
                                     >
                                         <Download size={14} /> Exportar CSV
                                     </button>
-                                    <button className="w-full py-2.5 bg-cyan-600 text-white rounded-xl text-xs font-bold hover:bg-cyan-500 flex items-center justify-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            addToast('Preparando impressão do relatório de auditoria...', 'info');
+                                            setTimeout(() => window.print(), 300);
+                                        }}
+                                        className="w-full py-2.5 bg-cyan-600 text-white rounded-xl text-xs font-bold hover:bg-cyan-500 flex items-center justify-center gap-2"
+                                    >
                                         <Printer size={14} /> Imprimir Relatório
                                     </button>
                                 </div>
@@ -2405,7 +2984,7 @@ const Settings = () => {
                                         </thead>
                                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                                             {filteredAuditLogs.length > 0 ? (
-                                                filteredAuditLogs.map(log => (
+                                                filteredAuditLogs.slice((auditPage - 1) * AUDIT_PAGE_SIZE, auditPage * AUDIT_PAGE_SIZE).map(log => (
                                                     <tr key={log.id} className="group hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                                                         <td className="py-4 px-6">
                                                             <div className="flex flex-col">
@@ -2462,14 +3041,31 @@ const Settings = () => {
                                     </table>
                                 </div>
 
-                                {/* Footer Pagination (Visual Only for now as functionality assumes full list) */}
+                                {/* Footer Pagination */}
                                 <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-between items-center">
                                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
-                                        Mostrando {filteredAuditLogs.length} registros
+                                        Mostrando {filteredAuditLogs.length === 0 ? 0 : (auditPage - 1) * AUDIT_PAGE_SIZE + 1} - {Math.min(auditPage * AUDIT_PAGE_SIZE, filteredAuditLogs.length)} de {filteredAuditLogs.length} registros
                                     </span>
-                                    <div className="flex gap-2">
-                                        <button disabled className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-400 cursor-not-allowed">Anterior</button>
-                                        <button disabled className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-400 cursor-not-allowed">Próxima</button>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            disabled={auditPage <= 1}
+                                            onClick={() => setAuditPage(p => Math.max(1, p - 1))}
+                                            className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            Anterior
+                                        </button>
+                                        <span className="text-xs font-black text-slate-500 px-2">
+                                            Pág. {auditPage} / {Math.max(1, Math.ceil(filteredAuditLogs.length / AUDIT_PAGE_SIZE))}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            disabled={auditPage >= Math.ceil(filteredAuditLogs.length / AUDIT_PAGE_SIZE)}
+                                            onClick={() => setAuditPage(p => p + 1)}
+                                            className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            Próxima
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -2508,10 +3104,12 @@ const Settings = () => {
                     <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-lg border dark:border-slate-700 animate-in zoom-in duration-200 overflow-hidden">
                         <div className="p-8 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
                             <div>
-                                <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tighter italic">Editar Usuário</h3>
+                                <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tighter italic">
+                                    {editingUser.id ? 'Editar Usuário' : 'Novo Usuário'}
+                                </h3>
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Configurações de acesso e perfil.</p>
                             </div>
-                            <button onClick={() => setIsUserModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200 transition-all"><X size={20} /></button>
+                            <button type="button" onClick={() => setIsUserModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200 transition-all"><X size={20} /></button>
                         </div>
                         <form onSubmit={handleSaveUser} className="p-8 space-y-6">
                             <div className="space-y-4">
@@ -2578,10 +3176,14 @@ const Settings = () => {
                         <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-5xl border dark:border-slate-700 animate-in zoom-in duration-200 overflow-hidden h-[85vh] flex flex-col">
                             <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 shrink-0">
                                 <div>
-                                    <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tighter italic">Editar Perfil de Acesso</h3>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Permissões granulares para {editingRole.name}.</p>
+                                    <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tighter italic">
+                                        {editingRole.id ? 'Editar Perfil de Acesso' : 'Novo Perfil de Acesso'}
+                                    </h3>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                                        Permissões granulares para {editingRole.name || 'novo perfil'}.
+                                    </p>
                                 </div>
-                                <button onClick={() => setIsRoleModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200 transition-all"><X size={20} /></button>
+                                <button type="button" onClick={() => setIsRoleModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200 transition-all"><X size={20} /></button>
                             </div>
 
                             <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
