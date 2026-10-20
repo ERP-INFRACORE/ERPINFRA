@@ -43,6 +43,9 @@ export default defineConfig(({ mode }) => {
           ]
         },
         workbox: {
+          skipWaiting: true,
+          clientsClaim: true,
+          cleanupOutdatedCaches: true,
           // Caching strategies
           runtimeCaching: [
             {
