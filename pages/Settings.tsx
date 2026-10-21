@@ -2013,7 +2013,7 @@ const Settings = () => {
                         </h1>
                         <p className="text-slate-500 dark:text-gray-400 text-xs mt-2 font-bold flex items-center gap-2 ml-1">
                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            Sistema Operacional v2.4.0
+                            Sistema Operacional v2.5.0
                         </p>
                     </div>
                 </div>
