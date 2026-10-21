@@ -61,13 +61,15 @@ import {
     Layers,
     Link,
     Smartphone,
-    Landmark
+    Landmark,
+    Bot
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { User, AppRole, AppSettings, AuditLog } from '../types';
 import { APP_PERMISSIONS } from '../permission_constants';
 import { generateCameloData } from '../src/utils/seeder';
+import AIAuditAgent from '../components/AIAuditAgent';
 
 // Internal Toast Component
 // Local Toast component removed in favor of global context
@@ -1815,7 +1817,7 @@ const Settings = () => {
         updateSettings, clearAllData, hasPermission, seedDatabase
     } = useApp();
 
-    const [activeTab, setActiveTab] = useState<'company' | 'security' | 'system' | 'audit'>('company');
+    const [activeTab, setActiveTab] = useState<'company' | 'security' | 'system' | 'audit' | 'ai_agent'>('company');
     const [subTab, setSubTab] = useState<string>('general'); // Generic subtab state
     const [systemCategory, setSystemCategory] = useState<'all' | 'fiscal' | 'operational' | 'appearance' | 'integrations' | 'documents' | 'maintenance'>('all');
     const [showCertDetails, setShowCertDetails] = useState(false);
@@ -2003,6 +2005,7 @@ const Settings = () => {
                     {hasPermission('users.manage') && <TabButton id="security" label="Segurança & Acesso" icon={ShieldCheck} />}
                     <TabButton id="system" label="Parâmetros" icon={Cpu} />
                     <TabButton id="audit" label="Auditoria" icon={History} />
+                    <TabButton id="ai_agent" label="Agente IA (Diagnóstico)" icon={Bot} />
                 </div>
             </div>
 
@@ -3069,6 +3072,13 @@ const Settings = () => {
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    )}
+
+                    {/* AI AUDIT AGENT TAB */}
+                    {activeTab === 'ai_agent' && (
+                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <AIAuditAgent mode="embedded" />
                         </div>
                     )}
                 </div>

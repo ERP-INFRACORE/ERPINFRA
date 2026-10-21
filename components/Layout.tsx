@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
+import AIAuditAgent from './AIAuditAgent';
 
 const Layout = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
@@ -37,14 +38,14 @@ const Layout = () => {
 
   const navItems = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={18} /> },
-    { name: 'Cadastros', path: '/clients', icon: <Users size={18} />, permission: 'clients.manage' },
+    { name: 'Cadastros', path: '/clients', icon: <Users size={18} />, permission: 'clients.view' },
     { name: 'Faturamento', path: '/sales', icon: <ShoppingCart size={18} />, permission: 'sales.view' },
     { name: 'Custos e Despesas', path: '/purchases', icon: <ShoppingBag size={18} />, permission: 'purchases.view' },
     { name: 'Produção', path: '/production', icon: <Construction size={18} />, permission: 'production.view' },
-    { name: 'Financeiro', path: '/finance', icon: <DollarSign size={18} />, permission: 'finance.view' },
-    { name: 'RH', path: '/hr', icon: <Briefcase size={18} />, permission: 'employees.view' },
+    { name: 'Financeiro', path: '/finance', icon: <DollarSign size={18} />, permission: 'finance.dashboard' },
+    { name: 'RH', path: '/hr', icon: <Briefcase size={18} />, permission: 'hr.view' },
     { name: 'Frota', path: '/fleet', icon: <Truck size={18} />, permission: 'fleet.view' },
-    { name: 'Relatórios', path: '/reports', icon: <FileText size={18} />, permission: 'sales.view' },
+    { name: 'Relatórios', path: '/reports', icon: <FileText size={18} />, permission: 'reports.view_basic' },
     { name: 'Configurações', path: '/settings', icon: <Settings size={18} />, permission: 'settings.view' },
   ].filter(item => !item.permission || hasPermission(item.permission));
 
@@ -113,6 +114,9 @@ const Layout = () => {
       <main className="flex-1 max-w-[1600px] mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
         <Outlet />
       </main>
+
+      {/* Global Floating AI Audit Agent */}
+      <AIAuditAgent mode="floating" />
 
       {/* Footer */}
       <footer className="bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 mt-auto">
