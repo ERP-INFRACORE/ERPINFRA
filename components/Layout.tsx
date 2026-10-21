@@ -285,7 +285,7 @@ const Layout = () => {
     }
 
     // 6. Open Budgets
-    const openBudgets = (budgets || []).filter(b => b.status === 'Aberto' || b.status === 'Pendente');
+    const openBudgets = (budgets || []).filter(b => b.status === 'Aberto');
     if (openBudgets.length > 0) {
       const totalBudgets = openBudgets.reduce((acc, b) => acc + (b.total || 0), 0);
       list.push({

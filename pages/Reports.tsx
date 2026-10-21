@@ -325,7 +325,7 @@ const Reports = () => {
                 break;
             case 'quotes':
             case 'quotes_pending':
-                data = (budgets || []).filter(b => selectedModule === 'quotes' || b.status === 'Pendente' || b.status === 'Rascunho').map(b => ({
+                data = (budgets || []).filter(b => selectedModule === 'quotes' || b.status === 'Aberto').map(b => ({
                     'Nº': b.id?.slice(-6).toUpperCase(),
                     Data: b.date,
                     Cliente: b.clientName,

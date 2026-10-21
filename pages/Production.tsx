@@ -268,7 +268,7 @@ const Production = () => {
                     </div>
                     <button
                         onClick={() => {
-                            setEditingUnit({ id: '', name: '', type: 'Britagem', status: 'Operando', capacity: 100, currentLoad: 0, temperature: 45, powerConsumption: 120, nextMaintenance: '500h' });
+                            setEditingUnit({ id: '', name: '', type: 'Britagem', status: 'Operando', capacity: '100 ton/h', currentLoad: 0, temp: 45, power: '120 kW' });
                             setIsUnitModalOpen(true);
                         }}
                         className="px-4 py-3 bg-slate-800 dark:bg-slate-700 text-white font-black rounded-2xl shadow-lg hover:bg-slate-900 transition-all flex items-center gap-2 text-xs uppercase tracking-widest"

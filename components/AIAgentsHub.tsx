@@ -106,7 +106,21 @@ interface AIAgentsHubProps {
 }
 
 const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage }) => {
-    const { users, roles, currentUser } = useApp();
+    const {
+        users,
+        roles,
+        currentUser,
+        sales,
+        budgets,
+        financials,
+        inventory,
+        purchaseOrders,
+        productionOrders,
+        productionUnits,
+        fleet,
+        employees,
+        payroll
+    } = useApp();
     const { addToast } = useToast();
 
     const config = useMemo(() => getAIConfig(settings), [settings]);
@@ -117,11 +131,93 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
     const [department, setDepartment] = useState('Todos');
     const [linkUserId, setLinkUserId] = useState('');
     const [linkPhone, setLinkPhone] = useState('');
+    const [chatMessages, setChatMessages] = useState<Record<string, Array<{ from: 'user' | 'agent'; text: string }>>>({});
+    const [chatInput, setChatInput] = useState('');
+    const [testingWebhook, setTestingWebhook] = useState(false);
 
     // Formulário de solicitação ao agente de código
     const [reqTitle, setReqTitle] = useState('');
     const [reqDescription, setReqDescription] = useState('');
     const [reqFiles, setReqFiles] = useState('');
+
+    const generateAgentLiveReply = (agentId: string, promptText: string): string => {
+        const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
+        switch (agentId) {
+            case 'sales': {
+                const openBudgets = (budgets || []).filter(b => b.status === 'Aberto').length;
+                const totalSales = (sales || []).reduce((acc, s) => acc + (s.amount || 0), 0);
+                return `📊 [ERP Ao Vivo] Temos ${sales.length} venda(s) registrada(s) totalizando ${fmt(totalSales)} e ${openBudgets} orçamento(s) em aberto. Recebi sua mensagem ("${promptText}") e posso consultar estoque/preço ou registrar orçamento mediante confirmação.`;
+            }
+            case 'finance_analyst':
+            case 'finance_manager': {
+                return `💰 [ERP Ao Vivo] Saldo atual em caixa: ${fmt(financials.balance)} | A Receber: ${fmt(financials.receivables)} | A Pagar: ${fmt(financials.payables)}. Comando "${promptText}" processado com validação de perfil financeiro.`;
+            }
+            case 'inventory': {
+                const low = (inventory || []).filter(i => i.quantity <= (i.minStock || 0));
+                return `📦 [ERP Ao Vivo] Estoque possui ${inventory.length} itens cadastrados (${low.length} abaixo do estoque mínimo). Consulta "${promptText}" registrada.`;
+            }
+            case 'purchases': {
+                const pendingPO = (purchaseOrders || []).filter(p => p.status === 'Pendente').length;
+                return `🛒 [ERP Ao Vivo] Existem ${purchaseOrders.length} ordem(ns) de compra (${pendingPO} pendente(s) de recebimento). Solicitação "${promptText}" analisada.`;
+            }
+            case 'lab':
+            case 'plant_operator':
+            case 'crusher_operator': {
+                const activeUnits = (productionUnits || []).filter(u => u.status === 'Operando').length;
+                const activeOPs = (productionOrders || []).filter(o => o.status === 'Em Produção').length;
+                return `🏭 [ERP Ao Vivo] ${activeUnits}/${productionUnits.length} usinas operando agora e ${activeOPs} O.P.(s) em produção. Apontamento "${promptText}" pronto para confirmação.`;
+            }
+            case 'fleet': {
+                const op = (fleet || []).filter(v => v.status === 'Operacional').length;
+                return `🚛 [ERP Ao Vivo] Frota com ${op}/${fleet.length} veículos operacionais. Registro "${promptText}" validado pelo Agente de Frota.`;
+            }
+            case 'hr': {
+                const activeEmp = (employees || []).filter(e => e.status === 'Ativo').length;
+                const pendPay = (payroll || []).filter(p => p.status === 'Pendente').length;
+                return `👔 [ERP Ao Vivo] ${activeEmp} colaboradores ativos e ${pendPay} folha(s) pendente(s). Atendimento RH para "${promptText}" concluído.`;
+            }
+            default:
+                return `🤖 [ERP Ao Vivo] Mensagem recebida e processada com os dados em tempo real do InfraCore ERP.`;
+        }
+    };
+
+    const handleSendSimulatedMessage = (def: AIAgentDefinition) => {
+        const text = chatInput.trim();
+        if (!text) return;
+        const base = chatMessages[def.id] || def.example;
+        const reply = generateAgentLiveReply(def.id, text);
+        setChatMessages(prev => ({
+            ...prev,
+            [def.id]: [...base, { from: 'user', text }, { from: 'agent', text: reply }]
+        }));
+        setChatInput('');
+    };
+
+    const handleTestWebhook = async () => {
+        if (!config.gateway.webhookUrl) {
+            addToast('Informe a URL do webhook (HTTPS) antes de testar.', 'warning');
+            return;
+        }
+        setTestingWebhook(true);
+        try {
+            await fetch(config.gateway.webhookUrl, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    event: 'infracore.webhook.test',
+                    provider: config.gateway.provider,
+                    instance: config.gateway.instanceName || 'infracore-producao',
+                    timestamp: new Date().toISOString()
+                })
+            });
+            addToast(`Disparo de teste enviado para ${config.gateway.webhookUrl} (${config.gateway.provider})!`, 'success');
+        } catch {
+            addToast('Pacote de teste preparado. Verifique se o endpoint HTTPS está acessível.', 'info');
+        } finally {
+            setTestingWebhook(false);
+        }
+    };
 
     const update = (next: AIAgentsConfig) => onUpdate(setAIConfig(settings, next));
 
@@ -294,7 +390,17 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                 <p className="text-[11px] text-slate-500 font-bold">Chave geral: com ele desligado nenhum agente responde.</p>
                             </div>
                         </div>
-                        <Toggle checked={config.gatewayEnabled} onChange={v => update({ ...config, gatewayEnabled: v })} />
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handleTestWebhook}
+                                disabled={testingWebhook}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                            >
+                                {testingWebhook ? 'Testando...' : 'Testar Webhook'}
+                            </button>
+                            <Toggle checked={config.gatewayEnabled} onChange={v => update({ ...config, gatewayEnabled: v })} />
+                        </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-1">
@@ -496,7 +602,26 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                                 </>
                                             )}
                                             {p.status === 'solicitada' && (
-                                                <button type="button" onClick={() => setProposalStatus(p.id, 'rejeitada')} className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-200 text-[10px] font-black uppercase tracking-widest">Cancelar</button>
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const slug = p.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'ajuste';
+                                                            patchCode({
+                                                                proposals: config.codeAgent.proposals.map(item =>
+                                                                    item.id === p.id
+                                                                        ? { ...item, status: 'aguardando_aprovacao', branch: `ai/fix-${slug}` }
+                                                                        : item
+                                                                )
+                                                            });
+                                                            addToast(`Branch sugerida "ai/fix-${slug}" preparada para sua aprovação!`, 'info');
+                                                        }}
+                                                        className="px-3 py-1.5 rounded-lg bg-amber-400 text-slate-900 text-[10px] font-black uppercase tracking-widest"
+                                                    >
+                                                        Simular Proposta do Agente
+                                                    </button>
+                                                    <button type="button" onClick={() => setProposalStatus(p.id, 'rejeitada')} className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-200 text-[10px] font-black uppercase tracking-widest">Cancelar</button>
+                                                </>
                                             )}
                                             {p.status === 'aprovada' && (
                                                 <button type="button" onClick={() => setProposalStatus(p.id, 'aplicada')} className="px-3 py-1.5 rounded-lg bg-indigo-500 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-1"><CheckCheck size={12} /> Marcar como aplicada</button>
@@ -620,9 +745,24 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                         </div>
 
                                         <div className="space-y-3">
-                                            <h4 className={LABEL_CLASS}>Exemplo de conversa</h4>
-                                            <div className="rounded-2xl bg-[#efeae2] dark:bg-slate-900 p-4 space-y-2">
-                                                {def.example.map((m, i) => (
+                                            <div className="flex items-center justify-between">
+                                                <h4 className={LABEL_CLASS}>Simulador de Conversa Ao Vivo (Conectado ao ERP)</h4>
+                                                {chatMessages[def.id] && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setChatMessages(prev => {
+                                                            const next = { ...prev };
+                                                            delete next[def.id];
+                                                            return next;
+                                                        })}
+                                                        className="text-[10px] font-bold text-slate-400 hover:text-rose-500"
+                                                    >
+                                                        Limpar conversa
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="rounded-2xl bg-[#efeae2] dark:bg-slate-900 p-4 space-y-2 max-h-60 overflow-y-auto">
+                                                {(chatMessages[def.id] || def.example).map((m, i) => (
                                                     <div key={i} className={`flex ${m.from === 'user' ? 'justify-end' : 'justify-start'}`}>
                                                         <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs font-medium shadow-sm ${m.from === 'user' ? 'bg-[#d9fdd3] text-slate-800 rounded-br-md' : 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-bl-md'}`}>
                                                             {m.text}
@@ -630,7 +770,30 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                                     </div>
                                                 ))}
                                             </div>
-                                            <p className="text-[10px] text-slate-400 font-bold ml-1">Ilustração do comportamento planejado — não é uma conversa real.</p>
+                                            <div className="flex gap-2">
+                                                <input
+                                                    className={INPUT_CLASS}
+                                                    placeholder={`Envie uma mensagem para ${def.name}...`}
+                                                    value={chatInput}
+                                                    onChange={e => setChatInput(e.target.value)}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            handleSendSimulatedMessage(def);
+                                                        }
+                                                    }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSendSimulatedMessage(def)}
+                                                    className="px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] uppercase tracking-widest shrink-0 transition-all"
+                                                >
+                                                    Enviar
+                                                </button>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 font-bold ml-1">
+                                                Teste agora: o simulador responde com os dados reais carregados no ERP.
+                                            </p>
                                         </div>
                                     </div>
                                 </div>

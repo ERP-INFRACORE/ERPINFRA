@@ -499,7 +499,7 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
   const {
     users,
     roles,
-    vehicles,
+    fleet,
     transactions,
     accounts,
     productionUnits,
@@ -547,7 +547,7 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
     const orphanUsers = users.filter(
       u => !roles.some(r => r.id === u.roleId)
     );
-    const unnamedVehicles = vehicles.filter(v => !v.name || v.name.trim() === '');
+    const unnamedVehicles = (fleet || []).filter(v => !v.name || v.name.trim() === '');
     const nonUuidSales = sales.filter(
       s => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.id)
     );
@@ -607,7 +607,7 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
         liveDetected: true
       };
     });
-  }, [users, roles, vehicles, sales, purchaseOrders, productionUnits, accounts]);
+  }, [users, roles, fleet, sales, purchaseOrders, productionUnits, accounts]);
 
   const modulesList = useMemo(() => {
     const unique = Array.from(new Set(STATIC_AUDIT_ISSUES.map(i => i.module)));
