@@ -154,7 +154,7 @@ const Reports = () => {
         { id: 'cashflow', name: 'Fluxo de Caixa Realizado (Extrato)', icon: <Activity size={16} />, category: 'Financeiro', description: 'Demonstrativo detalhado de entradas, saídas e evolução diária do saldo acumulado.', fields: ['Data', 'Descrição', 'Categoria', 'Conta', 'Entrada', 'Saída', 'Saldo Acumulado', 'Status'] },
         { id: 'cashflow_projection', name: 'Projeção de Caixa por Período', icon: <TrendingUp size={16} />, category: 'Financeiro', description: 'Previsão orçamentária por faixas de vencimento com saldo futuro estimado.', fields: ['Faixa de Vencimento', 'A Receber (Previsto)', 'A Pagar (Previsto)', 'Resultado Operacional', 'Saldo Projetado', 'Situação'] },
         { id: 'cashflow_daily', name: 'Fluxo de Caixa Diário Consolidado', icon: <Calendar size={16} />, category: 'Financeiro', description: 'Resumo diário consolidado com saldo inicial, entradas, saídas e saldo final.', fields: ['Data', 'Saldo Inicial', 'Entradas', 'Saídas', 'Saldo do Dia', 'Saldo Final'] },
-        { id: 'receivables', name: 'Contas a Receber', icon: <ArrowUpRight size={16} />, category: 'Financeiro', description: 'Títulos e duplicatas a receber com vencimentos e status de cobrança.', fields: ['Nº', 'Cliente', 'Valor', 'Vencimento', 'Dias em Aberto', 'Status'] },
+        { id: 'receivables', name: 'Contas a Receber', icon: <ArrowUpRight size={16} />, category: 'Financeiro', description: 'Títulos e duplicatas a receber com vencimentos e status de cobrança.', fields: ['Nº', 'Cliente', 'Valor', 'Vencimento', 'Forma Pagto', 'Dias em Aberto', 'Status'] },
         { id: 'receivables_aging', name: 'Aging de Recebíveis', icon: <Activity size={16} />, category: 'Financeiro', description: 'Análise por faixa de vencimento (A Vencer, 1-30d, 31-60d, 61-90d, 90+d).', fields: ['Cliente', 'A Vencer', '1-30 dias', '31-60 dias', '61-90 dias', '90+ dias', 'Total a Receber'] },
         { id: 'payables', name: 'Contas a Pagar', icon: <ArrowDownRight size={16} />, category: 'Financeiro', description: 'Obrigações e compromissos financeiros pendentes com fornecedores.', fields: ['Nº', 'Fornecedor', 'Valor', 'Vencimento', 'Dias para Vencimento', 'Status'] },
         { id: 'payables_aging', name: 'Aging de Pagáveis', icon: <Activity size={16} />, category: 'Financeiro', description: 'Contas a pagar agrupadas por faixas de vencimento.', fields: ['Fornecedor', 'A Vencer', '1-30 dias', '31-60 dias', '61-90 dias', '90+ dias', 'Total a Pagar'] },
@@ -418,10 +418,11 @@ const Reports = () => {
                 data = transactions.filter(t => t.type === 'Receita' && t.status !== 'Conciliado' && t.status !== 'Cancelado').map(t => {
                     const diffDays = Math.floor((parseDateString(t.dueDate || t.date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                     return {
-                        'Nº': t.id?.slice(-6).toUpperCase(),
+                        'Nº': t.documentNumber || t.id?.slice(-6).toUpperCase(),
                         Cliente: t.partnerName || t.description,
                         Valor: t.amount,
                         Vencimento: t.dueDate || t.date,
+                        'Forma Pagto': t.paymentMethod || 'A Prazo',
                         'Dias em Aberto': diffDays < 0 ? `${Math.abs(diffDays)} dias em atraso` : `${diffDays} dias a vencer`,
                         Status: t.status
                     };

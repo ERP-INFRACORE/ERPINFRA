@@ -1142,75 +1142,70 @@ const Purchases = () => {
          {/* TAB 1: DASHBOARD */}
          {activeTab === 'dashboard' && (
             <div className="space-y-6">
-               {/* Quick Action Tiles */}
-               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+               {/* Quick Action Buttons */}
+               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                   <button
                      onClick={() => setActiveTab('new-order')}
-                     className="bg-cyan-600 hover:bg-cyan-500 text-white rounded-2xl p-5 shadow-lg shadow-cyan-600/20 active:scale-95 hover:scale-[1.02] transition-all group flex flex-col justify-between h-36 relative overflow-hidden text-left"
+                     className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 hover:border-cyan-500 dark:hover:border-cyan-500 rounded-xl shadow-sm hover:shadow transition-all text-left group"
                   >
-                     <div className="p-2 bg-white/20 w-fit rounded-lg backdrop-blur-sm">
-                        <Plus size={20} />
+                     <div className="p-2.5 bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 rounded-lg group-hover:scale-105 transition-transform">
+                        <Plus size={18} />
                      </div>
-                     <div>
-                        <span className="block text-xs font-bold opacity-80 uppercase tracking-wider">Nova Ordem</span>
-                        <span className="block text-xl font-black leading-none mb-1">OCP</span>
-                        <span className="text-xs opacity-90 font-medium leading-tight block">Compra de Insumos</span>
+                     <div className="min-w-0">
+                        <span className="text-xs font-black text-slate-800 dark:text-white block truncate">OCP • Compra</span>
+                        <span className="text-[10px] text-slate-400 block truncate">Insumos & Estoque</span>
                      </div>
                   </button>
 
                   <button
                      onClick={() => setIsOSMModalOpen(true)}
-                     className="bg-teal-600 hover:bg-teal-500 text-white rounded-2xl p-5 shadow-lg shadow-teal-600/20 active:scale-95 hover:scale-[1.02] transition-all group flex flex-col justify-between h-36 relative overflow-hidden text-left"
+                     className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 hover:border-teal-500 dark:hover:border-teal-500 rounded-xl shadow-sm hover:shadow transition-all text-left group"
                   >
-                     <div className="p-2 bg-white/20 w-fit rounded-lg backdrop-blur-sm">
-                        <Wrench size={20} />
+                     <div className="p-2.5 bg-teal-50 dark:bg-teal-900/30 text-teal-600 rounded-lg group-hover:scale-105 transition-transform">
+                        <Wrench size={18} />
                      </div>
-                     <div>
-                        <span className="block text-xs font-bold opacity-80 uppercase tracking-wider">Nova Ordem</span>
-                        <span className="block text-xl font-black leading-none mb-1">OSM</span>
-                        <span className="text-xs opacity-90 font-medium leading-tight block">Manutenção de Frota</span>
+                     <div className="min-w-0">
+                        <span className="text-xs font-black text-slate-800 dark:text-white block truncate">OSM • Serviço</span>
+                        <span className="text-[10px] text-slate-400 block truncate">Manutenção Frota</span>
                      </div>
                   </button>
 
                   <button
                      onClick={() => setIsODOModalOpen(true)}
-                     className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl p-5 shadow-lg shadow-indigo-600/20 active:scale-95 hover:scale-[1.02] transition-all group flex flex-col justify-between h-36 relative overflow-hidden text-left"
+                     className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 hover:border-indigo-500 dark:hover:border-indigo-500 rounded-xl shadow-sm hover:shadow transition-all text-left group"
                   >
-                     <div className="p-2 bg-white/20 w-fit rounded-lg backdrop-blur-sm">
-                        <FileText size={20} />
+                     <div className="p-2.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-lg group-hover:scale-105 transition-transform">
+                        <FileText size={18} />
                      </div>
-                     <div>
-                        <span className="block text-xs font-bold opacity-80 uppercase tracking-wider">Nova Ordem</span>
-                        <span className="block text-xl font-black leading-none mb-1">ODO</span>
-                        <span className="text-xs opacity-90 font-medium leading-tight block">Despesa Operacional</span>
+                     <div className="min-w-0">
+                        <span className="text-xs font-black text-slate-800 dark:text-white block truncate">ODO • Despesa</span>
+                        <span className="text-[10px] text-slate-400 block truncate">Geral / Operacional</span>
                      </div>
                   </button>
 
                   <button
                      onClick={() => setIsODPModalOpen(true)}
-                     className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-2xl p-5 shadow-lg shadow-fuchsia-600/20 active:scale-95 hover:scale-[1.02] transition-all group flex flex-col justify-between h-36 relative overflow-hidden text-left"
+                     className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 hover:border-fuchsia-500 dark:hover:border-fuchsia-500 rounded-xl shadow-sm hover:shadow transition-all text-left group"
                   >
-                     <div className="p-2 bg-white/20 w-fit rounded-lg backdrop-blur-sm">
-                        <Users size={20} />
+                     <div className="p-2.5 bg-fuchsia-50 dark:bg-fuchsia-900/30 text-fuchsia-600 rounded-lg group-hover:scale-105 transition-transform">
+                        <Users size={18} />
                      </div>
-                     <div>
-                        <span className="block text-xs font-bold opacity-80 uppercase tracking-wider">Nova Ordem</span>
-                        <span className="block text-xl font-black leading-none mb-1">ODP</span>
-                        <span className="text-xs opacity-90 font-medium leading-tight block">Despesa com Pessoal</span>
+                     <div className="min-w-0">
+                        <span className="text-xs font-black text-slate-800 dark:text-white block truncate">ODP • Pessoal</span>
+                        <span className="text-[10px] text-slate-400 block truncate">Salários & RH</span>
                      </div>
                   </button>
 
                   <button
                      onClick={() => setIsODAModalOpen(true)}
-                     className="bg-orange-600 hover:bg-orange-500 text-white rounded-2xl p-5 shadow-lg shadow-orange-600/20 active:scale-95 hover:scale-[1.02] transition-all group flex flex-col justify-between h-36 relative overflow-hidden text-left"
+                     className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 hover:border-amber-500 dark:hover:border-amber-500 rounded-xl shadow-sm hover:shadow transition-all text-left group"
                   >
-                     <div className="p-2 bg-white/20 w-fit rounded-lg backdrop-blur-sm">
-                        <Fuel size={20} />
+                     <div className="p-2.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 rounded-lg group-hover:scale-105 transition-transform">
+                        <Fuel size={18} />
                      </div>
-                     <div>
-                        <span className="block text-xs font-bold opacity-80 uppercase tracking-wider">Nova Ordem</span>
-                        <span className="block text-xl font-black leading-none mb-1">ODA</span>
-                        <span className="text-xs opacity-90 font-medium leading-tight block">Abastecimento Frota</span>
+                     <div className="min-w-0">
+                        <span className="text-xs font-black text-slate-800 dark:text-white block truncate">ODA • Combustível</span>
+                        <span className="text-[10px] text-slate-400 block truncate">Abastecimento Frota</span>
                      </div>
                   </button>
                </div>
@@ -1306,18 +1301,21 @@ const Purchases = () => {
                      </div>
                   </div>
 
-                  <div className="bg-gradient-to-br from-cyan-700 to-slate-900 rounded-3xl p-6 shadow-xl text-white flex flex-col justify-between">
+                  <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-gray-700 flex flex-col justify-between">
                      <div>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-cyan-300">Inteligência de Compras</span>
-                        <h3 className="text-2xl font-black mt-1 mb-4 leading-tight">Política de Cotação Mínima</h3>
-                        <p className="text-xs text-cyan-100/80 leading-relaxed">
-                           Todas as aquisições de insumos acima de R$ 5.000,00 devem conter no mínimo 3 cotações de fornecedores homologados para garantir melhor custo e prazo.
+                        <div className="flex items-center gap-2 text-cyan-600 dark:text-cyan-400 mb-2">
+                           <Coins size={18} />
+                           <span className="text-[10px] font-black uppercase tracking-wider">Diretriz de Suprimentos</span>
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Política de Cotação Mínima</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                           Aquisições de insumos acima de R$ 5.000,00 exigem mapa comparativo com no mínimo 3 propostas de fornecedores homologados para garantir melhores custos e prazos.
                         </p>
                      </div>
-                     <div className="pt-6 border-t border-cyan-600/30">
+                     <div className="pt-4 border-t border-slate-100 dark:border-gray-700 mt-4">
                         <button
                            onClick={() => setActiveTab('quotations')}
-                           className="w-full py-3 bg-cyan-500 hover:bg-cyan-400 text-white rounded-xl font-black uppercase text-xs tracking-wider transition-all shadow-lg flex items-center justify-center gap-2"
+                           className="w-full py-2.5 bg-cyan-50 dark:bg-cyan-900/30 hover:bg-cyan-100 text-cyan-700 dark:text-cyan-300 rounded-xl font-bold uppercase text-xs tracking-wider transition-colors flex items-center justify-center gap-2"
                         >
                            <Coins size={15} /> Acessar Mapa de Cotações
                         </button>
@@ -2227,22 +2225,24 @@ const Purchases = () => {
          {/* MODAL: CONFERÊNCIA DE RECEBIMENTO DE ENTREGA */}
          {isReceiveInspectionModalOpen && inspectingOrder && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-               <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-xl border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden my-8">
-                  <div className="p-6 border-b dark:border-gray-700 bg-emerald-50 dark:bg-emerald-950/30 flex justify-between items-center">
+               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden my-6">
+                  <div className="p-5 border-b dark:border-gray-700 bg-slate-50 dark:bg-gray-800/50 flex justify-between items-center">
                      <div className="flex items-center gap-3">
                         <div className="p-2 bg-emerald-600 text-white rounded-xl">
-                           <Package size={22} />
+                           <Package size={18} />
                         </div>
                         <div>
-                           <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">Conferência de Recebimento de Entrega</h3>
+                           <h3 className="font-bold text-base text-slate-900 dark:text-white">Conferência de Recebimento</h3>
                            <p className="text-xs text-slate-500">Ordem #{inspectingOrder.id} • {inspectingOrder.supplierName}</p>
                         </div>
                      </div>
-                     <button onClick={() => setIsReceiveInspectionModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+                     <button onClick={() => setIsReceiveInspectionModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <X size={20} />
+                     </button>
                   </div>
 
-                  <div className="p-6 space-y-5">
-                     <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+                  <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+                     <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
                         <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Itens Conferidos no Descarregamento</h4>
                         <div className="space-y-2">
                            {inspectingOrder.items.map((it, idx) => (
@@ -2256,34 +2256,34 @@ const Purchases = () => {
                         </div>
                      </div>
 
-                     <div className="grid grid-cols-2 gap-4">
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Número da Nota Fiscal (DANFE)</label>
+                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Número da NF (DANFE)</label>
                            <input
                               type="text"
                               placeholder="Ex: NF-e 045.192"
                               value={inspectionInvoiceNumber}
                               onChange={e => setInspectionInvoiceNumber(e.target.value)}
-                              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold"
+                              className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
                            />
                         </div>
                         <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Data Efetiva de Recebimento</label>
+                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Data Efetiva de Recebimento</label>
                            <input
                               type="text"
                               value={inspectionReceivedDate}
                               onChange={e => setInspectionReceivedDate(e.target.value)}
-                              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold"
+                              className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
                            />
                         </div>
                      </div>
 
                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Conta Financeira para Lançamento do Contas a Pagar</label>
+                        <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Conta Financeira para Lançamento do Contas a Pagar</label>
                         <select
                            value={inspectionAccountId}
                            onChange={e => setInspectionAccountId(e.target.value)}
-                           className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold"
+                           className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
                         >
                            {accounts.map(acc => (
                               <option key={acc.id} value={acc.id}>{acc.name} ({formatCurrency(acc.balance)})</option>
@@ -2292,32 +2292,32 @@ const Purchases = () => {
                      </div>
 
                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Observações de Recebimento / Vistoria</label>
+                        <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Observações de Recebimento / Vistoria</label>
                         <textarea
                            placeholder="Lote íntegro, amostra coletada para laboratório, certificado de conformidade anexo..."
                            value={inspectionNotes}
                            onChange={e => setInspectionNotes(e.target.value)}
                            rows={2}
-                           className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-medium"
+                           className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-medium"
                         />
                      </div>
+                  </div>
 
-                     <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex gap-3">
-                        <button
-                           type="button"
-                           onClick={() => setIsReceiveInspectionModalOpen(false)}
-                           className="flex-1 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl text-xs uppercase"
-                        >
-                           Cancelar
-                        </button>
-                        <button
-                           type="button"
-                           onClick={handleConfirmReceiveOrder}
-                           className="flex-[2] py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
-                        >
-                           <CheckCircle size={15} /> Confirmar Entrada no Estoque
-                        </button>
-                     </div>
+                  <div className="p-5 bg-slate-50 dark:bg-gray-800/80 border-t dark:border-gray-700 flex gap-3">
+                     <button
+                        type="button"
+                        onClick={() => setIsReceiveInspectionModalOpen(false)}
+                        className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-600 transition-colors uppercase"
+                     >
+                        Cancelar
+                     </button>
+                     <button
+                        type="button"
+                        onClick={handleConfirmReceiveOrder}
+                        className="flex-[2] py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow transition-colors flex items-center justify-center gap-2"
+                     >
+                        <CheckCircle size={15} /> Confirmar Entrada no Estoque
+                     </button>
                   </div>
                </div>
             </div>
@@ -2326,18 +2326,20 @@ const Purchases = () => {
          {/* MODAL: NOVA COTAÇÃO (RFQ) */}
          {isNewQuotationModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-               <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-2xl border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden my-8">
-                  <div className="p-6 border-b dark:border-gray-700 bg-indigo-50/50 dark:bg-indigo-950/30 flex justify-between items-center">
+               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden my-6">
+                  <div className="p-5 border-b dark:border-gray-700 bg-slate-50 dark:bg-gray-800/50 flex justify-between items-center">
                      <div className="flex items-center gap-3">
                         <div className="p-2 bg-indigo-600 text-white rounded-xl">
-                           <Coins size={22} />
+                           <Coins size={18} />
                         </div>
                         <div>
-                           <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">Criar Solicitação de Cotação (RFQ)</h3>
-                           <p className="text-xs text-slate-500">Mínimo 3 fornecedores para comparação de preços e condições.</p>
+                           <h3 className="font-bold text-base text-slate-900 dark:text-white">Criar Solicitação de Cotação (RFQ)</h3>
+                           <p className="text-xs text-slate-500">Mínimo 3 fornecedores para comparação de preços e prazos</p>
                         </div>
                      </div>
-                     <button onClick={() => setIsNewQuotationModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+                     <button onClick={() => setIsNewQuotationModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <X size={20} />
+                     </button>
                   </div>
 
                   <form
@@ -2358,157 +2360,158 @@ const Purchases = () => {
                         addToast(`Cotação #${quoteId} criada com sucesso!`, 'success');
                         setIsNewQuotationModalOpen(false);
                      }}
-                     className="p-6 space-y-5"
                   >
-                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Título / Objeto da Cotação</label>
-                        <input
-                           type="text"
-                           placeholder="Ex: Fornecimento de 50 Toneladas de Cimento CP-II"
-                           value={newQuotationForm.title}
-                           onChange={e => setNewQuotationForm({ ...newQuotationForm, title: e.target.value })}
-                           required
-                           className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold"
-                        />
-                     </div>
-
-                     <div className="grid grid-cols-2 gap-4">
+                     <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
                         <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Departamento Solicitante</label>
+                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Título / Objeto da Cotação</label>
                            <input
                               type="text"
-                              value={newQuotationForm.requestedBy}
-                              onChange={e => setNewQuotationForm({ ...newQuotationForm, requestedBy: e.target.value })}
+                              placeholder="Ex: Fornecimento de 50 Toneladas de Cimento CP-II"
+                              value={newQuotationForm.title}
+                              onChange={e => setNewQuotationForm({ ...newQuotationForm, title: e.target.value })}
                               required
-                              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold"
+                              className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
                            />
                         </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Prazo Limite / Validade</label>
-                           <input
-                              type="date"
-                              value={newQuotationForm.expiryDate}
-                              onChange={e => setNewQuotationForm({ ...newQuotationForm, expiryDate: e.target.value })}
-                              required
-                              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold"
-                           />
-                        </div>
-                     </div>
 
-                     {/* Item */}
-                     <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase">Item Cotado</label>
-                        <div className="grid grid-cols-3 gap-3">
-                           <div className="col-span-2">
-                              <select
-                                 value={newQuotationForm.items[0]?.productId}
-                                 onChange={e => {
-                                    const selected = inventory.find(i => i.id === e.target.value);
-                                    const itms = [...newQuotationForm.items];
-                                    itms[0] = {
-                                       productId: e.target.value,
-                                       productName: selected ? selected.name : 'Insumo',
-                                       quantity: itms[0]?.quantity || 10,
-                                       unit: selected ? selected.unit : 'un'
-                                    };
-                                    setNewQuotationForm({ ...newQuotationForm, items: itms });
-                                 }}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Departamento Solicitante</label>
+                              <input
+                                 type="text"
+                                 value={newQuotationForm.requestedBy}
+                                 onChange={e => setNewQuotationForm({ ...newQuotationForm, requestedBy: e.target.value })}
                                  required
-                                 className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold"
-                              >
-                                 <option value="">Selecione o produto do estoque...</option>
-                                 {inventory.map(i => (
-                                    <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>
-                                 ))}
-                              </select>
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                              />
                            </div>
                            <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Prazo Limite / Validade</label>
                               <input
-                                 type="number"
-                                 placeholder="Quantidade"
-                                 value={newQuotationForm.items[0]?.quantity}
-                                 onChange={e => {
-                                    const itms = [...newQuotationForm.items];
-                                    itms[0] = { ...itms[0], quantity: Number(e.target.value) };
-                                    setNewQuotationForm({ ...newQuotationForm, items: itms });
-                                 }}
+                                 type="date"
+                                 value={newQuotationForm.expiryDate}
+                                 onChange={e => setNewQuotationForm({ ...newQuotationForm, expiryDate: e.target.value })}
                                  required
-                                 className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
                               />
                            </div>
                         </div>
-                     </div>
 
-                     {/* Supplier Quotes (3 Suppliers) */}
-                     <div className="space-y-3">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase">Propostas Recebidas dos Fornecedores (Mínimo 3)</label>
-                        {newQuotationForm.quotes.map((q, idx) => (
-                           <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-                              <div className="grid grid-cols-2 gap-2">
-                                 <div>
-                                    <select
-                                       value={q.supplierId}
-                                       onChange={e => {
-                                          const sup = suppliers.find(s => s.id === e.target.value);
-                                          const nq = [...newQuotationForm.quotes];
-                                          nq[idx] = { ...nq[idx], supplierId: e.target.value, supplierName: sup ? sup.name : '' };
-                                          setNewQuotationForm({ ...newQuotationForm, quotes: nq });
-                                       }}
-                                       required
-                                       className="w-full bg-white dark:bg-slate-800 border rounded-lg p-2 text-xs font-bold"
-                                    >
-                                       <option value="">Selecione o Fornecedor {idx + 1}...</option>
-                                       {suppliers.map(s => (
-                                          <option key={s.id} value={s.id}>{s.name}</option>
-                                       ))}
-                                    </select>
-                                 </div>
-                                 <div className="flex gap-2">
-                                    <input
-                                       type="number"
-                                       step="0.01"
-                                       placeholder="Preço Unit. (R$)"
-                                       value={q.unitPrice || ''}
-                                       onChange={e => {
-                                          const price = Number(e.target.value);
-                                          const qty = newQuotationForm.items[0]?.quantity || 1;
-                                          const nq = [...newQuotationForm.quotes];
-                                          nq[idx] = { ...nq[idx], unitPrice: price, totalPrice: price * qty };
-                                          setNewQuotationForm({ ...newQuotationForm, quotes: nq });
-                                       }}
-                                       required
-                                       className="w-full bg-white dark:bg-slate-800 border rounded-lg p-2 text-xs font-bold"
-                                    />
-                                    <input
-                                       type="number"
-                                       placeholder="Prazo (dias)"
-                                       value={q.deliveryDays}
-                                       onChange={e => {
-                                          const nq = [...newQuotationForm.quotes];
-                                          nq[idx] = { ...nq[idx], deliveryDays: Number(e.target.value) };
-                                          setNewQuotationForm({ ...newQuotationForm, quotes: nq });
-                                       }}
-                                       className="w-24 bg-white dark:bg-slate-800 border rounded-lg p-2 text-xs font-bold"
-                                    />
-                                 </div>
+                        {/* Item */}
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2">
+                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">Item Cotado</label>
+                           <div className="grid grid-cols-3 gap-2">
+                              <div className="col-span-2">
+                                 <select
+                                    value={newQuotationForm.items[0]?.productId}
+                                    onChange={e => {
+                                       const selected = inventory.find(i => i.id === e.target.value);
+                                       const itms = [...newQuotationForm.items];
+                                       itms[0] = {
+                                          productId: e.target.value,
+                                          productName: selected ? selected.name : 'Insumo',
+                                          quantity: itms[0]?.quantity || 10,
+                                          unit: selected ? selected.unit : 'un'
+                                       };
+                                       setNewQuotationForm({ ...newQuotationForm, items: itms });
+                                    }}
+                                    required
+                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                                 >
+                                    <option value="">Selecione o produto do estoque...</option>
+                                    {inventory.map(i => (
+                                       <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>
+                                    ))}
+                                 </select>
+                              </div>
+                              <div>
+                                 <input
+                                    type="number"
+                                    placeholder="Quantidade"
+                                    value={newQuotationForm.items[0]?.quantity}
+                                    onChange={e => {
+                                       const itms = [...newQuotationForm.items];
+                                       itms[0] = { ...itms[0], quantity: Number(e.target.value) };
+                                       setNewQuotationForm({ ...newQuotationForm, items: itms });
+                                    }}
+                                    required
+                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                                 />
                               </div>
                            </div>
-                        ))}
+                        </div>
+
+                        {/* Supplier Quotes (3 Suppliers) */}
+                        <div className="space-y-2.5">
+                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">Propostas dos Fornecedores (Mínimo 3)</label>
+                           {newQuotationForm.quotes.map((q, idx) => (
+                              <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <div>
+                                       <select
+                                          value={q.supplierId}
+                                          onChange={e => {
+                                             const sup = suppliers.find(s => s.id === e.target.value);
+                                             const nq = [...newQuotationForm.quotes];
+                                             nq[idx] = { ...nq[idx], supplierId: e.target.value, supplierName: sup ? sup.name : '' };
+                                             setNewQuotationForm({ ...newQuotationForm, quotes: nq });
+                                          }}
+                                          required
+                                          className="w-full bg-white dark:bg-slate-800 border rounded-lg p-2 text-xs font-bold"
+                                       >
+                                          <option value="">Selecione o Fornecedor {idx + 1}...</option>
+                                          {suppliers.map(s => (
+                                             <option key={s.id} value={s.id}>{s.name}</option>
+                                          ))}
+                                       </select>
+                                    </div>
+                                    <div className="flex gap-2">
+                                       <input
+                                          type="number"
+                                          step="0.01"
+                                          placeholder="Preço Unit. (R$)"
+                                          value={q.unitPrice || ''}
+                                          onChange={e => {
+                                             const price = Number(e.target.value);
+                                             const qty = newQuotationForm.items[0]?.quantity || 1;
+                                             const nq = [...newQuotationForm.quotes];
+                                             nq[idx] = { ...nq[idx], unitPrice: price, totalPrice: price * qty };
+                                             setNewQuotationForm({ ...newQuotationForm, quotes: nq });
+                                          }}
+                                          required
+                                          className="w-full bg-white dark:bg-slate-800 border rounded-lg p-2 text-xs font-bold"
+                                       />
+                                       <input
+                                          type="number"
+                                          placeholder="Prazo (dias)"
+                                          value={q.deliveryDays}
+                                          onChange={e => {
+                                             const nq = [...newQuotationForm.quotes];
+                                             nq[idx] = { ...nq[idx], deliveryDays: Number(e.target.value) };
+                                             setNewQuotationForm({ ...newQuotationForm, quotes: nq });
+                                          }}
+                                          className="w-24 bg-white dark:bg-slate-800 border rounded-lg p-2 text-xs font-bold"
+                                       />
+                                    </div>
+                                 </div>
+                              </div>
+                           ))}
+                        </div>
                      </div>
 
-                     <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex gap-3">
+                     <div className="p-5 bg-slate-50 dark:bg-gray-800/80 border-t dark:border-gray-700 flex gap-3">
                         <button
                            type="button"
                            onClick={() => setIsNewQuotationModalOpen(false)}
-                           className="flex-1 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl text-xs uppercase"
+                           className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 transition-colors uppercase"
                         >
                            Cancelar
                         </button>
                         <button
                            type="submit"
-                           className="flex-[2] py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl text-xs uppercase tracking-wider shadow-lg"
+                           className="flex-[2] py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow transition-colors flex items-center justify-center gap-2"
                         >
-                           Salvar Cotação
+                           <Save size={15} /> Salvar Cotação
                         </button>
                      </div>
                   </form>
@@ -2618,77 +2621,136 @@ const Purchases = () => {
 
          {/* STOCK ITEM MODAL */}
          {isStockModalOpen && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border dark:border-gray-700 animate-in zoom-in duration-200">
-                  <div className="p-6 border-b dark:border-gray-700 flex justify-between items-center">
-                     <h3 className="font-bold text-lg text-slate-900 dark:text-white uppercase tracking-tight">{editingItem ? 'Editar Item' : 'Novo Item de Estoque'}</h3>
-                     <button onClick={() => setIsStockModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden my-6">
+                  <div className="p-5 border-b dark:border-gray-700 bg-slate-50 dark:bg-gray-800/50 flex justify-between items-center">
+                     <div className="flex items-center gap-3">
+                        <div className="p-2 bg-cyan-600 text-white rounded-xl">
+                           <Package size={18} />
+                        </div>
+                        <div>
+                           <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                              {editingItem ? 'Editar Item de Estoque' : 'Novo Item de Estoque'}
+                           </h3>
+                           <p className="text-xs text-slate-500">Parâmetros de saldo, ponto de reposição e precificação</p>
+                        </div>
+                     </div>
+                     <button onClick={() => setIsStockModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <X size={20} />
+                     </button>
                   </div>
-                  <form onSubmit={handleSaveStock} className="p-6 space-y-4">
-                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome do Item</label>
-                        <input type="text" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 font-bold text-sm" value={stockForm.name || ''} onChange={e => setStockForm({ ...stockForm, name: e.target.value })} required />
-                     </div>
-                     <div className="grid grid-cols-2 gap-4">
+                  <form onSubmit={handleSaveStock}>
+                     <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
                         <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Categoria</label>
-                           <select
-                              className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 font-bold text-sm uppercase"
-                              value={stockForm.category || ''}
-                              onChange={e => setStockForm({ ...stockForm, category: e.target.value })}
+                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Nome do Item / Insumo</label>
+                           <input
+                              type="text"
+                              className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                              value={stockForm.name || ''}
+                              onChange={e => setStockForm({ ...stockForm, name: e.target.value })}
                               required
-                           >
-                              <option value="">Selecione...</option>
-                              <option value="Insumos">Insumos</option>
-                              <option value="Matéria Prima">Matéria Prima</option>
-                              <option value="Acabamentos">Acabamentos</option>
-                              <option value="Ferramentas">Ferramentas</option>
-                              <option value="Equipamentos">Equipamentos</option>
-                              <option value="Consumíveis">Consumíveis</option>
-                              <option value="Outros">Outros</option>
-                           </select>
+                           />
                         </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Unidade</label>
-                           <select
-                              className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 font-bold text-sm uppercase"
-                              value={stockForm.unit || ''}
-                              onChange={e => setStockForm({ ...stockForm, unit: e.target.value })}
-                              required
-                           >
-                              <option value="">Selecione...</option>
-                              <option value="un">UN (Unidade)</option>
-                              <option value="kg">KG (Quilos)</option>
-                              <option value="ton">TON (Toneladas)</option>
-                              <option value="m³">M³ (Metros Cúb.)</option>
-                              <option value="m²">M² (Metros Quad.)</option>
-                              <option value="m">M (Metros Lineares)</option>
-                              <option value="l">L (Litros)</option>
-                              <option value="sc">SC (Sacos)</option>
-                           </select>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Categoria</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold uppercase"
+                                 value={stockForm.category || ''}
+                                 onChange={e => setStockForm({ ...stockForm, category: e.target.value })}
+                                 required
+                              >
+                                 <option value="">Selecione...</option>
+                                 <option value="Insumos">Insumos</option>
+                                 <option value="Matéria Prima">Matéria Prima</option>
+                                 <option value="Acabamentos">Acabamentos</option>
+                                 <option value="Ferramentas">Ferramentas</option>
+                                 <option value="Equipamentos">Equipamentos</option>
+                                 <option value="Consumíveis">Consumíveis</option>
+                                 <option value="Outros">Outros</option>
+                              </select>
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Unidade</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold uppercase"
+                                 value={stockForm.unit || ''}
+                                 onChange={e => setStockForm({ ...stockForm, unit: e.target.value })}
+                                 required
+                              >
+                                 <option value="">Selecione...</option>
+                                 <option value="un">UN (Unidade)</option>
+                                 <option value="kg">KG (Quilos)</option>
+                                 <option value="ton">TON (Toneladas)</option>
+                                 <option value="m³">M³ (Metros Cúb.)</option>
+                                 <option value="m²">M² (Metros Quad.)</option>
+                                 <option value="m">M (Metros Lineares)</option>
+                                 <option value="l">L (Litros)</option>
+                                 <option value="sc">SC (Sacos)</option>
+                              </select>
+                           </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Quantidade Atual</label>
+                              <input
+                                 type="number"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={stockForm.quantity || 0}
+                                 onChange={e => setStockForm({ ...stockForm, quantity: Number(e.target.value) })}
+                                 required
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Estoque Mínimo (Alerta)</label>
+                              <input
+                                 type="number"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={stockForm.minStock || 0}
+                                 onChange={e => setStockForm({ ...stockForm, minStock: Number(e.target.value) })}
+                                 required
+                              />
+                           </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Preço de Custo (R$)</label>
+                              <input
+                                 type="number"
+                                 step="0.01"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={stockForm.costPrice ?? stockForm.price ?? 0}
+                                 onChange={e => setStockForm({ ...stockForm, costPrice: Number(e.target.value), price: stockForm.price || Number(e.target.value) })}
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Preço Unitário Referência (R$)</label>
+                              <input
+                                 type="number"
+                                 step="0.01"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={stockForm.price || 0}
+                                 onChange={e => setStockForm({ ...stockForm, price: Number(e.target.value) })}
+                                 required
+                              />
+                           </div>
                         </div>
                      </div>
-                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Qtd Atual</label>
-                           <input type="number" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 font-bold text-sm" value={stockForm.quantity || 0} onChange={e => setStockForm({ ...stockForm, quantity: Number(e.target.value) })} required />
-                        </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Qtd Mínima</label>
-                           <input type="number" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 font-bold text-sm" value={stockForm.minStock || 0} onChange={e => setStockForm({ ...stockForm, minStock: Number(e.target.value) })} required />
-                        </div>
+                     <div className="p-5 bg-slate-50 dark:bg-gray-800/80 border-t dark:border-gray-700 flex gap-3">
+                        <button
+                           type="button"
+                           onClick={() => setIsStockModalOpen(false)}
+                           className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 transition-colors uppercase"
+                        >
+                           Cancelar
+                        </button>
+                        <button
+                           type="submit"
+                           className="flex-[2] py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow transition-colors flex items-center justify-center gap-2"
+                        >
+                           <Save size={15} /> Salvar Item
+                        </button>
                      </div>
-                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Preço de Custo (R$)</label>
-                           <input type="number" step="0.01" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 font-bold text-sm" value={stockForm.costPrice ?? stockForm.price ?? 0} onChange={e => setStockForm({ ...stockForm, costPrice: Number(e.target.value), price: stockForm.price || Number(e.target.value) })} />
-                        </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Preço Unitário (R$)</label>
-                           <input type="number" step="0.01" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 font-bold text-sm" value={stockForm.price || 0} onChange={e => setStockForm({ ...stockForm, price: Number(e.target.value) })} required />
-                        </div>
-                     </div>
-                     <button type="submit" className="w-full py-4 bg-cyan-600 text-white font-black rounded-xl uppercase tracking-widest text-xs shadow-lg mt-4">Salvar Item</button>
                   </form>
                </div>
             </div>
@@ -2696,55 +2758,117 @@ const Purchases = () => {
 
          {/* SUPPLIER MODAL */}
          {isSupplierModalOpen && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg border dark:border-gray-700 animate-in zoom-in duration-200">
-                  <div className="p-6 border-b dark:border-gray-700 flex justify-between items-center">
-                     <h3 className="font-bold text-lg text-slate-900 dark:text-white uppercase tracking-tight">
-                        {editingSupplier ? 'Editar Fornecedor' : 'Novo Fornecedor'}
-                     </h3>
-                     <button type="button" onClick={() => setIsSupplierModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
-                  </div>
-                  <form onSubmit={handleSaveSupplier} className="p-6 space-y-4">
-                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Razão Social / Nome</label>
-                        <input type="text" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 px-4 font-bold text-sm" value={supForm.name || ''} onChange={e => setSupForm({ ...supForm, name: e.target.value })} required />
-                     </div>
-                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">CNPJ / CPF</label>
-                           <input type="text" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 px-4 font-bold text-sm" value={supForm.document || ''} onChange={e => setSupForm({ ...supForm, document: e.target.value })} required />
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden my-6">
+                  <div className="p-5 border-b dark:border-gray-700 bg-slate-50 dark:bg-gray-800/50 flex justify-between items-center">
+                     <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-600 text-white rounded-xl">
+                           <Truck size={18} />
                         </div>
                         <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Categoria</label>
-                           <input type="text" placeholder="Ex: Insumos, Combustível..." className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 px-4 font-bold text-sm" value={supForm.category || ''} onChange={e => setSupForm({ ...supForm, category: e.target.value })} required />
+                           <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                              {editingSupplier ? 'Editar Fornecedor' : 'Novo Fornecedor'}
+                           </h3>
+                           <p className="text-xs text-slate-500">Cadastro de fornecedores homologados e prestadores</p>
                         </div>
                      </div>
-                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Telefone</label>
-                           <input type="text" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 px-4 font-bold text-sm" value={supForm.phone || ''} onChange={e => setSupForm({ ...supForm, phone: e.target.value })} />
-                        </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">E-mail</label>
-                           <input type="email" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 px-4 font-bold text-sm" value={supForm.email || ''} onChange={e => setSupForm({ ...supForm, email: e.target.value })} />
-                        </div>
-                     </div>
-                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Contato Responsável</label>
-                           <input type="text" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 px-4 font-bold text-sm" value={supForm.contactPerson || ''} onChange={e => setSupForm({ ...supForm, contactPerson: e.target.value })} />
-                        </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Status</label>
-                           <select className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 px-4 font-bold text-sm" value={supForm.status || 'Ativo'} onChange={e => setSupForm({ ...supForm, status: e.target.value as any })}>
-                              <option value="Ativo">Ativo</option>
-                              <option value="Inativo">Inativo</option>
-                           </select>
-                        </div>
-                     </div>
-                     <button type="submit" className="w-full py-4 bg-cyan-600 text-white font-black rounded-xl uppercase tracking-widest text-xs shadow-lg mt-4">
-                        {editingSupplier ? 'Atualizar Fornecedor' : 'Cadastrar Fornecedor'}
+                     <button type="button" onClick={() => setIsSupplierModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <X size={20} />
                      </button>
+                  </div>
+                  <form onSubmit={handleSaveSupplier}>
+                     <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+                        <div>
+                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Razão Social / Nome</label>
+                           <input
+                              type="text"
+                              className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                              value={supForm.name || ''}
+                              onChange={e => setSupForm({ ...supForm, name: e.target.value })}
+                              required
+                           />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">CNPJ / CPF</label>
+                              <input
+                                 type="text"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={supForm.document || ''}
+                                 onChange={e => setSupForm({ ...supForm, document: e.target.value })}
+                                 required
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Categoria</label>
+                              <input
+                                 type="text"
+                                 placeholder="Ex: Insumos, Combustível, Manutenção..."
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={supForm.category || ''}
+                                 onChange={e => setSupForm({ ...supForm, category: e.target.value })}
+                                 required
+                              />
+                           </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Telefone</label>
+                              <input
+                                 type="text"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={supForm.phone || ''}
+                                 onChange={e => setSupForm({ ...supForm, phone: e.target.value })}
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">E-mail</label>
+                              <input
+                                 type="email"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={supForm.email || ''}
+                                 onChange={e => setSupForm({ ...supForm, email: e.target.value })}
+                              />
+                           </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Contato Responsável</label>
+                              <input
+                                 type="text"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={supForm.contactPerson || ''}
+                                 onChange={e => setSupForm({ ...supForm, contactPerson: e.target.value })}
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Status</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={supForm.status || 'Ativo'}
+                                 onChange={e => setSupForm({ ...supForm, status: e.target.value as any })}
+                              >
+                                 <option value="Ativo">Ativo</option>
+                                 <option value="Inativo">Inativo</option>
+                              </select>
+                           </div>
+                        </div>
+                     </div>
+                     <div className="p-5 bg-slate-50 dark:bg-gray-800/80 border-t dark:border-gray-700 flex gap-3">
+                        <button
+                           type="button"
+                           onClick={() => setIsSupplierModalOpen(false)}
+                           className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 transition-colors uppercase"
+                        >
+                           Cancelar
+                        </button>
+                        <button
+                           type="submit"
+                           className="flex-[2] py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow transition-colors flex items-center justify-center gap-2"
+                        >
+                           <Save size={15} /> {editingSupplier ? 'Atualizar Fornecedor' : 'Cadastrar Fornecedor'}
+                        </button>
+                     </div>
                   </form>
                </div>
             </div>
@@ -2753,18 +2877,28 @@ const Purchases = () => {
          {/* OSM MODAL */}
          {isOSMModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-               <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-2xl w-full max-w-4xl border dark:border-slate-700 animate-in zoom-in duration-200 my-8">
-                  <div className="px-10 py-8 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-                     <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Gerar Ordem de Serviço de Manutenção (OSM)</h3>
-                     <button onClick={() => setIsOSMModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden my-6">
+                  <div className="p-5 border-b dark:border-gray-700 bg-slate-50 dark:bg-gray-800/50 flex justify-between items-center">
+                     <div className="flex items-center gap-3">
+                        <div className="p-2 bg-teal-600 text-white rounded-xl">
+                           <Wrench size={18} />
+                        </div>
+                        <div>
+                           <h3 className="font-bold text-base text-slate-900 dark:text-white">Ordem de Serviço de Manutenção (OSM)</h3>
+                           <p className="text-xs text-slate-500">Manutenção preventiva, corretiva ou preditiva de frota</p>
+                        </div>
+                     </div>
+                     <button onClick={() => setIsOSMModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <X size={20} />
+                     </button>
                   </div>
-                  <form onSubmit={handleSaveOSM} className="p-10 space-y-8">
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-6">
+                  <form onSubmit={handleSaveOSM}>
+                     <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                            <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Veículo / Equipamento</label>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Veículo / Equipamento</label>
                               <select
-                                 className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
                                  value={selectedVehicleId}
                                  onChange={e => setSelectedVehicleId(e.target.value)}
                                  required
@@ -2773,28 +2907,61 @@ const Purchases = () => {
                                  {fleet.map(v => <option key={v.id} value={v.id}>{v.plate} - {v.name}</option>)}
                               </select>
                            </div>
-                           <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Data</label>
-                                 <input type="date" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm" value={osmForm.date} onChange={e => setOsmForm({ ...osmForm, date: e.target.value })} required />
-                              </div>
-                              <div>
-                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Tipo</label>
-                                 <select className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm" value={osmForm.type} onChange={e => setOsmForm({ ...osmForm, type: e.target.value as any })} required>
-                                    <option value="Preventiva">Preventiva</option>
-                                    <option value="Corretiva">Corretiva</option>
-                                    <option value="Preditiva">Preditiva</option>
-                                 </select>
-                              </div>
-                           </div>
                            <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Descrição do Serviço</label>
-                              <textarea className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 px-4 font-bold text-sm" placeholder="Ex: Troca de óleo, filtros, reparo mecânico..." value={osmForm.description} onChange={e => setOsmForm({ ...osmForm, description: e.target.value })} required rows={4}></textarea>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Data da Manutenção</label>
+                              <input
+                                 type="date"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={osmForm.date}
+                                 onChange={e => setOsmForm({ ...osmForm, date: e.target.value })}
+                                 required
+                              />
                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                            <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Conta de Débito</label>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Tipo de Manutenção</label>
                               <select
-                                 className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={osmForm.type}
+                                 onChange={e => setOsmForm({ ...osmForm, type: e.target.value as any })}
+                                 required
+                              >
+                                 <option value="Preventiva">Preventiva</option>
+                                 <option value="Corretiva">Corretiva</option>
+                                 <option value="Preditiva">Preditiva</option>
+                              </select>
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">KM / Horímetro Atual</label>
+                              <input
+                                 type="number"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 placeholder="0"
+                                 value={osmForm.km || ''}
+                                 onChange={e => setOsmForm({ ...osmForm, km: Number(e.target.value) })}
+                                 required
+                              />
+                           </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Custo Estimado (R$)</label>
+                              <input
+                                 type="number"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 placeholder="0.00"
+                                 value={osmForm.cost || ''}
+                                 onChange={e => setOsmForm({ ...osmForm, cost: Number(e.target.value) })}
+                                 required
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Conta Financeira para Débito</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
                                  value={osmForm.debitAccountId || ''}
                                  onChange={e => setOsmForm({ ...osmForm, debitAccountId: e.target.value })}
                                  required
@@ -2807,86 +2974,83 @@ const Purchases = () => {
                            </div>
                         </div>
 
-                        <div className="space-y-6">
-                           <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Custo Estimado (R$)</label>
-                                 <input type="number" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm" placeholder="0.00" value={osmForm.cost || ''} onChange={e => setOsmForm({ ...osmForm, cost: Number(e.target.value) })} required />
-                              </div>
-                              <div>
-                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">KM Atual</label>
-                                 <input type="number" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm" placeholder="0" value={osmForm.km || ''} onChange={e => setOsmForm({ ...osmForm, km: Number(e.target.value) })} required />
-                              </div>
-                           </div>
+                        <div>
+                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Descrição do Serviço</label>
+                           <textarea
+                              className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-medium"
+                              placeholder="Ex: Troca de óleo, filtros, reparo mecânico, alinhamento..."
+                              value={osmForm.description}
+                              onChange={e => setOsmForm({ ...osmForm, description: e.target.value })}
+                              required
+                              rows={2}
+                           />
+                        </div>
 
-                           <div className="p-6 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700">
-                              <h4 className="text-xs font-black text-teal-600 uppercase mb-4">Peças e Insumos (Opcional)</h4>
-                              <div className="grid grid-cols-3 gap-4">
-                                 <div className="col-span-2">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Produto</label>
-                                    <select
-                                       className="w-full bg-white dark:bg-slate-800 border dark:border-slate-600 rounded-xl py-3 font-bold text-sm"
-                                       value={osmForm.productId || ''}
-                                       onChange={e => setOsmForm({ ...osmForm, productId: e.target.value, productQuantity: e.target.value ? (osmForm.productQuantity || 1) : 0 })}
-                                    >
-                                       <option value="">Nenhum produto...</option>
-                                       {inventory.map(item => (
-                                          <option key={item.id} value={item.id}>{item.name} (Estoque: {item.quantity})</option>
-                                       ))}
-                                    </select>
-                                 </div>
-                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Qtd</label>
-                                    <input
-                                       type="number"
-                                       min="0"
-                                       step="0.1"
-                                       className="w-full bg-white dark:bg-slate-800 border dark:border-slate-600 rounded-xl py-3 px-3 font-bold text-sm"
-                                       value={osmForm.productQuantity || ''}
-                                       onChange={e => setOsmForm({ ...osmForm, productQuantity: Number(e.target.value) })}
-                                       disabled={!osmForm.productId}
-                                       placeholder="1"
-                                    />
-                                 </div>
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2">
+                           <h4 className="text-xs font-bold text-teal-600 dark:text-teal-400">Peças e Insumos do Almoxarifado (Opcional)</h4>
+                           <div className="grid grid-cols-3 gap-2">
+                              <div className="col-span-2">
+                                 <select
+                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                                    value={osmForm.productId || ''}
+                                    onChange={e => setOsmForm({ ...osmForm, productId: e.target.value, productQuantity: e.target.value ? (osmForm.productQuantity || 1) : 0 })}
+                                 >
+                                    <option value="">Nenhum produto retirado...</option>
+                                    {inventory.map(item => (
+                                       <option key={item.id} value={item.id}>{item.name} (Estoque: {item.quantity})</option>
+                                    ))}
+                                 </select>
+                              </div>
+                              <div>
+                                 <input
+                                    type="number"
+                                    min="0"
+                                    step="0.1"
+                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
+                                    value={osmForm.productQuantity || ''}
+                                    onChange={e => setOsmForm({ ...osmForm, productQuantity: Number(e.target.value) })}
+                                    disabled={!osmForm.productId}
+                                    placeholder="Qtd: 1"
+                                 />
                               </div>
                            </div>
+                        </div>
 
-                           <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Plano de Contas</label>
-                              <select
-                                 className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm"
-                                 value={osmForm.ledgerCode}
-                                 onChange={e => {
-                                    const options: any = {
-                                       '2.02.02': 'Manutenção de Frota',
-                                       '2.02.03': 'IPVA / Taxas / Seguros',
-                                       '2.02.04': 'Pneus / Rodagem'
-                                    };
-                                    setOsmForm({ ...osmForm, ledgerCode: e.target.value, ledgerName: options[e.target.value] });
-                                 }}
-                              >
-                                 <option value="2.02.02">2.02.02 - Manutenção de Frota</option>
-                                 <option value="2.02.03">2.02.03 - IPVA / Taxas / Seguros</option>
-                                 <option value="2.02.04">2.02.04 - Pneus / Rodagem</option>
-                              </select>
-                           </div>
+                        <div>
+                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Classificação Contábil</label>
+                           <select
+                              className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                              value={osmForm.ledgerCode}
+                              onChange={e => {
+                                 const options: any = {
+                                    '2.02.02': 'Manutenção de Frota',
+                                    '2.02.03': 'IPVA / Taxas / Seguros',
+                                    '2.02.04': 'Pneus / Rodagem'
+                                 };
+                                 setOsmForm({ ...osmForm, ledgerCode: e.target.value, ledgerName: options[e.target.value] });
+                              }}
+                           >
+                              <option value="2.02.02">2.02.02 - Manutenção de Frota</option>
+                              <option value="2.02.03">2.02.03 - IPVA / Taxas / Seguros</option>
+                              <option value="2.02.04">2.02.04 - Pneus / Rodagem</option>
+                           </select>
                         </div>
                      </div>
 
-                     <div className="pt-8 border-t dark:border-slate-700 flex gap-4">
+                     <div className="p-5 bg-slate-50 dark:bg-gray-800/80 border-t dark:border-gray-700 flex gap-3">
                         <button
                            type="button"
                            onClick={() => setIsOSMModalOpen(false)}
-                           className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 font-black rounded-2xl uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all"
+                           className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 transition-colors uppercase"
                         >
                            Cancelar
                         </button>
                         <button
                            type="submit"
                            disabled={isSubmitting}
-                           className={`flex-[2] py-4 bg-teal-600 text-white font-black rounded-2xl uppercase tracking-widest text-[10px] shadow-2xl shadow-teal-600/30 hover:bg-teal-500 transition-all flex items-center justify-center gap-3 ${isSubmitting ? 'opacity-75 cursor-not-allowed' : ''}`}
+                           className={`flex-[2] py-2.5 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow transition-colors flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-75 cursor-not-allowed' : ''}`}
                         >
-                           {isSubmitting ? <Loader className="animate-spin" size={18} /> : <Save size={18} />}
+                           {isSubmitting ? <Loader className="animate-spin" size={15} /> : <Save size={15} />}
                            {isSubmitting ? 'Processando...' : 'Confirmar OSM'}
                         </button>
                      </div>
@@ -2898,152 +3062,182 @@ const Purchases = () => {
          {/* ODO MODAL */}
          {isODOModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-               <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-2xl w-full max-w-2xl border dark:border-slate-700 animate-in zoom-in duration-200 my-8">
-                  <div className="px-10 py-8 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-                     <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Gerar Ordem de Despesa (ODO)</h3>
-                     <button onClick={() => setIsODOModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
-                  </div>
-                  <form onSubmit={handleSaveODO} className="p-10 space-y-6">
-                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Categoria (Plano de Contas)</label>
-                           <select
-                              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                              value={odoForm.ledgerCode}
-                              onChange={e => {
-                                 const code = e.target.value;
-                                 const options: Record<string, string> = {
-                                    '2.02.01': 'Material de Escritório',
-                                    '2.02.05': 'Energia Elétrica',
-                                    '2.02.06': 'Água e Esgoto',
-                                    '2.02.07': 'Telefonia e Internet',
-                                    '2.02.08': 'Aluguel e Condomínio',
-                                    '2.03.01': 'Serviços de Terceiros',
-                                    '2.03.02': 'Limpeza e Conservação',
-                                    '2.03.03': 'Manutenção Predial',
-                                    '2.03.04': 'Licenças e Softwares',
-                                    '2.03.05': 'Marketing e Publicidade',
-                                    '2.04.01': 'Impostos Federais',
-                                    '2.04.02': 'Impostos Municipais',
-                                    '2.05.01': 'Viagens e Hospedagem',
-                                    '2.02.09': 'Combustível (Uso Geral)',
-                                    '2.02.99': 'Outras Despesas Gerais'
-                                 };
-                                 setOdoForm({
-                                    ...odoForm,
-                                    ledgerCode: code,
-                                    category: options[code],
-                                    description: odoForm.description === '' ? options[code] : odoForm.description
-                                 });
-                              }}
-                           >
-                              <optgroup label="Despesas Administrativas">
-                                 <option value="2.02.01">2.02.01 - Material de Escritório</option>
-                                 <option value="2.02.05">2.02.05 - Energia Elétrica</option>
-                                 <option value="2.02.06">2.02.06 - Água e Esgoto</option>
-                                 <option value="2.02.07">2.02.07 - Telefonia e Internet</option>
-                                 <option value="2.02.08">2.02.08 - Aluguel e Condomínio</option>
-                                 <option value="2.02.09">2.02.09 - Combustível (Uso Geral)</option>
-                              </optgroup>
-                              <optgroup label="Serviços Tomados">
-                                 <option value="2.03.01">2.03.01 - Serviços de Terceiros</option>
-                                 <option value="2.03.02">2.03.02 - Limpeza e Conservação</option>
-                                 <option value="2.03.03">2.03.03 - Manutenção Predial</option>
-                                 <option value="2.03.04">2.03.04 - Licenças e Softwares</option>
-                                 <option value="2.03.05">2.03.05 - Marketing e Publicidade</option>
-                              </optgroup>
-                              <optgroup label="Impostos e Taxas">
-                                 <option value="2.04.01">2.04.01 - Impostos Federais</option>
-                                 <option value="2.04.02">2.04.02 - Impostos Municipais</option>
-                              </optgroup>
-                           </select>
+               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden my-6">
+                  <div className="p-5 border-b dark:border-gray-700 bg-slate-50 dark:bg-gray-800/50 flex justify-between items-center">
+                     <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-600 text-white rounded-xl">
+                           <FileText size={18} />
                         </div>
                         <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Mês de Competência</label>
+                           <h3 className="font-bold text-base text-slate-900 dark:text-white">Ordem de Despesa Operacional (ODO)</h3>
+                           <p className="text-xs text-slate-500">Lançamento de despesas administrativas, concessionárias e serviços</p>
+                        </div>
+                     </div>
+                     <button onClick={() => setIsODOModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <X size={20} />
+                     </button>
+                  </div>
+                  <form onSubmit={handleSaveODO}>
+                     <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Categoria (Plano de Contas)</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odoForm.ledgerCode}
+                                 onChange={e => {
+                                    const code = e.target.value;
+                                    const options: Record<string, string> = {
+                                       '2.02.01': 'Material de Escritório',
+                                       '2.02.05': 'Energia Elétrica',
+                                       '2.02.06': 'Água e Esgoto',
+                                       '2.02.07': 'Telefonia e Internet',
+                                       '2.02.08': 'Aluguel e Condomínio',
+                                       '2.03.01': 'Serviços de Terceiros',
+                                       '2.03.02': 'Limpeza e Conservação',
+                                       '2.03.03': 'Manutenção Predial',
+                                       '2.03.04': 'Licenças e Softwares',
+                                       '2.03.05': 'Marketing e Publicidade',
+                                       '2.04.01': 'Impostos Federais',
+                                       '2.04.02': 'Impostos Municipais',
+                                       '2.05.01': 'Viagens e Hospedagem',
+                                       '2.02.09': 'Combustível (Uso Geral)',
+                                       '2.02.99': 'Outras Despesas Gerais'
+                                    };
+                                    setOdoForm({
+                                       ...odoForm,
+                                       ledgerCode: code,
+                                       category: options[code],
+                                       description: odoForm.description === '' ? options[code] : odoForm.description
+                                    });
+                                 }}
+                              >
+                                 <optgroup label="Despesas Administrativas">
+                                    <option value="2.02.01">2.02.01 - Material de Escritório</option>
+                                    <option value="2.02.05">2.02.05 - Energia Elétrica</option>
+                                    <option value="2.02.06">2.02.06 - Água e Esgoto</option>
+                                    <option value="2.02.07">2.02.07 - Telefonia e Internet</option>
+                                    <option value="2.02.08">2.02.08 - Aluguel e Condomínio</option>
+                                    <option value="2.02.09">2.02.09 - Combustível (Uso Geral)</option>
+                                 </optgroup>
+                                 <optgroup label="Serviços Tomados">
+                                    <option value="2.03.01">2.03.01 - Serviços de Terceiros</option>
+                                    <option value="2.03.02">2.03.02 - Limpeza e Conservação</option>
+                                    <option value="2.03.03">2.03.03 - Manutenção Predial</option>
+                                    <option value="2.03.04">2.03.04 - Licenças e Softwares</option>
+                                    <option value="2.03.05">2.03.05 - Marketing e Publicidade</option>
+                                 </optgroup>
+                                 <optgroup label="Impostos e Taxas">
+                                    <option value="2.04.01">2.04.01 - Impostos Federais</option>
+                                    <option value="2.04.02">2.04.02 - Impostos Municipais</option>
+                                 </optgroup>
+                              </select>
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Mês de Competência</label>
+                              <input
+                                 type="month"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odoForm.competenceDate}
+                                 onChange={e => setOdoForm({ ...odoForm, competenceDate: e.target.value })}
+                                 required
+                              />
+                           </div>
+                        </div>
+
+                        <div>
+                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Descrição Detalhada</label>
                            <input
-                              type="month"
-                              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                              value={odoForm.competenceDate}
-                              onChange={e => setOdoForm({ ...odoForm, competenceDate: e.target.value })}
+                              type="text"
+                              className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                              placeholder="Ex: Fatura de Energia Elétrica referente a 01/2026"
+                              value={odoForm.description}
+                              onChange={e => setOdoForm({ ...odoForm, description: e.target.value })}
                               required
                            />
                         </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Valor Total (R$)</label>
+                              <input
+                                 type="number"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 placeholder="0.00"
+                                 value={odoForm.value || ''}
+                                 onChange={e => setOdoForm({ ...odoForm, value: Number(e.target.value) })}
+                                 required
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Método de Pagamento</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odoForm.paymentMethod}
+                                 onChange={e => setOdoForm({ ...odoForm, paymentMethod: e.target.value })}
+                              >
+                                 <option value="Boleto">Boleto Bancário</option>
+                                 <option value="Pix">Pix / Transferência</option>
+                                 <option value="Cartão de Crédito">Cartão de Crédito Corp.</option>
+                                 <option value="Débito em Conta">Débito Automático</option>
+                              </select>
+                           </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Beneficiário / Fornecedor</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odoForm.supplierId}
+                                 onChange={e => {
+                                    const supid = e.target.value;
+                                    const sup = suppliers.find(s => s.id === supid);
+                                    setOdoForm({
+                                       ...odoForm,
+                                       supplierId: supid,
+                                       supplierName: sup ? sup.name : 'Fornecedor Diverso'
+                                    });
+                                 }}
+                              >
+                                 <option value="">-- Selecione na Lista --</option>
+                                 {suppliers.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name} ({s.category})</option>
+                                 ))}
+                                 <option value="DVERSO">Outro / Não Cadastrado</option>
+                              </select>
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Conta de Saída</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odoForm.account}
+                                 onChange={e => setOdoForm({ ...odoForm, account: e.target.value })}
+                                 required
+                              >
+                                 <option value="">Selecione a conta...</option>
+                                 {accounts.map(acc => (
+                                    <option key={acc.id} value={acc.id}>{acc.name} ({formatCurrency(acc.balance)})</option>
+                                 ))}
+                              </select>
+                           </div>
+                        </div>
                      </div>
 
-                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Descrição Detalhada</label>
-                        <input type="text" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 px-4 font-bold text-sm" placeholder="Ex: Conta de Luz referente a 01/2026" value={odoForm.description} onChange={e => setOdoForm({ ...odoForm, description: e.target.value })} required />
-                     </div>
-
-                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Valor Total (R$)</label>
-                           <input type="number" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm" placeholder="0.00" value={odoForm.value || ''} onChange={e => setOdoForm({ ...odoForm, value: Number(e.target.value) })} required />
-                        </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Método de Pagamento</label>
-                           <select className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm" value={odoForm.paymentMethod} onChange={e => setOdoForm({ ...odoForm, paymentMethod: e.target.value })}>
-                              <option value="Boleto">Boleto Bancário</option>
-                              <option value="Pix">Pix / Transferência</option>
-                              <option value="Cartão de Crédito">Cartão de Crédito Corp.</option>
-                              <option value="Débito em Conta">Débito Automático</option>
-                           </select>
-                        </div>
-                     </div>
-
-                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Beneficiário / Fornecedor</label>
-                           <select
-                              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                              value={odoForm.supplierId}
-                              onChange={e => {
-                                 const supid = e.target.value;
-                                 const sup = suppliers.find(s => s.id === supid);
-                                 setOdoForm({
-                                    ...odoForm,
-                                    supplierId: supid,
-                                    supplierName: sup ? sup.name : 'Fornecedor Diverso'
-                                 });
-                              }}
-                           >
-                              <option value="">-- Selecione na Lista --</option>
-                              {suppliers.map(s => (
-                                 <option key={s.id} value={s.id}>{s.name} ({s.category})</option>
-                              ))}
-                              <option value="DVERSO">Outro / Não Cadastrado</option>
-                           </select>
-                        </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Conta de Saída</label>
-                           <select
-                              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                              value={odoForm.account}
-                              onChange={e => setOdoForm({ ...odoForm, account: e.target.value })}
-                              required
-                           >
-                              <option value="">Selecione a conta...</option>
-                              {accounts.map(acc => (
-                                 <option key={acc.id} value={acc.id}>{acc.name} ({formatCurrency(acc.balance)})</option>
-                              ))}
-                           </select>
-                        </div>
-                     </div>
-
-                     <div className="pt-6 border-t dark:border-slate-700 flex gap-4">
+                     <div className="p-5 bg-slate-50 dark:bg-gray-800/80 border-t dark:border-gray-700 flex gap-3">
                         <button
                            type="button"
                            onClick={() => setIsODOModalOpen(false)}
-                           className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 font-black rounded-2xl uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all"
+                           className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 transition-colors uppercase"
                         >
                            Cancelar
                         </button>
                         <button
                            type="submit"
                            disabled={isSubmitting}
-                           className={`flex-[2] py-4 bg-indigo-600 text-white font-black rounded-2xl uppercase tracking-widest text-[10px] shadow-2xl shadow-indigo-600/30 hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-75 cursor-not-allowed' : ''}`}
+                           className={`flex-[2] py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow transition-colors flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-75 cursor-not-allowed' : ''}`}
                         >
-                           {isSubmitting ? <Loader className="animate-spin" size={18} /> : <Save size={18} />}
+                           {isSubmitting ? <Loader className="animate-spin" size={15} /> : <Save size={15} />}
                            {isSubmitting ? 'Processando...' : 'Lançar Despesa'}
                         </button>
                      </div>
@@ -3055,110 +3249,141 @@ const Purchases = () => {
          {/* ODP MODAL */}
          {isODPModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-               <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-2xl w-full max-w-2xl border dark:border-slate-700 animate-in zoom-in duration-200 my-8">
-                  <div className="px-10 py-8 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-                     <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Gerar Ordem de Despesa de Pessoal (ODP)</h3>
-                     <button onClick={() => setIsODPModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden my-6">
+                  <div className="p-5 border-b dark:border-gray-700 bg-slate-50 dark:bg-gray-800/50 flex justify-between items-center">
+                     <div className="flex items-center gap-3">
+                        <div className="p-2 bg-fuchsia-600 text-white rounded-xl">
+                           <Users size={18} />
+                        </div>
+                        <div>
+                           <h3 className="font-bold text-base text-slate-900 dark:text-white">Ordem de Despesa de Pessoal (ODP)</h3>
+                           <p className="text-xs text-slate-500">Folha de pagamento, benefícios, diárias e adiantamentos</p>
+                        </div>
+                     </div>
+                     <button onClick={() => setIsODPModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <X size={20} />
+                     </button>
                   </div>
-                  <form onSubmit={handleSaveODP} className="p-10 space-y-6">
-                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Colaborador (RH)</label>
-                        <select
-                           className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                           value={odpForm.employeeId}
-                           onChange={e => setOdpForm({ ...odpForm, employeeId: e.target.value })}
-                           required
-                        >
-                           <option value="">Selecione o colaborador...</option>
-                           {employees.map(emp => (
-                              <option key={emp.id} value={emp.id}>{emp.name} - {emp.role}</option>
-                           ))}
-                        </select>
-                     </div>
-
-                     <div className="grid grid-cols-2 gap-4">
+                  <form onSubmit={handleSaveODP}>
+                     <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
                         <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Categoria</label>
+                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Colaborador (RH)</label>
                            <select
-                              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                              value={odpForm.ledgerCode}
-                              onChange={e => {
-                                 const code = e.target.value;
-                                 const options: Record<string, string> = {
-                                    '2.01.01': 'Salários e Ordenados',
-                                    '2.01.02': 'Adiantamento Salarial',
-                                    '2.01.03': 'Férias',
-                                    '2.01.04': '13º Salário',
-                                    '2.01.05': 'Vale Transporte',
-                                    '2.01.06': 'Vale Refeição / Alimentação',
-                                    '2.01.07': 'Rescisões',
-                                    '2.01.08': 'Bônus e Premiações',
-                                    '2.01.09': 'Reembolso de Despesas',
-                                    '2.01.99': 'Outras Despesas com Pessoal'
-                                 };
-                                 setOdpForm({
-                                    ...odpForm,
-                                    ledgerCode: code,
-                                    type: options[code],
-                                    description: odpForm.description === '' ? options[code] : odpForm.description
-                                 });
-                              }}
-                           >
-                              <option value="2.01.01">2.01.01 - Salários e Ordenados</option>
-                              <option value="2.01.02">2.01.02 - Adiantamento Salarial</option>
-                              <option value="2.01.03">2.01.03 - Férias</option>
-                              <option value="2.01.04">2.01.04 - 13º Salário</option>
-                              <option value="2.01.05">2.01.05 - Vale Transporte</option>
-                              <option value="2.01.06">2.01.06 - Vale Refeição / Alimentação</option>
-                              <option value="2.01.08">2.01.08 - Bônus e Premiações</option>
-                           </select>
-                        </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Valor (R$)</label>
-                           <input type="number" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm" placeholder="0.00" value={odpForm.value || ''} onChange={e => setOdpForm({ ...odpForm, value: Number(e.target.value) })} required />
-                        </div>
-                     </div>
-
-                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Descrição / Observação</label>
-                        <input type="text" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 px-4 font-bold text-sm" placeholder="Detalhes adicionais..." value={odpForm.description} onChange={e => setOdpForm({ ...odpForm, description: e.target.value })} />
-                     </div>
-
-                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Data de Pagamento</label>
-                           <input type="date" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm" value={odpForm.date} onChange={e => setOdpForm({ ...odpForm, date: e.target.value })} required />
-                        </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Conta de Saída</label>
-                           <select
-                              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                              value={odpForm.account}
-                              onChange={e => setOdpForm({ ...odpForm, account: e.target.value })}
+                              className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                              value={odpForm.employeeId}
+                              onChange={e => setOdpForm({ ...odpForm, employeeId: e.target.value })}
                               required
                            >
-                              <option value="">Selecione a conta...</option>
-                              {accounts.map(acc => (
-                                 <option key={acc.id} value={acc.id}>{acc.name} ({formatCurrency(acc.balance)})</option>
+                              <option value="">Selecione o colaborador...</option>
+                              {employees.map(emp => (
+                                 <option key={emp.id} value={emp.id}>{emp.name} - {emp.role}</option>
                               ))}
                            </select>
                         </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Categoria da Despesa</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odpForm.ledgerCode}
+                                 onChange={e => {
+                                    const code = e.target.value;
+                                    const options: Record<string, string> = {
+                                       '2.01.01': 'Salários e Ordenados',
+                                       '2.01.02': 'Adiantamento Salarial',
+                                       '2.01.03': 'Férias',
+                                       '2.01.04': '13º Salário',
+                                       '2.01.05': 'Vale Transporte',
+                                       '2.01.06': 'Vale Refeição / Alimentação',
+                                       '2.01.07': 'Rescisões',
+                                       '2.01.08': 'Bônus e Premiações',
+                                       '2.01.09': 'Reembolso de Despesas',
+                                       '2.01.99': 'Outras Despesas com Pessoal'
+                                    };
+                                    setOdpForm({
+                                       ...odpForm,
+                                       ledgerCode: code,
+                                       type: options[code],
+                                       description: odpForm.description === '' ? options[code] : odpForm.description
+                                    });
+                                 }}
+                              >
+                                 <option value="2.01.01">2.01.01 - Salários e Ordenados</option>
+                                 <option value="2.01.02">2.01.02 - Adiantamento Salarial</option>
+                                 <option value="2.01.03">2.01.03 - Férias</option>
+                                 <option value="2.01.04">2.01.04 - 13º Salário</option>
+                                 <option value="2.01.05">2.01.05 - Vale Transporte</option>
+                                 <option value="2.01.06">2.01.06 - Vale Refeição / Alimentação</option>
+                                 <option value="2.01.08">2.01.08 - Bônus e Premiações</option>
+                              </select>
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Valor (R$)</label>
+                              <input
+                                 type="number"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 placeholder="0.00"
+                                 value={odpForm.value || ''}
+                                 onChange={e => setOdpForm({ ...odpForm, value: Number(e.target.value) })}
+                                 required
+                              />
+                           </div>
+                        </div>
+
+                        <div>
+                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Descrição / Observação</label>
+                           <input
+                              type="text"
+                              className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                              placeholder="Detalhes adicionais do lançamento..."
+                              value={odpForm.description}
+                              onChange={e => setOdpForm({ ...odpForm, description: e.target.value })}
+                           />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Data de Pagamento</label>
+                              <input
+                                 type="date"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odpForm.date}
+                                 onChange={e => setOdpForm({ ...odpForm, date: e.target.value })}
+                                 required
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Conta de Saída</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odpForm.account}
+                                 onChange={e => setOdpForm({ ...odpForm, account: e.target.value })}
+                                 required
+                              >
+                                 <option value="">Selecione a conta...</option>
+                                 {accounts.map(acc => (
+                                    <option key={acc.id} value={acc.id}>{acc.name} ({formatCurrency(acc.balance)})</option>
+                                 ))}
+                              </select>
+                           </div>
+                        </div>
                      </div>
 
-                     <div className="pt-6 border-t dark:border-slate-700 flex gap-4">
+                     <div className="p-5 bg-slate-50 dark:bg-gray-800/80 border-t dark:border-gray-700 flex gap-3">
                         <button
                            type="button"
                            onClick={() => setIsODPModalOpen(false)}
-                           className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 font-black rounded-2xl uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all"
+                           className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 transition-colors uppercase"
                         >
                            Cancelar
                         </button>
                         <button
                            type="submit"
                            disabled={isSubmitting}
-                           className={`flex-[2] py-4 bg-fuchsia-600 text-white font-black rounded-2xl uppercase tracking-widest text-[10px] shadow-2xl shadow-fuchsia-600/30 hover:bg-fuchsia-500 transition-all flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-75 cursor-not-allowed' : ''}`}
+                           className={`flex-[2] py-2.5 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow transition-colors flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-75 cursor-not-allowed' : ''}`}
                         >
-                           {isSubmitting ? <Loader className="animate-spin" size={18} /> : <Save size={18} />}
+                           {isSubmitting ? <Loader className="animate-spin" size={15} /> : <Save size={15} />}
                            {isSubmitting ? 'Processando...' : 'Lançar ODP'}
                         </button>
                      </div>
@@ -3170,157 +3395,171 @@ const Purchases = () => {
          {/* ODA MODAL */}
          {isODAModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-               <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-2xl w-full max-w-2xl border dark:border-slate-700 animate-in zoom-in duration-200 my-8">
-                  <div className="px-10 py-8 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-                     <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Gerar Ordem de Abastecimento (ODA)</h3>
-                     <button onClick={() => setIsODAModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden my-6">
+                  <div className="p-5 border-b dark:border-gray-700 bg-slate-50 dark:bg-gray-800/50 flex justify-between items-center">
+                     <div className="flex items-center gap-3">
+                        <div className="p-2 bg-amber-600 text-white rounded-xl">
+                           <Fuel size={18} />
+                        </div>
+                        <div>
+                           <h3 className="font-bold text-base text-slate-900 dark:text-white">Ordem de Abastecimento (ODA)</h3>
+                           <p className="text-xs text-slate-500">Controle de abastecimento, combustível e hodômetro da frota</p>
+                        </div>
+                     </div>
+                     <button onClick={() => setIsODAModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <X size={20} />
+                     </button>
                   </div>
-                  <form onSubmit={handleSaveODA} className="p-10 space-y-6">
-                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Veículo</label>
-                           <select
-                              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                              value={odaForm.vehicleId}
-                              onChange={e => setOdaForm({ ...odaForm, vehicleId: e.target.value })}
-                              required
-                           >
-                              <option value="">Selecione o veículo...</option>
-                              {fleet.map(v => (
-                                 <option key={v.id} value={v.id}>{v.plate} - {v.name}</option>
-                              ))}
-                           </select>
+                  <form onSubmit={handleSaveODA}>
+                     <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Veículo</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odaForm.vehicleId}
+                                 onChange={e => setOdaForm({ ...odaForm, vehicleId: e.target.value })}
+                                 required
+                              >
+                                 <option value="">Selecione o veículo...</option>
+                                 {fleet.map(v => (
+                                    <option key={v.id} value={v.id}>{v.plate} - {v.name}</option>
+                                 ))}
+                              </select>
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Motorista Responsável</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odaForm.driverId}
+                                 onChange={e => setOdaForm({ ...odaForm, driverId: e.target.value })}
+                                 required
+                              >
+                                 <option value="">Selecione o motorista...</option>
+                                 {employees.map(emp => (
+                                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                                 ))}
+                              </select>
+                           </div>
                         </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Motorista (Responsável)</label>
-                           <select
-                              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                              value={odaForm.driverId}
-                              onChange={e => setOdaForm({ ...odaForm, driverId: e.target.value })}
-                              required
-                           >
-                              <option value="">Selecione o responsável...</option>
-                              {employees.map(emp => (
-                                 <option key={emp.id} value={emp.id}>{emp.name}</option>
-                              ))}
-                           </select>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Posto de Combustível / Fornecedor</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odaForm.stationId}
+                                 onChange={e => {
+                                    const sup = suppliers.find(s => s.id === e.target.value);
+                                    setOdaForm({ ...odaForm, stationId: e.target.value, stationName: sup ? sup.name : '' });
+                                 }}
+                                 required
+                              >
+                                 <option value="">Selecione o posto...</option>
+                                 {suppliers.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name} ({s.category})</option>
+                                 ))}
+                              </select>
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Tipo de Combustível</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odaForm.fuelType}
+                                 onChange={e => setOdaForm({ ...odaForm, fuelType: e.target.value })}
+                              >
+                                 <option value="Diesel S-10">Diesel S-10</option>
+                                 <option value="Diesel S-500">Diesel S-500</option>
+                                 <option value="Gasolina">Gasolina</option>
+                                 <option value="Etanol">Etanol</option>
+                                 <option value="Arla 32">Arla 32</option>
+                                 <option value="GNV">GNV</option>
+                              </select>
+                           </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Litros (L)</label>
+                              <input
+                                 type="number"
+                                 step="0.01"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odaForm.liters || ''}
+                                 onChange={e => {
+                                    const l = Number(e.target.value);
+                                    setOdaForm({ ...odaForm, liters: l, totalValue: l * odaForm.pricePerLiter });
+                                 }}
+                                 required
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Preço Unit. (R$)</label>
+                              <input
+                                 type="number"
+                                 step="0.001"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odaForm.pricePerLiter || ''}
+                                 onChange={e => {
+                                    const p = Number(e.target.value);
+                                    setOdaForm({ ...odaForm, pricePerLiter: p, totalValue: odaForm.liters * p });
+                                 }}
+                                 required
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Total (R$)</label>
+                              <input
+                                 type="text"
+                                 className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 font-black text-emerald-600 dark:text-emerald-400 text-xs"
+                                 value={formatCurrency(odaForm.totalValue)}
+                                 disabled
+                              />
+                           </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">KM Atual (Odômetro)</label>
+                              <input
+                                 type="number"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odaForm.km || ''}
+                                 onChange={e => setOdaForm({ ...odaForm, km: Number(e.target.value) })}
+                                 required
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Conta de Saída</label>
+                              <select
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                                 value={odaForm.account}
+                                 onChange={e => setOdaForm({ ...odaForm, account: e.target.value })}
+                                 required
+                              >
+                                 <option value="">Selecione a conta...</option>
+                                 {accounts.map(acc => (
+                                    <option key={acc.id} value={acc.id}>{acc.name} ({formatCurrency(acc.balance)})</option>
+                                 ))}
+                              </select>
+                           </div>
                         </div>
                      </div>
 
-                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Posto / Fornecedor</label>
-                           <select
-                              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                              value={odaForm.stationId}
-                              onChange={e => {
-                                 const sup = suppliers.find(s => s.id === e.target.value);
-                                 setOdaForm({ ...odaForm, stationId: e.target.value, stationName: sup ? sup.name : '' });
-                              }}
-                              required
-                           >
-                              <option value="">Selecione o posto...</option>
-                              {suppliers.map(s => (
-                                 <option key={s.id} value={s.id}>{s.name} ({s.category})</option>
-                              ))}
-                           </select>
-                        </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Combustível</label>
-                           <select
-                              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                              value={odaForm.fuelType}
-                              onChange={e => setOdaForm({ ...odaForm, fuelType: e.target.value })}
-                           >
-                              <option value="Diesel S-10">Diesel S-10</option>
-                              <option value="Diesel S-500">Diesel S-500</option>
-                              <option value="Gasolina">Gasolina</option>
-                              <option value="Etanol">Etanol</option>
-                              <option value="Arla 32">Arla 32</option>
-                              <option value="GNV">GNV</option>
-                           </select>
-                        </div>
-                     </div>
-
-                     <div className="grid grid-cols-3 gap-4">
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Litros (L)</label>
-                           <input
-                              type="number" step="0.01"
-                              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                              value={odaForm.liters || ''}
-                              onChange={e => {
-                                 const l = Number(e.target.value);
-                                 setOdaForm({ ...odaForm, liters: l, totalValue: l * odaForm.pricePerLiter });
-                              }}
-                              required
-                           />
-                        </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Preço Unit. (R$)</label>
-                           <input
-                              type="number" step="0.001"
-                              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                              value={odaForm.pricePerLiter || ''}
-                              onChange={e => {
-                                 const p = Number(e.target.value);
-                                 setOdaForm({ ...odaForm, pricePerLiter: p, totalValue: odaForm.liters * p });
-                              }}
-                              required
-                           />
-                        </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Total (R$)</label>
-                           <input
-                              type="number"
-                              className="w-full bg-slate-100 dark:bg-slate-950 border-none rounded-xl py-4 font-black text-emerald-500 text-sm"
-                              value={odaForm.totalValue.toFixed(2)}
-                              disabled
-                           />
-                        </div>
-                     </div>
-
-                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">KM Atual (Odômetro)</label>
-                           <input
-                              type="number"
-                              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                              value={odaForm.km || ''}
-                              onChange={e => setOdaForm({ ...odaForm, km: Number(e.target.value) })}
-                              required
-                           />
-                        </div>
-                        <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Conta de Saída</label>
-                           <select
-                              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                              value={odaForm.account}
-                              onChange={e => setOdaForm({ ...odaForm, account: e.target.value })}
-                              required
-                           >
-                              <option value="">Selecione a conta...</option>
-                              {accounts.map(acc => (
-                                 <option key={acc.id} value={acc.id}>{acc.name} ({formatCurrency(acc.balance)})</option>
-                              ))}
-                           </select>
-                        </div>
-                     </div>
-
-                     <div className="pt-6 border-t dark:border-slate-700 flex gap-4">
+                     <div className="p-5 bg-slate-50 dark:bg-gray-800/80 border-t dark:border-gray-700 flex gap-3">
                         <button
                            type="button"
                            onClick={() => setIsODAModalOpen(false)}
-                           className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 font-black rounded-2xl uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all"
+                           className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 transition-colors uppercase"
                         >
                            Cancelar
                         </button>
                         <button
                            type="submit"
                            disabled={isSubmitting}
-                           className={`flex-[2] py-4 bg-orange-600 text-white font-black rounded-2xl uppercase tracking-widest text-[10px] shadow-2xl shadow-orange-600/30 hover:bg-orange-500 transition-all flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-75 cursor-not-allowed' : ''}`}
+                           className={`flex-[2] py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow transition-colors flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-75 cursor-not-allowed' : ''}`}
                         >
-                           {isSubmitting ? <Loader className="animate-spin" size={18} /> : <Save size={18} />}
+                           {isSubmitting ? <Loader className="animate-spin" size={15} /> : <Save size={15} />}
                            {isSubmitting ? 'Processando...' : 'Lançar ODA'}
                         </button>
                      </div>

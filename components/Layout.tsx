@@ -33,39 +33,31 @@ import {
   ArrowRight,
   Activity,
   Database,
-  Command
+  Command,
+  Palette,
+  Check,
+  Brush
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { isSupabaseConfigured } from '../src/lib/supabase';
 import AIAuditAgent from './AIAuditAgent';
-
-type NavMode = 'classic' | 'sidebar' | 'dual-deck' | 'floating-dock';
-type VisualStyle = 'original' | 'scada' | 'bento-glass';
-type DensityMode = 'compact' | 'standard' | 'comfortable';
-type ContainerWidthMode = '1600' | 'full';
-type AccentTheme = 'cyan' | 'indigo' | 'emerald' | 'amber';
-
-interface LayoutPreferences {
-  navMode: NavMode;
-  visualStyle: VisualStyle;
-  density: DensityMode;
-  containerWidth: ContainerWidthMode;
-  accent: AccentTheme;
-  theme: 'light' | 'dark';
-  showCustomizerBar: boolean;
-  sidebarCollapsed: boolean;
-}
-
-const DEFAULT_PREFS: LayoutPreferences = {
-  navMode: 'classic',
-  visualStyle: 'original',
-  density: 'standard',
-  containerWidth: '1600',
-  accent: 'cyan',
-  theme: 'light',
-  showCustomizerBar: true,
-  sidebarCollapsed: false
-};
+import LayoutDesignerDrawer, {
+  LayoutPreferences,
+  DEFAULT_PREFS,
+  ACCENT_PALETTE,
+  DESIGNER_PRESETS,
+  DesignerPreset,
+  NavMode,
+  VisualStyle,
+  DensityMode,
+  ContainerWidthMode,
+  AccentTheme,
+  ThemeMode,
+  RadiusMode,
+  FontMode,
+  TextScaleMode,
+  CardShadowMode
+} from './LayoutDesignerDrawer';
 
 const formatCurrency = (val: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
@@ -77,6 +69,7 @@ const Layout = () => {
   const [notifFilter, setNotifFilter] = useState<'all' | 'critical' | 'ops' | 'finance'>('all');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [isDesignerOpen, setIsDesignerOpen] = useState(false);
 
   const {
     currentUser,
@@ -125,22 +118,101 @@ const Layout = () => {
     } catch {
       // ignore storage errors
     }
-    if (prefs.theme === 'dark') {
-      document.documentElement.classList.add('dark');
+
+    const root = document.documentElement;
+
+    // Dark & Theme Modes
+    if (prefs.theme === 'dark' || prefs.theme === 'oled') {
+      root.classList.add('dark');
     } else {
-      document.documentElement.classList.remove('dark');
+      root.classList.remove('dark');
     }
+
+    if (prefs.theme === 'oled') {
+      root.classList.add('oled-theme');
+    } else {
+      root.classList.remove('oled-theme');
+    }
+
+    if (prefs.theme === 'high-contrast') {
+      root.classList.add('high-contrast-theme');
+    } else {
+      root.classList.remove('high-contrast-theme');
+    }
+
+    // Border Radius Dynamic Classes
+    root.classList.remove('radius-none', 'radius-subtle', 'radius-rounded', 'radius-pill');
+    if (prefs.borderRadius === 'none') root.classList.add('radius-none');
+    else if (prefs.borderRadius === 'subtle') root.classList.add('radius-subtle');
+    else if (prefs.borderRadius === 'pill') root.classList.add('radius-pill');
+    else root.classList.add('radius-rounded');
+
+    // Shadow Classes
+    root.classList.remove('shadow-none-mode', 'shadow-strong-mode');
+    if (prefs.cardShadow === 'none') root.classList.add('shadow-none-mode');
+    else if (prefs.cardShadow === 'strong') root.classList.add('shadow-strong-mode');
+
+    // Text Scale
+    if (prefs.textScale === '90') {
+      root.style.fontSize = '93%';
+    } else if (prefs.textScale === '110') {
+      root.style.fontSize = '107%';
+    } else {
+      root.style.fontSize = '100%';
+    }
+
+    // Font Family
+    if (prefs.fontFamily === 'mono') {
+      root.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+    } else if (prefs.fontFamily === 'inter') {
+      root.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    } else {
+      root.style.fontFamily = '"Roboto", sans-serif';
+    }
+
+    // Dynamic Style Tag Injection for OLED & Special Overrides
+    let styleTag = document.getElementById('infracore-dynamic-theme-css');
+    if (!styleTag) {
+      styleTag = document.createElement('style');
+      styleTag.id = 'infracore-dynamic-theme-css';
+      document.head.appendChild(styleTag);
+    }
+    styleTag.textContent = `
+      .oled-theme, .oled-theme body, .oled-theme header, .oled-theme aside {
+        background-color: #000000 !important;
+      }
+      .oled-theme .bg-slate-900, .oled-theme .bg-slate-800, .oled-theme .bg-slate-950 {
+        background-color: #050505 !important;
+        border-color: #1f2937 !important;
+      }
+      .high-contrast-theme * {
+        border-color: #475569 !important;
+      }
+      .high-contrast-theme button, .high-contrast-theme a {
+        font-weight: 700 !important;
+      }
+      .radius-none *, .radius-none button, .radius-none input, .radius-none div {
+        border-radius: 0px !important;
+      }
+      .shadow-none-mode .shadow-sm, .shadow-none-mode .shadow-md, .shadow-none-mode .shadow-xl, .shadow-none-mode .shadow-soft {
+        box-shadow: none !important;
+      }
+    `;
   }, [prefs]);
 
-  // Global Ctrl+K shortcut for Command Palette
+  // Global Shortcuts: Ctrl+K (Search), Alt+L (Layout Studio)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsSearchOpen(prev => !prev);
+      } else if (e.altKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        setIsDesignerOpen(prev => !prev);
       } else if (e.key === 'Escape') {
         setIsSearchOpen(false);
         setIsNotificationsOpen(false);
+        setIsDesignerOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -150,10 +222,23 @@ const Layout = () => {
   const updatePref = <K extends keyof LayoutPreferences>(key: K, value: LayoutPreferences[K]) => {
     setPrefs(prev => ({ ...prev, [key]: value }));
     if (key === 'theme' && settings) {
-      updateSettings({ ...settings, theme: value as 'light' | 'dark' });
+      const mapped = value === 'dark' || value === 'oled' ? 'dark' : 'light';
+      updateSettings({ ...settings, theme: mapped });
     }
     if (key === 'density' && settings) {
       updateSettings({ ...settings, interfaceDensity: value as any });
+    }
+  };
+
+  const applyPreset = (preset: DesignerPreset) => {
+    setPrefs(prev => ({
+      ...prev,
+      ...preset.prefs,
+      activePreset: preset.id
+    }));
+    if (preset.prefs.theme && settings) {
+      const mapped = preset.prefs.theme === 'dark' || preset.prefs.theme === 'oled' ? 'dark' : 'light';
+      updateSettings({ ...settings, theme: mapped });
     }
   };
 
@@ -323,20 +408,13 @@ const Layout = () => {
     return systemNotifications.filter(n => n.category === notifFilter);
   }, [systemNotifications, notifFilter]);
 
-  // Accent color dynamic classes
-  const accentBadgeClass = {
-    cyan: 'bg-cyan-600 text-white',
-    indigo: 'bg-indigo-600 text-white',
-    emerald: 'bg-emerald-600 text-white',
-    amber: 'bg-amber-500 text-slate-950'
-  }[prefs.accent];
+  // Accent color dynamic classes & metadata
+  const accentData = useMemo(() => {
+    return ACCENT_PALETTE.find(a => a.id === prefs.accent) || ACCENT_PALETTE[0];
+  }, [prefs.accent]);
 
-  const activeNavClass = {
-    cyan: 'bg-slate-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400 font-bold',
-    indigo: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 font-bold',
-    emerald: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 font-bold',
-    amber: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 font-bold'
-  }[prefs.accent];
+  const accentBadgeClass = accentData.badgeClass;
+  const activeNavClass = accentData.navClass;
 
   const containerClass = prefs.containerWidth === 'full' ? 'max-w-full px-4 sm:px-8' : 'max-w-[1600px] px-4 sm:px-6 lg:px-8';
   const mainPaddingClass =
@@ -346,12 +424,17 @@ const Layout = () => {
       ? 'py-8'
       : 'py-6';
 
-  const bgSurfaceClass =
-    prefs.visualStyle === 'scada'
-      ? 'bg-slate-950 text-slate-100'
-      : prefs.visualStyle === 'bento-glass'
-      ? 'bg-gradient-to-br from-slate-50 via-cyan-50/40 to-indigo-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/30 text-slate-900 dark:text-white'
-      : 'bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white';
+  const bgSurfaceClass = useMemo(() => {
+    if (prefs.theme === 'oled') return 'bg-black text-white';
+    if (prefs.theme === 'high-contrast') return 'bg-white dark:bg-black text-black dark:text-white';
+    if (prefs.visualStyle === 'scada') return 'bg-slate-950 text-slate-100';
+    if (prefs.visualStyle === 'bento-glass') {
+      return 'bg-gradient-to-br from-slate-50 via-cyan-50/30 to-indigo-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/30 text-slate-900 dark:text-white';
+    }
+    if (prefs.visualStyle === 'minimal-flat') return 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white';
+    if (prefs.visualStyle === 'soft-neumorphic') return 'bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-white';
+    return 'bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white';
+  }, [prefs.theme, prefs.visualStyle]);
 
   // Quick Global Search Results (Ctrl+K)
   const searchResults = useMemo(() => {
@@ -395,9 +478,15 @@ const Layout = () => {
               <span className="px-2 py-0.5 rounded-md bg-gradient-to-r from-cyan-500 to-indigo-500 text-white font-black text-[10px] uppercase tracking-wider flex items-center gap-1 shadow-sm">
                 <Sliders size={11} /> Barra de Personalização
               </span>
-              <span className="hidden xl:inline text-[11px] text-slate-400">
-                Alterne modos sem perder o layout original:
-              </span>
+              <button
+                type="button"
+                onClick={() => setIsDesignerOpen(true)}
+                className="px-2.5 py-0.5 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[10px] uppercase tracking-wider flex items-center gap-1 shadow-xs transition-colors"
+                title="Abrir Studio de Designer Completo com todas as opções visuais"
+              >
+                <Palette size={11} />
+                <span>Studio Completo</span>
+              </button>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -405,10 +494,10 @@ const Layout = () => {
               <div className="flex items-center bg-slate-800/90 p-0.5 rounded-lg border border-slate-700">
                 <span className="text-[10px] font-bold text-slate-400 px-2 hidden sm:inline">Navegação:</span>
                 {[
-                  { id: 'classic', label: 'Clássico (Original)' },
-                  { id: 'sidebar', label: 'Sidebar Lateral' },
-                  { id: 'dual-deck', label: 'Topo 2 Andares' },
-                  { id: 'floating-dock', label: 'Dock Flutuante' }
+                  { id: 'classic', label: 'Clássico' },
+                  { id: 'sidebar', label: 'Sidebar' },
+                  { id: 'dual-deck', label: '2 Andares' },
+                  { id: 'floating-dock', label: 'Dock' }
                 ].map(mode => (
                   <button
                     key={mode.id}
@@ -430,8 +519,9 @@ const Layout = () => {
                 <span className="text-[10px] font-bold text-slate-400 px-2 hidden md:inline">Visual:</span>
                 {[
                   { id: 'original', label: 'Original' },
-                  { id: 'scada', label: 'Industrial COI' },
-                  { id: 'bento-glass', label: 'Bento Glass' }
+                  { id: 'scada', label: 'Industrial' },
+                  { id: 'bento-glass', label: 'Bento Glass' },
+                  { id: 'minimal-flat', label: 'Flat' }
                 ].map(st => (
                   <button
                     key={st.id}
@@ -482,37 +572,34 @@ const Layout = () => {
                 <span>{prefs.containerWidth === 'full' ? 'Tela 100%' : '1600px'}</span>
               </button>
 
-              {/* 5. Cor de Destaque */}
-              <div className="hidden sm:flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700">
-                {(
-                  [
-                    { id: 'cyan', color: 'bg-cyan-500', title: 'Azul Original' },
-                    { id: 'indigo', color: 'bg-indigo-500', title: 'Índigo Executivo' },
-                    { id: 'emerald', color: 'bg-emerald-500', title: 'Esmeralda Operacional' },
-                    { id: 'amber', color: 'bg-amber-500', title: 'Âmbar Industrial' }
-                  ] as const
-                ).map(acc => (
+              {/* 5. Cores Rápidas de Destaque */}
+              <div className="hidden sm:flex items-center gap-1.5 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+                {ACCENT_PALETTE.slice(0, 6).map(acc => (
                   <button
                     key={acc.id}
                     type="button"
-                    title={acc.title}
+                    title={`${acc.name} (${acc.category})`}
                     onClick={() => updatePref('accent', acc.id)}
-                    className={`w-3.5 h-3.5 rounded-full ${acc.color} transition-transform ${
-                      prefs.accent === acc.id ? 'scale-125 ring-2 ring-white' : 'opacity-60 hover:opacity-100'
+                    className={`w-3.5 h-3.5 rounded-full transition-transform ${
+                      prefs.accent === acc.id ? 'scale-125 ring-2 ring-white shadow-xs' : 'opacity-60 hover:opacity-100'
                     }`}
+                    style={{ backgroundColor: acc.colorHex }}
                   />
                 ))}
               </div>
 
-              {/* 6. Tema Claro / Escuro */}
+              {/* 6. Tema Claro / Escuro / OLED */}
               <button
                 type="button"
-                onClick={() => updatePref('theme', prefs.theme === 'dark' ? 'light' : 'dark')}
+                onClick={() => {
+                  const next = prefs.theme === 'light' ? 'dark' : prefs.theme === 'dark' ? 'oled' : 'light';
+                  updatePref('theme', next as ThemeMode);
+                }}
                 className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] font-bold text-amber-300 flex items-center gap-1"
-                title="Alternar entre Modo Claro e Modo Escuro"
+                title={`Tema atual: ${prefs.theme.toUpperCase()}. Clique para alternar Claro / Escuro / OLED`}
               >
-                {prefs.theme === 'dark' ? <Sun size={12} /> : <Moon size={12} />}
-                <span>{prefs.theme === 'dark' ? 'Claro' : 'Escuro'}</span>
+                {prefs.theme === 'light' ? <Sun size={12} /> : <Moon size={12} />}
+                <span className="capitalize">{prefs.theme}</span>
               </button>
 
               {/* 7. Restaurar Original */}
@@ -520,7 +607,7 @@ const Layout = () => {
                 type="button"
                 onClick={resetToOriginalLayout}
                 className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 border border-slate-700 text-[11px] font-bold text-slate-400 flex items-center gap-1 transition-colors"
-                title="Restaurar exatamente o layout original"
+                title="Restaurar exatamente o layout original de fábrica"
               >
                 <RotateCcw size={11} />
                 <span className="hidden sm:inline">Original</span>
@@ -531,7 +618,7 @@ const Layout = () => {
                 type="button"
                 onClick={() => updatePref('showCustomizerBar', false)}
                 className="p-1 text-slate-400 hover:text-white rounded-md"
-                title="Recolher barra de personalização"
+                title="Recolher barra de personalização (pode ser reaberta no botão Layout do cabeçalho)"
               >
                 <X size={14} />
               </button>
@@ -541,10 +628,10 @@ const Layout = () => {
       )}
 
       {/* =====================================================================
-          FITA DE TELEMETRIA INDUSTRIAL (Exibida quando Visual = Industrial COI)
+          FITA DE TELEMETRIA INDUSTRIAL (Exibida quando SCADA ou showLiveTelemetry)
          ===================================================================== */}
-      {prefs.visualStyle === 'scada' && (
-        <div className="bg-slate-900 border-b border-amber-500/30 text-xs font-mono text-slate-300 py-1.5 px-4">
+      {(prefs.visualStyle === 'scada' || prefs.showLiveTelemetry) && (
+        <div className="bg-slate-900 border-b border-amber-500/30 text-xs font-mono text-slate-300 py-1.5 px-4 transition-all">
           <div className={`${containerClass} mx-auto flex flex-wrap items-center justify-between gap-2`}>
             <div className="flex items-center gap-4">
               <span className="px-2 py-0.5 rounded bg-amber-500 text-slate-950 font-black">
@@ -670,19 +757,39 @@ const Layout = () => {
                 <span className="hidden 2xl:inline text-[11px] text-slate-400">Ctrl+K</span>
               </button>
 
-              {/* Toggle Personalization Bar Button */}
+              {/* Botão de Designer & Layout Aprimorado */}
               <button
                 type="button"
-                onClick={() => updatePref('showCustomizerBar', !prefs.showCustomizerBar)}
-                className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-bold ${
-                  prefs.showCustomizerBar
-                    ? 'bg-cyan-50 dark:bg-cyan-950/50 border-cyan-300 dark:border-cyan-700 text-cyan-700 dark:text-cyan-300'
-                    : 'bg-slate-100 dark:bg-slate-700/70 border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                onClick={() => setIsDesignerOpen(prev => !prev)}
+                className={`p-2 px-2.5 rounded-xl border transition-all flex items-center gap-2 text-xs font-bold shadow-xs ${
+                  isDesignerOpen
+                    ? `${accentBadgeClass} border-transparent ring-2 ring-cyan-500/40 shadow-sm`
+                    : 'bg-slate-100 dark:bg-slate-700/70 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 hover:border-slate-300'
                 }`}
-                title="Mostrar / Ocultar Barra de Personalização de Layout (Opção 12)"
+                title="Abrir Studio de Designer & Layout (Cores, Estilos, Temas e Ergonomia) [Alt+L]"
               >
-                <Sliders size={16} />
-                <span className="hidden xl:inline text-[11px]">Layout</span>
+                <div className="relative flex items-center justify-center">
+                  <Palette
+                    size={16}
+                    className={isDesignerOpen ? 'text-white animate-pulse' : 'text-cyan-600 dark:text-cyan-400'}
+                  />
+                  <span
+                    className="absolute -top-1 -right-1 w-2 h-2 rounded-full ring-1 ring-white dark:ring-slate-900 shadow-xs"
+                    style={{ backgroundColor: accentData.colorHex }}
+                  />
+                </div>
+                <div className="hidden xl:flex items-center gap-1.5">
+                  <span className="text-[11px] font-black uppercase tracking-wider">Layout</span>
+                  <span
+                    className={`text-[9px] px-1.5 py-0.2 rounded-full font-black uppercase tracking-wider ${
+                      isDesignerOpen
+                        ? 'bg-white/20 text-white'
+                        : 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300'
+                    }`}
+                  >
+                    Design
+                  </span>
+                </div>
               </button>
 
               {/* Notification Bell Button (Opens Full Unclipped Notification Window) */}
@@ -1141,6 +1248,16 @@ const Layout = () => {
           ))}
         </div>
       )}
+
+      {/* Studio de Designer & Layout Drawer */}
+      <LayoutDesignerDrawer
+        isOpen={isDesignerOpen}
+        onClose={() => setIsDesignerOpen(false)}
+        prefs={prefs}
+        updatePref={updatePref}
+        applyPreset={applyPreset}
+        resetToOriginalLayout={resetToOriginalLayout}
+      />
 
       {/* Global Floating AI Audit Agent */}
       <AIAuditAgent mode="floating" />
