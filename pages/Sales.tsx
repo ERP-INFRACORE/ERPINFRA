@@ -2660,6 +2660,7 @@ const Sales = () => {
                         <div className="flex items-center justify-end gap-1 opacity-20 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => setSelectedBudget(b)} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white rounded-lg transition-all" title="Ver Detalhes"><Eye size={18} /></button>
                           <button onClick={() => handlePrintBudget(b)} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white rounded-lg transition-all" title="Imprimir Orçamento"><Printer size={18} /></button>
+                          <button onClick={() => setShowNFE({ type: 'budget', data: b })} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white rounded-lg transition-all" title="Gerar NF-e (DANFE)"><FileSearch size={18} /></button>
                           {b.status === 'Aberto' && (
                             <>
                               <button
