@@ -128,6 +128,8 @@ const Fleet = () => {
         date: new Date().toISOString().split('T')[0],
         cost: 0,
         km: 0,
+        ledgerCode: '2.02.02',
+        ledgerName: 'Manutenção de Frota e Peças',
         attachments: []
     });
     const [newFuel, setNewFuel] = useState<Partial<FuelLog>>({
@@ -136,6 +138,8 @@ const Fleet = () => {
         cost: 0,
         km: 0,
         fuelType: 'Diesel',
+        ledgerCode: '2.02.01',
+        ledgerName: 'Combustível e Lubrificantes (Diesel S10)',
         attachments: []
     });
 
@@ -831,6 +835,13 @@ const Fleet = () => {
                                         >
                                             <Droplets size={10} /> Abast.
                                         </button>
+                                        <button
+                                            onClick={() => { setSelectedVehicleId(v.id); setIsTireLayoutOpen(true); }}
+                                            className="flex-1 py-1 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-600 hover:text-white rounded-lg text-[8px] font-black uppercase transition-all flex items-center justify-center gap-1"
+                                            title="Mapa de Pneus Detalhado"
+                                        >
+                                            <Disc size={10} /> Pneus
+                                        </button>
                                     </div>
                                 </div>
                             );
@@ -853,7 +864,12 @@ const Fleet = () => {
                             >
                                 <Download size={16} />
                             </button>
-
+                            <button
+                                onClick={() => setIsMaintModalOpen(true)}
+                                className="px-4 py-2 bg-teal-600 text-white font-black rounded-xl text-xs uppercase shadow-lg shadow-teal-600/20 flex items-center gap-1.5"
+                            >
+                                <Plus size={14} /> Nova Ordem de Manutenção
+                            </button>
                         </div>
                     </div>
                     <div className="overflow-x-auto">
@@ -1051,7 +1067,7 @@ const Fleet = () => {
                                                                               <div class="row"><span class="label">Veículo:</span> <span>${veh?.plate}</span></div>
                                                                               <div class="row"><span class="label">Hodômetro:</span> <span>${l.km.toLocaleString()} KM</span></div>
                                                                               <hr style="border:0; border-top:1px dashed #ccc"/>
-                                                                              <div class="row"><span class="label">Combustível:</span> <span>${newFuel.fuelType || 'Diesel'}</span></div>
+                                                                              <div class="row"><span class="label">Combustível:</span> <span>${(l as any).fuelType || 'Diesel S10'}</span></div>
                                                                               <div class="row"><span class="label">Litros:</span> <span>${l.liters.toFixed(2)} L</span></div>
                                                                               <div class="row"><span class="label">Preço/L:</span> <span>${formatBRL(l.cost / l.liters)}</span></div>
                                                                               

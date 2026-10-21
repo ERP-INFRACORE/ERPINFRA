@@ -928,6 +928,10 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
                       <AlertTriangle size={11} />
                       {issue.severity}
                     </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                      <CheckCircle2 size={11} />
+                      Corrigido & Ativo
+                    </span>
                     <span className="text-[11px] font-mono text-slate-400 dark:text-slate-400 flex items-center gap-1 ml-1">
                       <FileCode size={12} className="text-slate-400" />
                       {issue.file} <span className="text-slate-300 dark:text-slate-600">|</span> L:{issue.lines}

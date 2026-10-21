@@ -364,7 +364,7 @@ const Finance = () => {
                <NavButton id="planning" label="Plano de Contas" icon={FolderOpen} />
             </div>
 
-            {currentUser?.username === 'admin' && (
+            {(hasPermission('finance.edit_transaction') || hasPermission('finance.approve') || currentUser?.username === 'admin') && (
                <button
                   onClick={() => {
                      setSelectedTransaction(null);
@@ -514,8 +514,8 @@ const Finance = () => {
 
                         <div>
                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Conta Financeira</label>
-                           <div className="grid grid-cols-2 gap-2">
-                              {accounts.slice(0, 4).map(acc => (
+                           <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+                              {accounts.map(acc => (
                                  <button
                                     type="button"
                                     key={acc.id}
@@ -1070,7 +1070,21 @@ const Finance = () => {
                         <Upload size={18} />
                         <input type="file" className="hidden" onChange={handleImport} accept=".csv,.ofx,.xlsx" />
                      </label>
-                     <button className="p-2 text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg">
+                     <button
+                        onClick={() => {
+                           const list = activeTab === 'ledger' ? filteredTransactions : activeTab === 'receivables' ? receivables : payables;
+                           const headers = 'Data,Vencimento,Descrição,Categoria,Conta,Tipo,Valor,Status\n';
+                           const rows = list.map(t => `"${t.date}","${t.dueDate || t.date}","${t.description}","${t.ledgerName || t.category}","${t.account}","${t.type}","${t.amount}","${t.status}"`).join('\n');
+                           const blob = new Blob(['\uFEFF' + headers + rows], { type: 'text/csv;charset=utf-8;' });
+                           const url = URL.createObjectURL(blob);
+                           const a = document.createElement('a');
+                           a.href = url;
+                           a.download = `financeiro_${activeTab}_${new Date().toISOString().split('T')[0]}.csv`;
+                           a.click();
+                        }}
+                        className="p-2 text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg"
+                        title="Exportar CSV"
+                     >
                         <Download size={18} />
                      </button>
                   </div>

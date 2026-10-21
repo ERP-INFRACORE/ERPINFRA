@@ -106,6 +106,9 @@ const Purchases = () => {
    // Search & Filter
    const [searchTerm, setSearchTerm] = useState('');
    const [statusFilter, setStatusFilter] = useState<string>('Todos');
+   const [catalogSearch, setCatalogSearch] = useState('');
+   const [stockSearch, setStockSearch] = useState('');
+   const [stockLevelFilter, setStockLevelFilter] = useState<'Todos' | 'Crítico' | 'Normal' | 'Excedente'>('Todos');
 
    // OSM States (Maintenance)
    const [isOSMModalOpen, setIsOSMModalOpen] = useState(false);
@@ -272,7 +275,7 @@ const Purchases = () => {
       setTempAttachments([]);
       setShippingCost(0);
       setSourceAccount('');
-      setActiveTab('approval'); // Go to approval
+      setActiveTab('orders');
       setIsSubmitting(false);
    };
 
@@ -1122,13 +1125,21 @@ const Purchases = () => {
                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                            <input
                               type="text"
+                              value={catalogSearch}
+                              onChange={e => setCatalogSearch(e.target.value)}
                               placeholder="Buscar no estoque..."
                               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
                            />
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-2">
-                           {inventory.map(item => (
+                           {inventory
+                              .filter(item =>
+                                 !catalogSearch.trim() ||
+                                 item.name.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+                                 item.category.toLowerCase().includes(catalogSearch.toLowerCase())
+                              )
+                              .map(item => (
                               <button
                                  key={item.id}
                                  onClick={() => addItemToOrder(item)}
@@ -1439,6 +1450,8 @@ const Purchases = () => {
                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                            <input
                               type="text"
+                              value={stockSearch}
+                              onChange={e => setStockSearch(e.target.value)}
                               placeholder="Buscar item, categoria ou código..."
                               className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-gray-600 dark:bg-gray-700 text-sm outline-none"
                            />
@@ -1446,8 +1459,13 @@ const Purchases = () => {
 
                      </div>
                      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar w-full md:w-auto">
-                        {['Todos', 'Crítico', 'Normal', 'Excedente'].map(f => (
-                           <button key={f} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${f === 'Todos' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>
+                        {(['Todos', 'Crítico', 'Normal', 'Excedente'] as const).map(f => (
+                           <button
+                              type="button"
+                              key={f}
+                              onClick={() => setStockLevelFilter(f)}
+                              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${stockLevelFilter === f ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}
+                           >
                               {f}
                            </button>
                         ))}
@@ -1468,7 +1486,23 @@ const Purchases = () => {
                               </tr>
                            </thead>
                            <tbody className="divide-y divide-slate-50 dark:divide-gray-700">
-                              {inventory.map(item => (
+                              {inventory
+                                 .filter(item => {
+                                    const matchesSearch =
+                                       !stockSearch.trim() ||
+                                       item.name.toLowerCase().includes(stockSearch.toLowerCase()) ||
+                                       item.category.toLowerCase().includes(stockSearch.toLowerCase());
+                                    const matchesLevel =
+                                       stockLevelFilter === 'Todos'
+                                          ? true
+                                          : stockLevelFilter === 'Crítico'
+                                          ? item.quantity <= item.minStock
+                                          : stockLevelFilter === 'Excedente'
+                                          ? item.quantity > (item.maxStock || item.minStock * 3 || 100)
+                                          : item.quantity > item.minStock;
+                                    return matchesSearch && matchesLevel;
+                                 })
+                                 .map(item => (
                                  <tr key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-gray-700/50 transition-colors group">
                                     <td className="px-6 py-4">
                                        <div className="flex items-center gap-3">
@@ -1579,7 +1613,17 @@ const Purchases = () => {
                         </div>
 
                         <div className="mt-6 flex gap-2">
-                           <button className="flex-1 py-2 bg-slate-50 dark:bg-gray-700 text-slate-600 dark:text-gray-300 rounded-lg text-xs font-bold hover:bg-cyan-50 hover:text-cyan-600 transition-colors">Editar</button>
+                           <button
+                              type="button"
+                              onClick={() => {
+                                 setEditingSupplier(sup);
+                                 setSupForm(sup);
+                                 setIsSupplierModalOpen(true);
+                              }}
+                              className="flex-1 py-2 bg-slate-50 dark:bg-gray-700 text-slate-600 dark:text-gray-300 rounded-lg text-xs font-bold hover:bg-cyan-50 hover:text-cyan-600 transition-colors"
+                           >
+                              Editar
+                           </button>
                            <button onClick={() => {
                               setSelectedSupplier(sup.id);
                               setActiveTab('new-order');
@@ -1587,7 +1631,7 @@ const Purchases = () => {
                         </div>
                      </div>
                   ))}
-                  <button onClick={() => { setSupForm({ status: 'Ativo', registeredAt: new Date().toLocaleDateString('pt-BR') }); setIsSupplierModalOpen(true); }} className="bg-slate-50/50 dark:bg-gray-800/50 border-2 border-dashed border-slate-200 dark:border-gray-700 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-cyan-300 hover:text-cyan-500 transition-all group">
+                  <button onClick={() => { setEditingSupplier(null); setSupForm({ status: 'Ativo', registeredAt: new Date().toLocaleDateString('pt-BR') }); setIsSupplierModalOpen(true); }} className="bg-slate-50/50 dark:bg-gray-800/50 border-2 border-dashed border-slate-200 dark:border-gray-700 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-cyan-300 hover:text-cyan-500 transition-all group">
                      <div className="p-3 bg-white dark:bg-gray-700 rounded-full group-hover:scale-110 transition-transform shadow-sm">
                         <Plus size={32} />
                      </div>
@@ -1762,11 +1806,79 @@ const Purchases = () => {
                               <input type="number" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 font-bold text-sm" value={stockForm.minStock || 0} onChange={e => setStockForm({ ...stockForm, minStock: Number(e.target.value) })} required />
                            </div>
                         </div>
+                        <div className="grid grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Preço de Custo (R$)</label>
+                              <input type="number" step="0.01" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 font-bold text-sm" value={stockForm.costPrice ?? stockForm.price ?? 0} onChange={e => setStockForm({ ...stockForm, costPrice: Number(e.target.value), price: stockForm.price || Number(e.target.value) })} />
+                           </div>
+                           <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Preço Unitário / Venda (R$)</label>
+                              <input type="number" step="0.01" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 font-bold text-sm" value={stockForm.price || 0} onChange={e => setStockForm({ ...stockForm, price: Number(e.target.value) })} required />
+                           </div>
+                        </div>
                         <button type="submit" className="w-full py-4 bg-cyan-600 text-white font-black rounded-xl uppercase tracking-widest text-xs shadow-lg mt-4">Salvar Item</button>
                      </form>
                   </div>
                </div>
 
+            )
+         }
+
+         {/* Supplier Modal */}
+         {
+            isSupplierModalOpen && (
+               <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg border dark:border-gray-700 animate-in zoom-in duration-200">
+                     <div className="p-6 border-b dark:border-gray-700 flex justify-between items-center">
+                        <h3 className="font-bold text-lg text-slate-900 dark:text-white uppercase tracking-tight">
+                           {editingSupplier ? 'Editar Fornecedor' : 'Novo Fornecedor'}
+                        </h3>
+                        <button type="button" onClick={() => setIsSupplierModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+                     </div>
+                     <form onSubmit={handleSaveSupplier} className="p-6 space-y-4">
+                        <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Razão Social / Nome</label>
+                           <input type="text" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 px-4 font-bold text-sm" value={supForm.name || ''} onChange={e => setSupForm({ ...supForm, name: e.target.value })} required />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">CNPJ / CPF</label>
+                              <input type="text" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 px-4 font-bold text-sm" value={supForm.document || ''} onChange={e => setSupForm({ ...supForm, document: e.target.value })} required />
+                           </div>
+                           <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Categoria</label>
+                              <input type="text" placeholder="Ex: Insumos, Combustível..." className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 px-4 font-bold text-sm" value={supForm.category || ''} onChange={e => setSupForm({ ...supForm, category: e.target.value })} required />
+                           </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Telefone</label>
+                              <input type="text" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 px-4 font-bold text-sm" value={supForm.phone || ''} onChange={e => setSupForm({ ...supForm, phone: e.target.value })} />
+                           </div>
+                           <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">E-mail</label>
+                              <input type="email" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 px-4 font-bold text-sm" value={supForm.email || ''} onChange={e => setSupForm({ ...supForm, email: e.target.value })} />
+                           </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Contato Responsável</label>
+                              <input type="text" className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 px-4 font-bold text-sm" value={supForm.contactPerson || ''} onChange={e => setSupForm({ ...supForm, contactPerson: e.target.value })} />
+                           </div>
+                           <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Status</label>
+                              <select className="w-full bg-slate-50 dark:bg-gray-700 border-none rounded-xl py-3 px-4 font-bold text-sm" value={supForm.status || 'Ativo'} onChange={e => setSupForm({ ...supForm, status: e.target.value as any })}>
+                                 <option value="Ativo">Ativo</option>
+                                 <option value="Inativo">Inativo</option>
+                              </select>
+                           </div>
+                        </div>
+                        <button type="submit" className="w-full py-4 bg-cyan-600 text-white font-black rounded-xl uppercase tracking-widest text-xs shadow-lg mt-4">
+                           {editingSupplier ? 'Atualizar Fornecedor' : 'Cadastrar Fornecedor'}
+                        </button>
+                     </form>
+                  </div>
+               </div>
             )
          }
          {/* OSM Modal (Maintenance) */}
@@ -1843,19 +1955,32 @@ const Purchases = () => {
                               {/* Parts/Products Logic from Inventory */}
                               <div className="p-6 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700">
                                  <h4 className="text-xs font-black text-teal-600 uppercase mb-4">Peças e Insumos (Opcional)</h4>
-                                 <div className="grid grid-cols-1 gap-4">
-                                    <div>
+                                 <div className="grid grid-cols-3 gap-4">
+                                    <div className="col-span-2">
                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Produto</label>
                                        <select
                                           className="w-full bg-white dark:bg-slate-800 border dark:border-slate-600 rounded-xl py-3 font-bold text-sm"
                                           value={osmForm.productId || ''}
-                                          onChange={e => setOsmForm({ ...osmForm, productId: e.target.value })}
+                                          onChange={e => setOsmForm({ ...osmForm, productId: e.target.value, productQuantity: e.target.value ? (osmForm.productQuantity || 1) : 0 })}
                                        >
                                           <option value="">Nenhum produto...</option>
                                           {inventory.map(item => (
                                              <option key={item.id} value={item.id}>{item.name} (Estoque: {item.quantity})</option>
                                           ))}
                                        </select>
+                                    </div>
+                                    <div>
+                                       <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Qtd</label>
+                                       <input
+                                          type="number"
+                                          min="0"
+                                          step="0.1"
+                                          className="w-full bg-white dark:bg-slate-800 border dark:border-slate-600 rounded-xl py-3 px-3 font-bold text-sm"
+                                          value={osmForm.productQuantity || ''}
+                                          onChange={e => setOsmForm({ ...osmForm, productQuantity: Number(e.target.value) })}
+                                          disabled={!osmForm.productId}
+                                          placeholder="1"
+                                       />
                                     </div>
                                  </div>
                               </div>

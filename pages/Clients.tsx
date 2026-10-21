@@ -44,12 +44,25 @@ const Clients = () => {
   const [activeTab, setActiveTab] = useState('clients');
   const [searchTerm, setSearchTerm] = useState('');
 
+  const toInputDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      if (dateStr.includes('/')) {
+        const [d, m, y] = dateStr.split('/');
+        if (y && m && d) return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+      return dateStr.split('T')[0];
+    } catch {
+      return '';
+    }
+  };
+
   const canManage = (type: string) => {
     switch (type) {
-      case 'clients': return hasPermission('clients.manage');
-      case 'suppliers': return hasPermission('clients.manage');
-      case 'employees': return hasPermission('employees.manage');
-      case 'products': return hasPermission('inventory.manage');
+      case 'clients': return hasPermission('clients.create') || hasPermission('clients.edit') || hasPermission('clients.manage');
+      case 'suppliers': return hasPermission('suppliers.manage') || hasPermission('clients.manage');
+      case 'employees': return hasPermission('hr.manage') || hasPermission('employees.manage');
+      case 'products': return hasPermission('inventory.create') || hasPermission('inventory.edit') || hasPermission('inventory.manage');
       case 'vehicles': return hasPermission('fleet.manage');
       default: return false;
     }
@@ -108,7 +121,8 @@ const Clients = () => {
       };
       if (editingId) updateStockItem(product); else addStockItem(product);
     } else if (activeTab === 'vehicles') {
-      const vehicle: FleetVehicle = { ...formData, model: formData.name, id: editingId || `v-${Date.now()}`, fuelLevel: parseFloat(formData.fuelLevel) || 0 };
+      const vehicleName = formData.name || formData.model || 'Veículo';
+      const vehicle: FleetVehicle = { ...formData, name: vehicleName, model: vehicleName, id: editingId || `v-${Date.now()}`, fuelLevel: parseFloat(formData.fuelLevel) || 0 };
       if (editingId) updateVehicle(vehicle); else addVehicle(vehicle);
     }
     handleCloseModal();
@@ -450,8 +464,8 @@ const Clients = () => {
                         <div className="md:col-span-4">
                           <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Data Admissão</label>
                           <input type="date" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                            value={formData.admissionDate ? new Date(formData.admissionDate.split('/').reverse().join('-')).toISOString().split('T')[0] : ''}
-                            onChange={e => setFormData({ ...formData, admissionDate: new Date(e.target.value).toLocaleDateString('pt-BR') })} />
+                            value={toInputDate(formData.admissionDate)}
+                            onChange={e => setFormData({ ...formData, admissionDate: e.target.value ? e.target.value.split('-').reverse().join('/') : '' })} />
                         </div>
                         <div className="md:col-span-4">
                           <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Salário Base (R$)</label>
@@ -555,8 +569,8 @@ const Clients = () => {
                           <input
                             type="date"
                             className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                            value={formData.insuranceExpiry ? new Date(formData.insuranceExpiry.split('/').reverse().join('-')).toISOString().split('T')[0] : ''}
-                            onChange={e => setFormData({ ...formData, insuranceExpiry: new Date(e.target.value).toLocaleDateString('pt-BR') })}
+                            value={toInputDate(formData.insuranceExpiry)}
+                            onChange={e => setFormData({ ...formData, insuranceExpiry: e.target.value ? e.target.value.split('-').reverse().join('/') : '' })}
                           />
                         </div>
                       </>

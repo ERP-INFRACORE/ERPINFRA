@@ -18,7 +18,7 @@ const HR = () => {
         salaryAdvances, addSalaryAdvance, updateAdvanceStatus, paySalaryAdvance, deleteAdvance,
         users
     } = useApp();
-    const { addTransaction, accounts, hasPermission, currentUser, transactions, addPurchaseOrder } = useApp();
+    const { addTransaction, accounts, hasPermission, currentUser, transactions, addPurchaseOrder, settings } = useApp();
     const { addToast } = useToast();
 
     const [activeTab, setActiveTab] = useState<'employees' | 'payroll' | 'vacations' | 'advances' | 'time'>('employees');
@@ -201,7 +201,6 @@ const HR = () => {
 
 
     const handlePrintReceipt = (record: PayrollRecord) => {
-        const settings = useApp().settings; // Assuming settings is available in hook or we fetch it
         const companyName = settings?.companyName || "INFRACORE ERP";
         const companyDoc = settings?.document || "00.000.000/0000-00";
 
@@ -549,7 +548,21 @@ const HR = () => {
                                         >
                                             <Download size={18} />
                                         </button>
-
+                                        <button
+                                            onClick={() => {
+                                                setSelectedEmployee(null);
+                                                setEmpForm({
+                                                    status: 'Ativo',
+                                                    salary: 0,
+                                                    vacationDaysAvailable: 30,
+                                                    admissionDate: new Date().toISOString().split('T')[0]
+                                                });
+                                                setIsEmployeeModalOpen(true);
+                                            }}
+                                            className="px-5 py-3 bg-indigo-600 text-white font-black rounded-xl shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2 text-xs uppercase tracking-widest"
+                                        >
+                                            <UserPlus size={16} /> Novo Colaborador
+                                        </button>
                                     </div>
                                 </div>
                                 <div className="overflow-x-auto">
@@ -676,7 +689,12 @@ const HR = () => {
                         {activeTab === 'advances' && (
                             <div className="space-y-6">
                                 <div className="flex justify-end">
-
+                                    <button
+                                        onClick={() => setIsAdvanceModalOpen(true)}
+                                        className="px-5 py-3 bg-indigo-600 text-white font-black rounded-xl shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2 text-xs uppercase tracking-widest"
+                                    >
+                                        <Plus size={16} /> Solicitar Antecipação
+                                    </button>
                                 </div>
 
                                 <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
@@ -1124,7 +1142,7 @@ const HR = () => {
                                             >
                                                 <option value="">Selecione uma conta...</option>
                                                 {accounts.map(acc => (
-                                                    <option key={acc.id} value={acc.id}>{acc.name} ({acc.bank})</option>
+                                                    <option key={acc.id} value={acc.id}>{acc.name} ({acc.bankName || acc.type})</option>
                                                 ))}
                                             </select>
                                         </div>

@@ -110,6 +110,7 @@ const Production = () => {
                 tester: newTest.tester
             };
             addQualityTest(selectedOrder.id, test);
+            setSelectedOrder(prev => prev ? { ...prev, qualityTests: [test, ...(prev.qualityTests || [])] } : null);
             setIsTestModalOpen(false);
         }
     };
@@ -265,6 +266,15 @@ const Production = () => {
                         <button onClick={() => setActiveTab('formulas')} className={`px-4 py-2 text-[10px] font-black rounded-xl transition-all ${activeTab === 'formulas' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}>PROCESSOS PRODUTIVOS/FÓRMULAS</button>
                         <button onClick={() => setActiveTab('lab')} className={`px-4 py-2 text-[10px] font-black rounded-xl transition-all ${activeTab === 'lab' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}>LABORATÓRIO</button>
                     </div>
+                    <button
+                        onClick={() => {
+                            setEditingUnit({ id: '', name: '', type: 'Britagem', status: 'Operando', capacity: 100, currentLoad: 0, temperature: 45, powerConsumption: 120, nextMaintenance: '500h' });
+                            setIsUnitModalOpen(true);
+                        }}
+                        className="px-4 py-3 bg-slate-800 dark:bg-slate-700 text-white font-black rounded-2xl shadow-lg hover:bg-slate-900 transition-all flex items-center gap-2 text-xs uppercase tracking-widest"
+                    >
+                        <Plus size={18} /> Nova Usina
+                    </button>
                     <button
                         onClick={() => setIsOrderModalOpen(true)}
                         className="px-6 py-3 bg-indigo-600 text-white font-black rounded-2xl shadow-xl hover:bg-indigo-700 transition-all flex items-center gap-2 text-xs uppercase tracking-widest"

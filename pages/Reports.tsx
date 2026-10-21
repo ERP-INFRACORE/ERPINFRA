@@ -62,7 +62,7 @@ import { exportToCSV, printDocument } from '../utils/exportUtils';
 const formatMoney = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
 const Reports = () => {
-    const { financials, transactions, sales, inventory, purchaseOrders, clients, fleet, employees, stockMovements, settings, planOfAccounts } = useApp();
+    const { financials, transactions, sales, budgets, inventory, purchaseOrders, clients, fleet, employees, stockMovements, settings, planOfAccounts } = useApp();
     const { addToast } = useToast();
     const [isGenerating, setIsGenerating] = useState(false);
     const [activeTab, setActiveTab] = useState<'dashboard' | 'generator' | 'chart_of_accounts'>('generator');
@@ -325,13 +325,13 @@ const Reports = () => {
                 break;
             case 'quotes':
             case 'quotes_pending':
-                data = sales.filter(s => (s as any).status === 'Orçamento' || (selectedModule === 'quotes_pending' && (s as any).status === 'Pendente')).map(s => ({
-                    'Nº': s.id?.slice(-6).toUpperCase(),
-                    Data: s.date,
-                    Cliente: s.clientName,
-                    Valor: s.amount,
-                    Status: s.status,
-                    Convertido: (s as any).status === 'Concluída' ? 'Sim' : 'Não'
+                data = (budgets || []).filter(b => selectedModule === 'quotes' || b.status === 'Pendente' || b.status === 'Rascunho').map(b => ({
+                    'Nº': b.id?.slice(-6).toUpperCase(),
+                    Data: b.date,
+                    Cliente: b.clientName,
+                    Valor: b.total,
+                    Status: b.status,
+                    Convertido: b.status === 'Aprovado' ? 'Sim' : 'Não'
                 }));
                 break;
 
@@ -478,7 +478,7 @@ const Reports = () => {
                 const prodRevenue = inventory.map(i => {
                     const revenue = sales.reduce((acc, s) => acc + (s.items?.filter(item => item.id === i.id).reduce((a, item) => a + item.price * item.quantity, 0) || 0), 0);
                     return { name: i.name, revenue };
-                }).sort((a, b) => b.revenue - a[1].revenue);
+                }).sort((a, b) => b.revenue - a.revenue);
                 let accum = 0;
                 const totalRev = prodRevenue.reduce((a, p) => a + p.revenue, 0);
                 data = prodRevenue.map(p => {
@@ -604,18 +604,18 @@ const Reports = () => {
                 })));
                 break;
             case 'fleet_fuel':
-                data = fleet.flatMap(f => ((f as any).fuelHistory || []).map((fuel: any) => ({
+                data = fleet.flatMap(f => (f.fuelLogs || (f as any).fuelHistory || []).map((fuel: any) => ({
                     Placa: f.plate,
                     Data: fuel.date,
                     Litros: fuel.liters,
                     Valor: fuel.cost,
                     KM: fuel.km,
-                    'Média km/l': fuel.kmPerLiter?.toFixed(2) || '-'
+                    'Média km/l': fuel.kmPerLiter?.toFixed(2) || (fuel.liters > 0 ? (fuel.km / fuel.liters).toFixed(2) : '-')
                 })));
                 break;
             case 'fleet_costs':
                 data = fleet.map(f => {
-                    const fuelCost = ((f as any).fuelHistory || []).reduce((acc: number, fuel: any) => acc + (fuel.cost || 0), 0);
+                    const fuelCost = (f.fuelLogs || (f as any).fuelHistory || []).reduce((acc: number, fuel: any) => acc + (fuel.cost || 0), 0);
                     const maintCost = (f.maintenanceHistory || []).reduce((acc: number, m: any) => acc + (m.cost || 0), 0);
                     return {
                         Placa: f.plate,
@@ -1475,9 +1475,15 @@ const Reports = () => {
                                                     </div>
                                                     <div className="flex gap-2">
                                                         <button
-                                                            onClick={(e) => { e.stopPropagation(); exportToCSV([], `Relatorio_${m.id}`); }}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedModule(m.id);
+                                                                setTimeout(() => {
+                                                                    addToast(`Relatório "${m.name}" carregado para exportação.`, 'info');
+                                                                }, 100);
+                                                            }}
                                                             className="p-1.5 bg-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-200 transition-colors"
-                                                            title="Exportar Rápido"
+                                                            title="Visualizar e Exportar"
                                                         >
                                                             <Download size={14} />
                                                         </button>
