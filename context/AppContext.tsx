@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../src/lib/supabase';
 import * as api from '../src/services/api';
+import { isValidUUID, generateUUID, toDeterministicUUID } from '../src/services/api';
 import {
   Client, Transaction, FleetVehicle, Sale, InventoryItem, Budget, Supplier,
   Employee, PurchaseOrder, MaintenanceRecord, FuelLog, PayrollRecord, TimeLog, Tire, TireHistory,
@@ -568,10 +569,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [roles, setRoles] = useState<AppRole[]>(INITIAL_ROLES);
   const [settings, setSettings] = useState<AppSettings>(INITIAL_SETTINGS);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
-  const [accounts, setAccounts] = useState<any[]>(INITIAL_ACCOUNTS); // Added
-  const [planOfAccounts, setPlanOfAccounts] = useState<any[]>(INITIAL_PLAN_OF_ACCOUNTS); // Added
+  const [accounts, setAccounts] = useState<any[]>(INITIAL_ACCOUNTS);
+  const [planOfAccounts, setPlanOfAccounts] = useState<any[]>(INITIAL_PLAN_OF_ACCOUNTS);
 
-  // Persistence Load
+  // Cross-Tab Synchronization Configuration
+  const CROSS_TAB_CHANNEL_NAME = 'infracore_erp_cross_tab_sync';
+  const TAB_INSTANCE_ID = useMemo(() => {
+    return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+  }, []);
+
+  const broadcastCrossTab = useCallback((msg: {
+    type: 'MUTATION' | 'STOCK_MUTATION' | 'SALE_INVOICED' | 'PO_RECEIVED' | 'AUTH_SYNC' | 'FULL_SYNC';
+    table?: string;
+    action?: 'add' | 'update' | 'delete';
+    id?: string;
+    item?: any;
+    payload?: any;
+  }) => {
+    const fullMsg = {
+      ...msg,
+      senderTabId: TAB_INSTANCE_ID,
+      msgId: Math.random().toString(36).slice(2),
+      _t: Date.now()
+    };
+
+    if (typeof window !== 'undefined') {
+      if ('BroadcastChannel' in window) {
+        try {
+          const bc = new BroadcastChannel(CROSS_TAB_CHANNEL_NAME);
+          bc.postMessage(fullMsg);
+          bc.close();
+        } catch (err) {
+          console.warn('BroadcastChannel error:', err);
+        }
+      }
+      try {
+        localStorage.setItem('infracore_cross_tab_event', JSON.stringify(fullMsg));
+      } catch {}
+    }
+  }, [TAB_INSTANCE_ID]);
+
   // Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
@@ -599,49 +636,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {
       console.error('Failed to persist session', e);
     }
+    broadcastCrossTab({
+      type: 'AUTH_SYNC',
+      payload: { user }
+    });
   };
 
   const login = async (username: string, password?: string, rememberMe: boolean = true): Promise<{ success: boolean; message?: string }> => {
-    // Debug info
-    console.log('Attempting login with:', { username, passwordProvided: !!password });
-
-    // 1. Try to find the user in the loaded state (Real DB Data)
     let user = users.find(u => u.username === username);
 
-    // 2. Emergency/Setup Access: Only allow mock admin if DB is empty OR if explicitly requested manually (not auto-login)
+    // Emergency admin login for empty database
     if (!user && users.length === 0 && username === 'admin' && password === '123') {
-      console.log('🌱 First Access / Emergency Admin Login triggered');
-
       const mockAdmin = INITIAL_USERS.find(u => u.username === 'admin');
       if (mockAdmin) {
         if (roles.length === 0) setRoles(INITIAL_ROLES);
-
         persistCurrentUser(mockAdmin, rememberMe);
-        return { success: true, message: 'Acesso de Configuração Inicial (Banco Vazio)' };
+        return { success: true, message: 'Acesso de Configuração Inicial' };
       }
     }
 
-    // 3. Normal Authentication Flow
     if (!user) {
-      console.warn('Login failed: User not found.');
       return { success: false, message: 'Usuário não encontrado.' };
     }
 
     if (user.status !== 'Ativo') {
-      console.warn(`Login failed: User ${username} is not Active.`);
       return { success: false, message: 'Usuário inativo ou bloqueado.' };
     }
 
-    // Password Check
-    const passwordMatch = user.password === password;
-
-    if (!passwordMatch) {
-      console.warn('Login failed: Password mismatch.');
+    if (user.password !== password) {
       return { success: false, message: 'Senha incorreta.' };
     }
 
     persistCurrentUser(user, rememberMe);
-    console.log('Login successful for:', username);
     return { success: true };
   };
 
@@ -674,22 +700,68 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (userRole.permissions.includes(permissionId)) return true;
 
-    // Alias mapping for backward compatibility across modules
+    // Comprehensive bidirectional alias mapping across modules
     const aliasMap: Record<string, string[]> = {
-      'sales.view': ['sales.view.sales'],
+      // Sales
+      'sales.view': ['sales.view.sales', 'sales.create', 'sales.edit'],
       'sales.view.sales': ['sales.view'],
       'sales.create': ['sales.create.sales'],
       'sales.create.sales': ['sales.create'],
+      'sales.manage': ['sales.view', 'sales.create', 'sales.edit', 'sales.approve'],
+
+      // Clients
       'clients.manage': ['clients.view', 'clients.create', 'clients.edit'],
+      'clients.view': ['clients.manage'],
+      'clients.create': ['clients.manage'],
+      'clients.edit': ['clients.manage'],
+      'clients.delete': ['clients.manage'],
+
+      // Suppliers
+      'suppliers.manage': ['suppliers.view', 'purchases.manage', 'purchases.view'],
+      'suppliers.view': ['suppliers.manage'],
+
+      // HR & Employees
       'employees.view': ['hr.view'],
-      'employees.manage': ['hr.manage', 'hr.payroll'],
-      'hr.manage_employees': ['hr.manage'],
-      'inventory.manage': ['inventory.create', 'inventory.edit', 'inventory.adjust'],
+      'hr.view': ['employees.view'],
+      'employees.manage': ['hr.manage', 'hr.payroll', 'hr.manage_employees'],
+      'hr.manage': ['employees.manage', 'hr.manage_employees'],
+      'hr.manage_employees': ['hr.manage', 'employees.manage'],
+      'hr.payroll': ['employees.manage'],
+
+      // Inventory
+      'inventory.manage': ['inventory.create', 'inventory.edit', 'inventory.adjust', 'inventory.view'],
+      'inventory.view': ['inventory.manage'],
+      'inventory.create': ['inventory.manage'],
+      'inventory.edit': ['inventory.manage'],
+      'inventory.adjust': ['inventory.manage'],
+      'inventory.history': ['inventory.manage'],
+
+      // Fleet
+      'fleet.manage': ['fleet.view', 'fleet.maintenance', 'fleet.fuel', 'fleet.tires'],
+      'fleet.view': ['fleet.manage'],
+      'fleet.maintenance': ['fleet.manage'],
+      'fleet.fuel': ['fleet.manage'],
+
+      // Finance
       'finance.view': ['finance.dashboard', 'finance.view_transactions'],
+      'finance.dashboard': ['finance.view'],
       'finance.reconcile': ['finance.approve', 'finance.edit_transaction'],
       'finance.transact': ['finance.add_revenue', 'finance.add_expense'],
-      'finance.delete': ['finance.manage_accounts', 'finance.edit_transaction'],
-      'finance.delete_transaction': ['finance.edit_transaction', 'finance.approve']
+      'finance.delete': ['finance.manage_accounts', 'finance.edit_transaction', 'finance.approve', 'finance.delete_transaction'],
+      'finance.delete_transaction': ['finance.delete', 'finance.edit_transaction', 'finance.approve', 'finance.manage_accounts'],
+      'finance.admin': ['finance.manage_accounts', 'finance.manage_plan', 'finance.approve', 'finance.dashboard'],
+
+      // Reports
+      'reports.view': ['reports.view_basic', 'reports.view_advanced'],
+      'reports.view_basic': ['reports.view', 'reports.view_advanced'],
+
+      // Settings & System
+      'settings.manage': ['settings.system', 'settings.company', 'settings.view'],
+      'settings.view': ['settings.manage', 'settings.system', 'settings.company'],
+
+      // AI Agents
+      'ai.agents.view': ['ai.agents.manage'],
+      'ai.agents.manage': ['ai.agents.view']
     };
 
     const aliases = aliasMap[permissionId];
@@ -700,14 +772,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return false;
   }, [currentUser, roles]);
 
-
+  // Load Remote Supabase Data
   const loadSupabaseData = async () => {
     if (!isSupabaseConfigured()) return;
 
     try {
       const [
         cl, su, emp, inv, tr, fl, ti, us, ro, set, sa, po, pro, prf, pru, fac, pay, stm,
-        bud, tml, vac, adv, aud
+        bud, tml, vac, adv, aud, maint, fuel
       ] = await Promise.all([
         api.fetchData<Client>('clients'),
         api.fetchData<Supplier>('suppliers'),
@@ -720,7 +792,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         api.fetchRoles(),
         api.fetchData<AppSettings>('settings'),
 
-        // New Tables
+        // All Additional Tables
         api.fetchData<Sale>('sales'),
         api.fetchData<PurchaseOrder>('purchase_orders'),
         api.fetchData<ProductionOrder>('production_orders'),
@@ -734,20 +806,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         api.fetchData<Vacation>('vacations').catch(() => []),
         api.fetchData<SalaryAdvance>('salary_advances').catch(() => []),
         api.fetchData<AuditLog>('audit_logs').catch(() => []),
+        api.fetchData<MaintenanceRecord>('maintenance_records').catch(() => []),
+        api.fetchData<FuelLog>('fuel_logs').catch(() => [])
       ]);
 
-      if (cl.length > 0) setClients(cl);
-      if (su.length > 0) setSuppliers(su);
-      if (emp.length > 0) setEmployees(emp);
-      if (inv.length > 0) setInventory(inv);
-      if (tr.length > 0) setTransactions(tr);
-      if (fl.length > 0) setFleet(fl);
-      if (ti.length > 0) setTires(ti);
-      if (us.length > 0) setUsers(us);
-      if (ro.length > 0) setRoles(ro);
-      if (set.length > 0) setSettings(set[0]);
+      if (cl && cl.length > 0) setClients(cl);
+      if (su && su.length > 0) setSuppliers(su);
+      if (emp && emp.length > 0) setEmployees(emp);
+      if (inv && inv.length > 0) setInventory(inv);
+      if (tr && tr.length > 0) setTransactions(tr);
+      if (ti && ti.length > 0) setTires(ti);
+      if (us && us.length > 0) setUsers(us);
+      if (ro && ro.length > 0) setRoles(ro);
+      if (set && set.length > 0) setSettings(set[0]);
 
-      // New Data
+      if (fl && fl.length > 0) {
+        const enrichedFleet = fl.map(v => ({
+          ...v,
+          maintenanceHistory: maint && maint.length > 0 ? maint.filter(m => m.vehicleId === v.id) : (v.maintenanceHistory || []),
+          fuelLogs: fuel && fuel.length > 0 ? fuel.filter(f => f.vehicleId === v.id) : (v.fuelLogs || [])
+        }));
+        setFleet(enrichedFleet);
+      }
+
       if (sa && sa.length > 0) setSales(sa);
       if (po && po.length > 0) setPurchaseOrders(po);
       if (pro && pro.length > 0) setProductionOrders(pro);
@@ -762,240 +843,573 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (adv && adv.length > 0) setSalaryAdvances(adv);
       if (aud && aud.length > 0) setAuditLogs(aud);
 
-      // Auto-Seed: If no users/roles/clients in DB, inject defaults to populated DB
-      if (us.length === 0 && ro.length === 0 && cl.length === 0) {
-        console.log('🌱 Empty database detected. Seeding full initial data...');
-
+      // Auto-Seed: If database is completely empty, populate initial structure
+      if (us && us.length === 0 && ro && ro.length === 0 && cl && cl.length === 0) {
         try {
           const roleMap: Record<string, string> = {};
-
-          // 1. Roles
-          console.log('...Seeding Roles');
           for (const role of INITIAL_ROLES) {
             const { id, ...rest } = role;
             const cleanRole = await api.createItem<AppRole>('app_roles', rest);
             if (cleanRole) roleMap[role.id] = cleanRole.id;
           }
 
-          // 2. Users
-          console.log('...Seeding Users');
           for (const user of INITIAL_USERS) {
             const { id, roleId, ...rest } = user;
             const newRoleId = roleMap[roleId] || roleId;
             await api.createItem('users', { ...rest, roleId: newRoleId });
           }
 
-          // 3. Settings
-          if (set.length === 0) {
-            console.log('...Seeding Settings');
+          if (set && set.length === 0) {
             await api.createItem('settings', INITIAL_SETTINGS);
           }
 
-          // 4. Clients
-          console.log('...Seeding Clients (Synced)');
-          // Removed mock clients seeding
-
-          // 5. Suppliers
-          console.log('...Seeding Suppliers (Synced)');
           for (const item of INITIAL_SUPPLIERS) {
             const { id, ...rest } = item;
             await api.createItem('suppliers', rest);
           }
 
-          // 6. Employees
-          console.log('...Seeding Employees (Synced)');
           for (const item of INITIAL_EMPLOYEES) {
             const { id, ...rest } = item;
             await api.createItem('employees', rest);
           }
 
-          // 7. Inventory
-          console.log('...Seeding Inventory (Synced)');
           for (const item of INITIAL_INVENTORY) {
             await api.createItem('inventory', item);
           }
 
-          // 8. Fleet
-          console.log('...Seeding Fleet (Synced)');
-          // Removed mock fleet seeding
-
-          // 9. Production Units
-          console.log('...Seeding Production Units (Synced)');
           for (const item of INITIAL_PRODUCTION_UNITS) {
             const { id, ...rest } = item;
             await api.createItem('production_units', rest);
           }
 
-          // 10. Formulas
-          console.log('...Seeding Formulas (Synced)');
           for (const item of INITIAL_FORMULAS) {
             const { id, ...rest } = item;
             await api.createItem('production_formulas', rest);
           }
 
-          console.log('✅ Full Seeding complete. Reloading Users...');
-
-          // Re-fetch users to ensure login works immediately
           const latestUsers = await api.fetchData<User>('users');
           if (latestUsers && latestUsers.length > 0) {
             setUsers(latestUsers);
-            console.log('✅ Users state updated with seeded data.');
           }
-
         } catch (seedErr) {
           console.error('Seeding failed:', seedErr);
         }
       }
-
     } catch (e) {
-      console.error("Failed to load Supabase data", e);
+      console.error('Failed to load Supabase data', e);
     }
   };
 
-  // Loading Logic
+  // Initial Load from LocalStorage and Remote Database
   useEffect(() => {
-    const loadData = async () => {
-      // 1. Try Local Storage first
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const data = JSON.parse(stored);
-          if (data.clients) setClients(data.clients);
-          if (data.suppliers) setSuppliers(data.suppliers);
-          if (data.employees) setEmployees(data.employees);
-          if (data.transactions) setTransactions(data.transactions);
-          if (data.sales) setSales(data.sales);
-          if (data.budgets) setBudgets(data.budgets);
-          if (data.purchaseOrders) setPurchaseOrders(data.purchaseOrders);
-          if (data.fleet) setFleet(data.fleet);
-          if (data.inventory) setInventory(data.inventory);
-          if (data.payroll) setPayroll(data.payroll);
-          if (data.timeLogs) setTimeLogs(data.timeLogs);
-          if (data.vacations) setVacations(data.vacations);
-          if (data.salaryAdvances) setSalaryAdvances(data.salaryAdvances);
-          if (data.tires) setTires(data.tires);
-          if (data.productionOrders) setProductionOrders(data.productionOrders);
-          if (data.formulas) setFormulas(data.formulas);
-          if (data.productionUnits) setProductionUnits(data.productionUnits);
-          if (data.users) setUsers(data.users);
-          if (data.roles) setRoles(data.roles);
-          if (data.settings) setSettings(data.settings);
-          if (data.auditLogs) setAuditLogs(data.auditLogs);
-          if (data.stockMovements) setStockMovements(data.stockMovements);
-          if (data.accounts) setAccounts(data.accounts);
-          if (data.planOfAccounts && data.planOfAccounts.length > 0) {
-            setPlanOfAccounts(data.planOfAccounts);
-          }
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const data = JSON.parse(stored);
+        if (data.clients) setClients(data.clients);
+        if (data.suppliers) setSuppliers(data.suppliers);
+        if (data.employees) setEmployees(data.employees);
+        if (data.transactions) setTransactions(data.transactions);
+        if (data.sales) setSales(data.sales);
+        if (data.budgets) setBudgets(data.budgets);
+        if (data.purchaseOrders) setPurchaseOrders(data.purchaseOrders);
+        if (data.fleet) setFleet(data.fleet);
+        if (data.inventory) setInventory(data.inventory);
+        if (data.payroll) setPayroll(data.payroll);
+        if (data.timeLogs) setTimeLogs(data.timeLogs);
+        if (data.vacations) setVacations(data.vacations);
+        if (data.salaryAdvances) setSalaryAdvances(data.salaryAdvances);
+        if (data.tires) setTires(data.tires);
+        if (data.productionOrders) setProductionOrders(data.productionOrders);
+        if (data.formulas) setFormulas(data.formulas);
+        if (data.productionUnits) setProductionUnits(data.productionUnits);
+        if (data.users) setUsers(data.users);
+        if (data.roles) setRoles(data.roles);
+        if (data.settings) setSettings(data.settings);
+        if (data.auditLogs) setAuditLogs(data.auditLogs);
+        if (data.stockMovements) setStockMovements(data.stockMovements);
+        if (data.accounts) setAccounts(data.accounts);
+        if (data.planOfAccounts && data.planOfAccounts.length > 0) {
+          setPlanOfAccounts(data.planOfAccounts);
         }
-      } catch (e) {
-        console.error("Failed to load persistence", e);
       }
-
-      // Load from Supabase (async)
-      loadSupabaseData();
+    } catch (e) {
+      console.error('Failed to load persistence', e);
     }
 
-    loadData(); // Call the async function
+    loadSupabaseData();
   }, []);
 
-
-  // Persistence Save
+  // Save to LocalStorage on state change
   useEffect(() => {
     const data = {
       clients, suppliers, employees, transactions, sales, budgets, purchaseOrders, fleet, inventory, payroll, timeLogs, vacations, salaryAdvances, tires,
       productionOrders, formulas, productionUnits, users, roles, settings, auditLogs, accounts, planOfAccounts, stockMovements
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {
+      console.warn('Failed to save to localStorage quota', e);
+    }
   }, [clients, suppliers, employees, transactions, sales, budgets, purchaseOrders, fleet, inventory, payroll, timeLogs, vacations, salaryAdvances, tires, productionOrders, formulas, productionUnits, users, roles, settings, auditLogs, accounts, planOfAccounts, stockMovements]);
+
+  // Reactive Cross-Tab Listener
+  useEffect(() => {
+    const processedMsgIds = new Set<string>();
+
+    const handleMessage = (msg: any) => {
+      if (!msg || msg.senderTabId === TAB_INSTANCE_ID) return;
+      if (msg.msgId) {
+        if (processedMsgIds.has(msg.msgId)) return;
+        processedMsgIds.add(msg.msgId);
+        if (processedMsgIds.size > 200) {
+          const first = processedMsgIds.values().next().value;
+          if (first) processedMsgIds.delete(first);
+        }
+      }
+
+      switch (msg.type) {
+        case 'MUTATION': {
+          const { table, action, id, item } = msg;
+          if (!table) return;
+
+          const applyToSetter = (setter: React.Dispatch<React.SetStateAction<any[]>>) => {
+            if (action === 'add' && item) {
+              setter(prev => prev.some(i => i.id === item.id) ? prev : [item, ...prev]);
+            } else if (action === 'update' && item) {
+              setter(prev => prev.map(i => i.id === id ? { ...i, ...item } : i));
+            } else if (action === 'delete' && id) {
+              setter(prev => prev.filter(i => i.id !== id));
+            }
+          };
+
+          const setterMap: Record<string, React.Dispatch<React.SetStateAction<any[]>>> = {
+            clients: setClients,
+            suppliers: setSuppliers,
+            employees: setEmployees,
+            transactions: setTransactions,
+            sales: setSales,
+            budgets: setBudgets,
+            purchase_orders: setPurchaseOrders,
+            fleet: setFleet,
+            inventory: setInventory,
+            stock_movements: setStockMovements,
+            payroll: setPayroll,
+            time_logs: setTimeLogs,
+            vacations: setVacations,
+            salary_advances: setSalaryAdvances,
+            tires: setTires,
+            production_orders: setProductionOrders,
+            production_formulas: setFormulas,
+            production_units: setProductionUnits,
+            users: setUsers,
+            app_roles: setRoles,
+            audit_logs: setAuditLogs,
+            financial_accounts: setAccounts
+          };
+
+          if (table === 'settings' && item) {
+            setSettings(item);
+          } else if (setterMap[table]) {
+            applyToSetter(setterMap[table]);
+          }
+          break;
+        }
+
+        case 'STOCK_MUTATION': {
+          const { itemId, quantityDelta, movement } = msg.payload || {};
+          if (itemId && typeof quantityDelta === 'number') {
+            setInventory(prev => prev.map(item => item.id === itemId ? { ...item, quantity: item.quantity + quantityDelta } : item));
+          }
+          if (movement) {
+            setStockMovements(prev => prev.some(m => m.id === movement.id) ? prev : [movement, ...prev]);
+          }
+          break;
+        }
+
+        case 'SALE_INVOICED': {
+          const { sale, transactions: newTxs, stockUpdates } = msg.payload || {};
+          if (sale) {
+            setSales(prev => prev.some(s => s.id === sale.id) ? prev : [sale, ...prev]);
+          }
+          if (Array.isArray(newTxs) && newTxs.length > 0) {
+            setTransactions(prev => {
+              const existingIds = new Set(prev.map(t => t.id));
+              const uniqueNew = newTxs.filter(t => !existingIds.has(t.id));
+              return [...uniqueNew, ...prev];
+            });
+          }
+          if (Array.isArray(stockUpdates) && stockUpdates.length > 0) {
+            setInventory(prev => {
+              const deltaMap = new Map(stockUpdates.map(u => [u.itemId, u.quantityDelta]));
+              return prev.map(item => {
+                const delta = deltaMap.get(item.id);
+                return delta !== undefined ? { ...item, quantity: item.quantity + (delta as number) } : item;
+              });
+            });
+          }
+          break;
+        }
+
+        case 'PO_RECEIVED': {
+          const { order, transaction, stockUpdates } = msg.payload || {};
+          if (order) {
+            setPurchaseOrders(prev => prev.map(o => o.id === order.id ? order : o));
+          }
+          if (transaction) {
+            setTransactions(prev => prev.some(t => t.id === transaction.id) ? prev : [transaction, ...prev]);
+          }
+          if (Array.isArray(stockUpdates) && stockUpdates.length > 0) {
+            setInventory(prev => {
+              const deltaMap = new Map(stockUpdates.map(u => [u.itemId, u.quantityDelta]));
+              return prev.map(item => {
+                const delta = deltaMap.get(item.id);
+                return delta !== undefined ? { ...item, quantity: item.quantity + (delta as number) } : item;
+              });
+            });
+          }
+          break;
+        }
+
+        case 'AUTH_SYNC': {
+          const { user } = msg.payload || {};
+          setCurrentUser(user || null);
+          break;
+        }
+
+        case 'FULL_SYNC': {
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (parsed.sales) setSales(parsed.sales);
+              if (parsed.transactions) setTransactions(parsed.transactions);
+              if (parsed.inventory) setInventory(parsed.inventory);
+              if (parsed.stockMovements) setStockMovements(parsed.stockMovements);
+              if (parsed.fleet) setFleet(parsed.fleet);
+              if (parsed.clients) setClients(parsed.clients);
+              if (parsed.suppliers) setSuppliers(parsed.suppliers);
+              if (parsed.employees) setEmployees(parsed.employees);
+              if (parsed.purchaseOrders) setPurchaseOrders(parsed.purchaseOrders);
+              if (parsed.accounts) setAccounts(parsed.accounts);
+            }
+          } catch {}
+          break;
+        }
+      }
+    };
+
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        bc = new BroadcastChannel(CROSS_TAB_CHANNEL_NAME);
+        bc.onmessage = (event) => handleMessage(event.data);
+      } catch {}
+    }
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === 'infracore_cross_tab_event' && event.newValue) {
+        try {
+          const data = JSON.parse(event.newValue);
+          handleMessage(data);
+        } catch {}
+      } else if (event.key === 'infracore_current_user') {
+        try {
+          const user = event.newValue ? JSON.parse(event.newValue) : null;
+          setCurrentUser(user);
+        } catch {}
+      }
+    };
+
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [TAB_INSTANCE_ID]);
+
+  // Reactive Supabase Realtime Listener
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+
+    const channel = supabase.channel('infracore-erp-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+        const { eventType, table, new: newRow, old: oldRow } = payload;
+        if (!table) return;
+
+        const handleRealtimeTable = (setter: React.Dispatch<React.SetStateAction<any[]>>) => {
+          if (eventType === 'INSERT' && newRow) {
+            setter(prev => prev.some(item => item.id === (newRow as any).id) ? prev : [newRow as any, ...prev]);
+          } else if (eventType === 'UPDATE' && newRow) {
+            setter(prev => prev.map(item => item.id === (newRow as any).id ? { ...item, ...newRow } : item));
+          } else if (eventType === 'DELETE' && oldRow) {
+            setter(prev => prev.filter(item => item.id !== (oldRow as any).id));
+          }
+        };
+
+        const rtMap: Record<string, React.Dispatch<React.SetStateAction<any[]>>> = {
+          clients: setClients,
+          suppliers: setSuppliers,
+          employees: setEmployees,
+          transactions: setTransactions,
+          sales: setSales,
+          budgets: setBudgets,
+          purchase_orders: setPurchaseOrders,
+          inventory: setInventory,
+          stock_movements: setStockMovements,
+          payroll: setPayroll,
+          time_logs: setTimeLogs,
+          vacations: setVacations,
+          salary_advances: setSalaryAdvances,
+          tires: setTires,
+          production_orders: setProductionOrders,
+          production_formulas: setFormulas,
+          production_units: setProductionUnits,
+          users: setUsers,
+          app_roles: setRoles,
+          audit_logs: setAuditLogs,
+          financial_accounts: setAccounts
+        };
+
+        if (table === 'settings' && newRow) {
+          setSettings(newRow as AppSettings);
+        } else if (table === 'fleet') {
+          if (eventType === 'INSERT' && newRow) {
+            setFleet(prev => prev.some(v => v.id === (newRow as any).id) ? prev : [newRow as FleetVehicle, ...prev]);
+          } else if (eventType === 'UPDATE' && newRow) {
+            setFleet(prev => prev.map(v => v.id === (newRow as any).id ? { ...v, ...newRow } : v));
+          } else if (eventType === 'DELETE' && oldRow) {
+            setFleet(prev => prev.filter(v => v.id !== (oldRow as any).id));
+          }
+        } else if (table === 'maintenance_records') {
+          if (eventType === 'INSERT' && newRow) {
+            setFleet(prev => prev.map(v => v.id === (newRow as any).vehicleId ? { ...v, maintenanceHistory: [newRow as MaintenanceRecord, ...(v.maintenanceHistory || [])] } : v));
+          }
+        } else if (table === 'fuel_logs') {
+          if (eventType === 'INSERT' && newRow) {
+            setFleet(prev => prev.map(v => v.id === (newRow as any).vehicleId ? { ...v, fuelLogs: [newRow as FuelLog, ...(v.fuelLogs || [])] } : v));
+          }
+        } else if (rtMap[table]) {
+          handleRealtimeTable(rtMap[table]);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const clearAllData = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
+    broadcastCrossTab({ type: 'FULL_SYNC' });
     window.location.reload();
-  }, []);
+  }, [broadcastCrossTab]);
 
   const addAuditLog = (logData: Omit<AuditLog, 'id' | 'timestamp'>) => {
     const newLog: AuditLog = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: generateUUID(),
       timestamp: new Date().toLocaleString('pt-BR'),
       ...logData
     };
     syncAdd('audit_logs', newLog, setAuditLogs);
   };
 
-  // Clients
-  // Wrap setters to also update Supabase (Optimistic UI)
+  // Generic Synchronizer Helpers
   const syncAdd = async (table: string, item: any, setter: React.Dispatch<React.SetStateAction<any[]>>) => {
+    const itemWithUUID = {
+      ...item,
+      id: isValidUUID(item?.id) ? item.id : (item?.id ? toDeterministicUUID(item.id) : generateUUID())
+    };
+
     // Optimistic update
-    setter(prev => [item, ...prev]);
+    setter(prev => [itemWithUUID, ...prev.filter(i => i.id !== itemWithUUID.id)]);
+
+    // Broadcast mutation to other tabs
+    broadcastCrossTab({
+      type: 'MUTATION',
+      table,
+      action: 'add',
+      id: itemWithUUID.id,
+      item: itemWithUUID
+    });
+
     if (isSupabaseConfigured()) {
       try {
-        await api.createItem(table, item);
-      } catch (e) { console.error(`Sync add error ${table}`, e); }
+        const saved = await api.createItem(table, itemWithUUID);
+        if (saved && (saved as any).id) {
+          setter(prev => prev.map(i => i.id === itemWithUUID.id ? { ...itemWithUUID, ...(saved as any) } : i));
+          broadcastCrossTab({
+            type: 'MUTATION',
+            table,
+            action: 'update',
+            id: (saved as any).id,
+            item: { ...itemWithUUID, ...(saved as any) }
+          });
+        }
+      } catch (e) {
+        console.error(`Sync add error for table ${table}:`, e);
+      }
     }
   };
 
   const syncUpdate = async (table: string, id: string, item: any, setter: React.Dispatch<React.SetStateAction<any[]>>) => {
-    setter(prev => prev.map(i => i.id === id ? item : i));
+    setter(prev => prev.map(i => i.id === id ? { ...i, ...item } : i));
+
+    // Broadcast mutation to other tabs
+    broadcastCrossTab({
+      type: 'MUTATION',
+      table,
+      action: 'update',
+      id,
+      item
+    });
+
     if (isSupabaseConfigured()) {
       try {
         await api.updateItem(table, id, item);
-      } catch (e) { console.error(`Sync update error ${table}`, e); }
+      } catch (e) {
+        console.error(`Sync update error for table ${table}:`, e);
+      }
     }
   };
 
   const syncDelete = async (table: string, id: string, setter: React.Dispatch<React.SetStateAction<any[]>>) => {
     setter(prev => prev.filter(i => i.id !== id));
+
+    // Broadcast mutation to other tabs
+    broadcastCrossTab({
+      type: 'MUTATION',
+      table,
+      action: 'delete',
+      id
+    });
+
     if (isSupabaseConfigured()) {
       try {
         await api.deleteItem(table, id);
-      } catch (e) { console.error(`Sync delete error ${table}`, e); }
+      } catch (e) {
+        console.error(`Sync delete error for table ${table}:`, e);
+      }
     }
   };
 
-  // Specific Implementations using Sync
+  // Specific Entities
   const addClient = (client: Client) => syncAdd('clients', client, setClients);
   const updateClient = (client: Client) => syncUpdate('clients', client.id, client, setClients);
-  const deleteClient = (id: string) => syncDelete('clients', id, setClients);
+  const deleteClient = (id: string) => {
+    const item = clients.find(c => c.id === id);
+    syncDelete('clients', id, setClients);
+    addAuditLog({
+      userId: currentUser?.id || 'system',
+      userName: currentUser?.name || 'Sistema',
+      action: 'Exclusão de Cliente',
+      module: 'Cadastros',
+      details: `Cliente ${item?.name || id} foi removido.`,
+      severity: 'warning'
+    });
+  };
 
   const addSupplier = (supplier: Supplier) => syncAdd('suppliers', supplier, setSuppliers);
   const updateSupplier = (supplier: Supplier) => syncUpdate('suppliers', supplier.id, supplier, setSuppliers);
-  const deleteSupplier = (id: string) => syncDelete('suppliers', id, setSuppliers);
+  const deleteSupplier = (id: string) => {
+    const item = suppliers.find(s => s.id === id);
+    syncDelete('suppliers', id, setSuppliers);
+    addAuditLog({
+      userId: currentUser?.id || 'system',
+      userName: currentUser?.name || 'Sistema',
+      action: 'Exclusão de Fornecedor',
+      module: 'Cadastros',
+      details: `Fornecedor ${item?.name || id} foi removido.`,
+      severity: 'warning'
+    });
+  };
 
   const addEmployee = (employee: Employee) => syncAdd('employees', employee, setEmployees);
   const updateEmployee = (employee: Employee) => syncUpdate('employees', employee.id, employee, setEmployees);
-  const deleteEmployee = (id: string) => syncDelete('employees', id, setEmployees);
-
-  // ... (Manual replacements for others or generic pattern adoption)
-  // For brevity in this large file rework, I will update critical ones: Users, Roles, Inventory
+  const deleteEmployee = (id: string) => {
+    const item = employees.find(e => e.id === id);
+    syncDelete('employees', id, setEmployees);
+    addAuditLog({
+      userId: currentUser?.id || 'system',
+      userName: currentUser?.name || 'Sistema',
+      action: 'Exclusão de Colaborador',
+      module: 'RH',
+      details: `Colaborador ${item?.name || id} foi removido.`,
+      severity: 'warning'
+    });
+  };
 
   const addUser = (user: User) => syncAdd('users', user, setUsers);
   const updateUser = (updated: User) => syncUpdate('users', updated.id, updated, setUsers);
-  const deleteUser = (id: string) => syncDelete('users', id, setUsers);
+  const deleteUser = (id: string) => {
+    const item = users.find(u => u.id === id);
+    syncDelete('users', id, setUsers);
+    addAuditLog({
+      userId: currentUser?.id || 'system',
+      userName: currentUser?.name || 'Sistema',
+      action: 'Exclusão de Usuário',
+      module: 'Configurações',
+      details: `Usuário ${item?.username || id} foi removido.`,
+      severity: 'critical'
+    });
+  };
 
   const addRole = (role: AppRole) => syncAdd('app_roles', role, setRoles);
   const updateRole = (updated: AppRole) => syncUpdate('app_roles', updated.id, updated, setRoles);
-  const deleteRole = (id: string) => syncDelete('app_roles', id, setRoles);
+  const deleteRole = (id: string) => {
+    const item = roles.find(r => r.id === id);
+    syncDelete('app_roles', id, setRoles);
+    addAuditLog({
+      userId: currentUser?.id || 'system',
+      userName: currentUser?.name || 'Sistema',
+      action: 'Exclusão de Perfil',
+      module: 'Configurações',
+      details: `Perfil ${item?.name || id} foi removido.`,
+      severity: 'critical'
+    });
+  };
 
-  // Settings
   const updateSettings = (updated: AppSettings) => {
     setSettings(updated);
+    broadcastCrossTab({
+      type: 'MUTATION',
+      table: 'settings',
+      action: 'update',
+      id: 'settings',
+      item: updated
+    });
     if (isSupabaseConfigured()) api.updateSettings(updated);
   };
 
   // Inventory
   const addStockItem = (item: InventoryItem) => syncAdd('inventory', item, setInventory);
   const updateStockItem = (item: InventoryItem) => syncUpdate('inventory', item.id, item, setInventory);
-  const deleteStockItem = (id: string) => syncDelete('inventory', id, setInventory);
+  const deleteStockItem = (id: string) => {
+    const item = inventory.find(i => i.id === id);
+    syncDelete('inventory', id, setInventory);
+    addAuditLog({
+      userId: currentUser?.id || 'system',
+      userName: currentUser?.name || 'Sistema',
+      action: 'Exclusão de Item de Estoque',
+      module: 'Estoque',
+      details: `Item ${item?.name || id} foi excluído.`,
+      severity: 'warning'
+    });
+  };
 
   const updateStock = (itemId: string, quantityDelta: number, reason: string = 'Ajuste Manual', documentId?: string) => {
+    let movementToLog: StockMovement | null = null;
+    let updatedItem: InventoryItem | null = null;
+
     setInventory(prev => prev.map(item => {
       if (item.id === itemId) {
-        const newItem = { ...item, quantity: item.quantity + quantityDelta };
-        if (isSupabaseConfigured()) api.updateItem('inventory', itemId, { quantity: newItem.quantity });
+        const newQty = item.quantity + quantityDelta;
+        updatedItem = { ...item, quantity: newQty };
 
-        // Log Movement
         const movement: StockMovement = {
-          id: `mv-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          id: generateUUID(),
           itemId: item.id,
           itemName: item.name,
           type: quantityDelta >= 0 ? 'Entrada' : 'Saída',
@@ -1003,26 +1417,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           date: new Date().toISOString(),
           reason: reason,
           documentId: documentId,
-          userId: currentUser?.id,
+          userId: currentUser?.id ? (isValidUUID(currentUser.id) ? currentUser.id : toDeterministicUUID(currentUser.id)) : undefined,
           userName: currentUser?.name
         };
-        setStockMovements(prev => [movement, ...prev]);
-        if (isSupabaseConfigured()) api.createItem('stock_movements', movement);
+        movementToLog = movement;
 
-        return newItem;
+        return updatedItem;
       }
       return item;
     }));
+
+    if (movementToLog) {
+      const mv = movementToLog as StockMovement;
+      setStockMovements(prev => [mv, ...prev]);
+
+      // Broadcast to other tabs
+      broadcastCrossTab({
+        type: 'STOCK_MUTATION',
+        payload: { itemId, quantityDelta, movement: mv }
+      });
+
+      if (isSupabaseConfigured()) {
+        if (updatedItem) {
+          api.updateItem('inventory', itemId, { quantity: (updatedItem as InventoryItem).quantity }).catch(e => console.error('Error updating stock item in Supabase', e));
+        }
+        api.createItem('stock_movements', mv).catch(e => console.error('Error logging stock movement in Supabase', e));
+      }
+    }
   };
 
-
-
-  // Keep remaining simple setters for now to avoid breaking everything at once, 
-  // or use the original implementations but note they are LocalStorage only until converted.
-
-  // Original implementations below replaced by above for specific entities.
-  // We need to keep the others compatible.
-
+  // Payroll
   const addPayroll = (record: PayrollRecord) => syncAdd('payroll', record, setPayroll);
   const payPayroll = (id: string) => {
     const p = payroll.find(r => r.id === id);
@@ -1043,13 +1467,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Vacations
   const addVacation = (vacation: Vacation) => {
     syncAdd('vacations', vacation, setVacations);
-    // Atualizar dias disponíveis do funcionário
     if (vacation.status === 'Aprovado') {
-      setEmployees(prev => prev.map(emp =>
-        emp.id === vacation.employeeId
-          ? { ...emp, vacationDaysAvailable: (emp.vacationDaysAvailable || 30) - vacation.days }
-          : emp
-      ));
+      setEmployees(prev => prev.map(emp => {
+        if (emp.id === vacation.employeeId) {
+          const newDays = Math.max(0, (emp.vacationDaysAvailable || 30) - vacation.days);
+          if (isSupabaseConfigured()) api.updateItem('employees', emp.id, { vacationDaysAvailable: newDays }).catch(() => {});
+          return { ...emp, vacationDaysAvailable: newDays };
+        }
+        return emp;
+      }));
     }
   };
 
@@ -1059,23 +1485,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const updated = { ...vac, status, approvedBy };
         if (isSupabaseConfigured()) api.updateItem('vacations', id, { status, approvedBy });
 
-        // Se aprovado, deduzir dias do funcionário
         if (status === 'Aprovado' && vac.status !== 'Aprovado') {
-          setEmployees(emps => emps.map(emp =>
-            emp.id === vac.employeeId
-              ? { ...emp, vacationDaysAvailable: (emp.vacationDaysAvailable || 30) - vac.days }
-              : emp
-          ));
+          setEmployees(emps => emps.map(emp => {
+            if (emp.id === vac.employeeId) {
+              const newDays = Math.max(0, (emp.vacationDaysAvailable || 30) - vac.days);
+              if (isSupabaseConfigured()) api.updateItem('employees', emp.id, { vacationDaysAvailable: newDays }).catch(() => {});
+              return { ...emp, vacationDaysAvailable: newDays };
+            }
+            return emp;
+          }));
         }
 
-        // Se rejeitado após aprovação, devolver dias
         if (status === 'Rejeitado' && vac.status === 'Aprovado') {
-          setEmployees(emps => emps.map(emp =>
-            emp.id === vac.employeeId
-              ? { ...emp, vacationDaysAvailable: (emp.vacationDaysAvailable || 0) + vac.days }
-              : emp
-          ));
+          setEmployees(emps => emps.map(emp => {
+            if (emp.id === vac.employeeId) {
+              const newDays = (emp.vacationDaysAvailable || 0) + vac.days;
+              if (isSupabaseConfigured()) api.updateItem('employees', emp.id, { vacationDaysAvailable: newDays }).catch(() => {});
+              return { ...emp, vacationDaysAvailable: newDays };
+            }
+            return emp;
+          }));
         }
+
+        broadcastCrossTab({
+          type: 'MUTATION',
+          table: 'vacations',
+          action: 'update',
+          id,
+          item: updated
+        });
 
         return updated;
       }
@@ -1086,12 +1524,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteVacation = (id: string) => {
     const vacation = vacations.find(v => v.id === id);
     if (vacation && vacation.status === 'Aprovado') {
-      // Devolver dias se estava aprovado
-      setEmployees(prev => prev.map(emp =>
-        emp.id === vacation.employeeId
-          ? { ...emp, vacationDaysAvailable: (emp.vacationDaysAvailable || 0) + vacation.days }
-          : emp
-      ));
+      setEmployees(prev => prev.map(emp => {
+        if (emp.id === vacation.employeeId) {
+          const newDays = (emp.vacationDaysAvailable || 0) + vacation.days;
+          if (isSupabaseConfigured()) api.updateItem('employees', emp.id, { vacationDaysAvailable: newDays }).catch(() => {});
+          return { ...emp, vacationDaysAvailable: newDays };
+        }
+        return emp;
+      }));
     }
     syncDelete('vacations', id, setVacations);
   };
@@ -1100,18 +1540,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addSalaryAdvance = (advance: SalaryAdvance) => syncAdd('salary_advances', advance, setSalaryAdvances);
 
   const updateAdvanceStatus = (id: string, status: SalaryAdvance['status'], approvedBy?: string) => {
-    setSalaryAdvances(prev => prev.map(adv =>
-      adv.id === id ? { ...adv, status, approvedBy } : adv
-    ));
-    if (isSupabaseConfigured()) api.updateItem('salary_advances', id, { status, approvedBy });
+    setSalaryAdvances(prev => prev.map(adv => {
+      if (adv.id === id) {
+        const updated = { ...adv, status, approvedBy };
+        if (isSupabaseConfigured()) api.updateItem('salary_advances', id, { status, approvedBy });
+        broadcastCrossTab({
+          type: 'MUTATION',
+          table: 'salary_advances',
+          action: 'update',
+          id,
+          item: updated
+        });
+        return updated;
+      }
+      return adv;
+    }));
   };
 
   const paySalaryAdvance = (id: string) => {
     setSalaryAdvances(prev => prev.map(adv => {
       if (adv.id === id && adv.status === 'Aprovado') {
         const paidAt = new Date().toLocaleDateString('pt-BR');
+        const updated = { ...adv, status: 'Pago' as const, paidAt };
         if (isSupabaseConfigured()) api.updateItem('salary_advances', id, { status: 'Pago', paidAt });
-        return { ...adv, status: 'Pago' as const, paidAt };
+        broadcastCrossTab({
+          type: 'MUTATION',
+          table: 'salary_advances',
+          action: 'update',
+          id,
+          item: updated
+        });
+        return updated;
       }
       return adv;
     }));
@@ -1120,12 +1579,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteAdvance = (id: string) => syncDelete('salary_advances', id, setSalaryAdvances);
 
   // Transactions
-  // Transactions
   const updateTransactionStatus = (id: string, status: Transaction['status'], date?: string) => {
     setTransactions(prev => prev.map(t => {
       if (t.id === id) {
         const updateData: Partial<Transaction> = { status };
-        // If becoming Conciliado and date provided, update date
         if (date && status === 'Conciliado') {
           updateData.date = date;
         }
@@ -1133,17 +1590,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (isSupabaseConfigured()) {
           api.updateItem('transactions', id, updateData);
         }
-        return { ...t, ...updateData };
+
+        const updated = { ...t, ...updateData };
+        broadcastCrossTab({
+          type: 'MUTATION',
+          table: 'transactions',
+          action: 'update',
+          id,
+          item: updated
+        });
+        return updated;
       }
       return t;
     }));
   };
 
-  const importTransactions = (file: any) => { alert('Importação via arquivo não implementada com Supabase ainda.'); };
+  const importTransactions = (_file: any) => {
+    alert('Importação via arquivo não implementada com Supabase ainda.');
+  };
 
-  // Transactions
   const addTransaction = (t: Transaction) => {
-    // Guards: Prevent duplicates based on ID
     if (transactions.some(existing => existing.id === t.id)) {
       console.warn(`Transaction ${t.id} already exists. Skipping.`);
       return;
@@ -1157,206 +1623,386 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteTransaction = (id: string) => syncDelete('transactions', id, setTransactions);
 
-  // ...
-
-  // Sales
+  // Sales (Faturamento)
   const addSale = (sale: Sale) => {
-    // Guard: Prevent duplicate sales
-    if (sales.some(s => s.id === sale.id)) return;
-
-    syncAdd('sales', sale, setSales);
-
-    const numInstallments = sale.installments && sale.installments > 1 ? sale.installments : 1;
-
-    // Helper to parse DD/MM/YYYY
-    const parseDate = (dateStr: string) => {
-      const [day, month, year] = dateStr.split('/').map(Number);
-      return new Date(year, month - 1, day);
+    const saleId = isValidUUID(sale.id) ? sale.id : toDeterministicUUID(sale.id);
+    const saleWithUUID: Sale = {
+      ...sale,
+      id: saleId,
+      clientId: sale.clientId ? (isValidUUID(sale.clientId) ? sale.clientId : toDeterministicUUID(sale.clientId)) : sale.clientId,
+      accountId: sale.accountId ? (isValidUUID(sale.accountId) ? sale.accountId : toDeterministicUUID(sale.accountId)) : sale.accountId,
+      vehicleId: sale.vehicleId ? (isValidUUID(sale.vehicleId) ? sale.vehicleId : toDeterministicUUID(sale.vehicleId)) : sale.vehicleId,
+      documentNumber: sale.documentNumber || (sale.id && sale.id.startsWith('S-') ? sale.id.slice(2) : saleId.slice(0, 8))
     };
 
-    // Helper to add days
+    if (sales.some(s => s.id === saleWithUUID.id)) return;
+
+    // 1. Optimistic Add Sale
+    setSales(prev => [saleWithUUID, ...prev]);
+
+    // 2. Financial Transactions
+    const numInstallments = sale.installments && sale.installments > 1 ? sale.installments : 1;
+    const parseDate = (dateStr: string) => {
+      if (!dateStr) return new Date();
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+      }
+      return new Date(dateStr);
+    };
+
     const addDays = (date: Date, days: number) => {
       const result = new Date(date);
       result.setDate(result.getDate() + days);
       return result.toLocaleDateString('pt-BR');
     };
 
+    const txsToCreate: Transaction[] = [];
+
     if (numInstallments > 1) {
       const baseDate = parseDate(sale.date);
-      const installmentValue = sale.amount / numInstallments;
+      const installmentValue = Number((sale.amount / numInstallments).toFixed(2));
 
       for (let i = 1; i <= numInstallments; i++) {
         let dueDate = addDays(baseDate, i * 30);
-
-        // Use custom date if provided
         if (sale.installmentDueDates && sale.installmentDueDates[i - 1]) {
-          const [y, m, d] = sale.installmentDueDates[i - 1].split('-');
-          dueDate = `${d}/${m}/${y}`;
+          const parts = sale.installmentDueDates[i - 1].split('-');
+          if (parts.length === 3) {
+            dueDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+          } else {
+            dueDate = sale.installmentDueDates[i - 1];
+          }
         }
 
         const installmentTx: Transaction = {
-          ...sale,
-          id: `${sale.id}-${i}`,
-          description: `${sale.description} (${i}/${numInstallments})`,
+          id: toDeterministicUUID(`${saleWithUUID.id}-inst-${i}`),
+          date: saleWithUUID.date,
+          dueDate: dueDate,
+          description: `${saleWithUUID.description} (${i}/${numInstallments})`,
+          category: saleWithUUID.category || 'Vendas',
+          accountId: saleWithUUID.accountId,
+          account: saleWithUUID.account || 'Caixa Geral',
           amount: installmentValue,
           status: 'Pendente',
-          dueDate: dueDate,
-          date: dueDate,
-          type: 'Receita'
+          type: 'Receita',
+          originModule: 'Vendas',
+          originId: saleWithUUID.id,
+          documentNumber: `${saleWithUUID.documentNumber}-${i}/${numInstallments}`,
+          partnerId: saleWithUUID.clientId,
+          partnerName: saleWithUUID.clientName,
+          ledgerCode: saleWithUUID.ledgerCode || '1.01.01',
+          ledgerName: saleWithUUID.ledgerName || 'Receita de Vendas'
         };
-        addTransaction(installmentTx);
+        txsToCreate.push(installmentTx);
       }
     } else {
-      addTransaction(sale);
+      const singleTx: Transaction = {
+        id: toDeterministicUUID(`${saleWithUUID.id}-tx`),
+        date: saleWithUUID.date,
+        dueDate: saleWithUUID.dueDate || saleWithUUID.date,
+        description: saleWithUUID.description,
+        category: saleWithUUID.category || 'Vendas',
+        accountId: saleWithUUID.accountId,
+        account: saleWithUUID.account || 'Caixa Geral',
+        amount: saleWithUUID.amount,
+        status: saleWithUUID.status || 'Pendente',
+        type: 'Receita',
+        originModule: 'Vendas',
+        originId: saleWithUUID.id,
+        documentNumber: saleWithUUID.documentNumber,
+        partnerId: saleWithUUID.clientId,
+        partnerName: saleWithUUID.clientName,
+        ledgerCode: saleWithUUID.ledgerCode || '1.01.01',
+        ledgerName: saleWithUUID.ledgerName || 'Receita de Vendas'
+      };
+      txsToCreate.push(singleTx);
     }
 
-    // Update stock only if not already processed (implicitly handled by UI flow, but good to be safe)
-    sale.items.forEach(item => updateStock(item.id, -item.quantity, `Venda #${sale.id}`, sale.id));
+    setTransactions(prev => [...txsToCreate, ...prev]);
+
+    // 3. Update stock for sold items
+    const stockUpdates: Array<{ itemId: string, quantityDelta: number }> = [];
+    if (Array.isArray(saleWithUUID.items)) {
+      saleWithUUID.items.forEach(item => {
+        const delta = -Number(item.quantity);
+        stockUpdates.push({ itemId: item.id, quantityDelta: delta });
+        updateStock(item.id, delta, `Venda #${saleWithUUID.documentNumber || saleWithUUID.id.slice(0, 8)}`, saleWithUUID.id);
+      });
+    }
+
+    // 4. Broadcast all changes in one comprehensive payload so other tabs update reactively
+    broadcastCrossTab({
+      type: 'SALE_INVOICED',
+      payload: {
+        sale: saleWithUUID,
+        transactions: txsToCreate,
+        stockUpdates
+      }
+    });
+
+    // 5. Sync to Supabase
+    if (isSupabaseConfigured()) {
+      api.createItem('sales', saleWithUUID).catch(e => console.error('Error saving sale to Supabase', e));
+      for (const tx of txsToCreate) {
+        api.createItem('transactions', tx).catch(e => console.error('Error saving sale transaction to Supabase', e));
+      }
+    }
   };
 
+  // Budgets
   const addBudget = (budget: Budget) => syncAdd('budgets', budget, setBudgets);
   const updateBudget = (budget: Budget) => syncUpdate('budgets', budget.id, budget, setBudgets);
   const updateBudgetStatus = (id: string, status: Budget['status']) => {
-    setBudgets(prev => prev.map(b => b.id === id ? { ...b, status } : b));
-    if (isSupabaseConfigured()) api.updateItem('budgets', id, { status });
+    setBudgets(prev => prev.map(b => {
+      if (b.id === id) {
+        const updated = { ...b, status };
+        if (isSupabaseConfigured()) api.updateItem('budgets', id, { status });
+        broadcastCrossTab({
+          type: 'MUTATION',
+          table: 'budgets',
+          action: 'update',
+          id,
+          item: updated
+        });
+        return updated;
+      }
+      return b;
+    }));
   };
 
-  // Purchases
+  // Purchases (Suprimentos)
   const addPurchaseOrder = (order: PurchaseOrder) => {
-    // Guard: Prevent ID duplication
     if (purchaseOrders.some(p => p.id === order.id)) return;
 
     const orderWithLedger = {
       ...order,
-      ledgerCode: '2.02.03',
-      ledgerName: 'Material de Consumo'
+      ledgerCode: order.ledgerCode || '2.02.03',
+      ledgerName: order.ledgerName || 'Material de Consumo'
     };
     syncAdd('purchase_orders', orderWithLedger, setPurchaseOrders);
+
     if (order.status === 'Recebido') {
+      const expenseId = toDeterministicUUID(`exp-${order.id}`);
       const expense: Transaction = {
-        id: `exp-${order.id}`,
+        id: expenseId,
         date: order.date,
+        dueDate: order.date,
         description: `Compra: ${order.supplierName}`,
         category: 'Insumos',
         amount: order.total,
-        account: order.accountId || 'Caixa',
-        accountId: order.accountId || '',
+        account: order.targetAccountId ? (accounts.find(a => a.id === order.targetAccountId)?.name || 'Caixa Geral') : 'Caixa Geral',
+        accountId: order.targetAccountId ? (isValidUUID(order.targetAccountId) ? order.targetAccountId : toDeterministicUUID(order.targetAccountId)) : '',
         type: 'Despesa',
         status: 'Pendente',
+        originModule: 'Compras',
+        originId: order.id ? (isValidUUID(order.id) ? order.id : toDeterministicUUID(order.id)) : undefined,
         ledgerCode: '2.02.03',
         ledgerName: 'Material de Consumo'
       };
       addTransaction(expense);
-      order.items.forEach(item => updateStock(item.id, item.quantity, `Compra PO #${order.id}`, order.id));
+      if (Array.isArray(order.items)) {
+        order.items.forEach(item => updateStock(item.id, Number(item.quantity), `Compra PO #${order.id.slice(0, 8)}`, order.id));
+      }
     }
   };
 
-  const updatePurchaseOrder = (order: PurchaseOrder) => {
-    setPurchaseOrders(prev => prev.map(o => o.id === order.id ? order : o));
-    if (isSupabaseConfigured()) api.updateItem('purchase_orders', order.id, order);
-  };
+  const updatePurchaseOrder = (order: PurchaseOrder) => syncUpdate('purchase_orders', order.id, order, setPurchaseOrders);
 
   const receivePurchaseOrder = (id: string) => {
+    let orderToUpdate: PurchaseOrder | null = null;
+    let expenseTx: Transaction | null = null;
+    const stockUpdates: Array<{ itemId: string, quantityDelta: number }> = [];
+
     setPurchaseOrders(prev => prev.map(order => {
-      // Guard: Strictly check status to prevent double receiving
       if (order.id === id && order.status !== 'Recebido') {
         const receivedDate = new Date().toLocaleDateString('pt-BR');
-
-        // Prevent duplicate transaction if somehow button clicked twice
-        const expenseId = `exp-${order.id}`;
-        if (transactions.some(t => t.id === expenseId)) return order;
-
         const updated: PurchaseOrder = {
           ...order,
           status: 'Recebido' as const,
           receivedAt: receivedDate,
-          ledgerCode: '2.02.03',
-          ledgerName: 'Material de Consumo'
+          ledgerCode: order.ledgerCode || '2.02.03',
+          ledgerName: order.ledgerName || 'Material de Consumo'
         };
-        if (isSupabaseConfigured()) api.updateItem('purchase_orders', order.id, updated);
+        orderToUpdate = updated;
 
-        // Fallback for Account
-        const targetAccountId = order.targetAccountId || 'acc-1';
-        const targetAccountName = accounts.find(a => a.id === targetAccountId)?.name || 'Caixa Geral';
+        const targetAccountId = order.targetAccountId || order.accountId || 'acc-1';
+        const targetAccount = accounts.find(a => a.id === targetAccountId);
+        const expenseId = toDeterministicUUID(`exp-${order.id}`);
 
-        const expense: Transaction = {
+        expenseTx = {
           id: expenseId,
           date: receivedDate,
-          description: `Compra PO #${order.id}: ${order.supplierName}`,
+          dueDate: receivedDate,
+          description: `Compra PO #${order.id.slice(0, 8)}: ${order.supplierName}`,
           category: 'Insumos',
           amount: order.total,
-          account: targetAccountName,
-          accountId: targetAccountId,
+          account: targetAccount?.name || 'Caixa Geral',
+          accountId: targetAccount?.id ? (isValidUUID(targetAccount.id) ? targetAccount.id : toDeterministicUUID(targetAccount.id)) : toDeterministicUUID(targetAccountId),
           type: 'Despesa',
           status: 'Pendente',
+          originModule: 'Compras',
+          originId: order.id ? (isValidUUID(order.id) ? order.id : toDeterministicUUID(order.id)) : undefined,
           ledgerCode: '2.02.03',
           ledgerName: 'Material de Consumo'
         };
-        addTransaction(expense);
-
-        // Critical: Update Stock with cost price awareness if needed (future improvement: Weighted Average Cost)
-        order.items.forEach(item => updateStock(item.id, item.quantity, `Compra PO #${order.id}`, order.id));
 
         return updated;
       }
       return order;
     }));
+
+    if (orderToUpdate) {
+      const ord = orderToUpdate as PurchaseOrder;
+
+      if (expenseTx) {
+        const tx = expenseTx as Transaction;
+        setTransactions(prev => prev.some(t => t.id === tx.id) ? prev : [tx, ...prev]);
+        if (isSupabaseConfigured()) {
+          api.createItem('transactions', tx).catch(e => console.error('Error saving PO transaction to Supabase', e));
+        }
+      }
+
+      if (Array.isArray(ord.items)) {
+        ord.items.forEach(item => {
+          const qty = Number(item.quantity);
+          stockUpdates.push({ itemId: item.id, quantityDelta: qty });
+          updateStock(item.id, qty, `Entrada PO #${ord.id.slice(0, 8)}`, ord.id);
+
+          // Update weighted average cost (Custo Médio Ponderado)
+          setInventory(prev => prev.map(invItem => {
+            if (invItem.id === item.id) {
+              const prevQty = Math.max(0, invItem.quantity - qty);
+              const prevCost = invItem.costPrice || invItem.price || 0;
+              const newUnitPrice = item.price || prevCost;
+              const totalCost = (prevQty * prevCost) + (qty * newUnitPrice);
+              const totalQty = prevQty + qty;
+              const weightedCost = totalQty > 0 ? Number((totalCost / totalQty).toFixed(2)) : newUnitPrice;
+              const updatedInv = { ...invItem, costPrice: weightedCost };
+              if (isSupabaseConfigured()) {
+                api.updateItem('inventory', invItem.id, { costPrice: weightedCost }).catch(() => {});
+              }
+              return updatedInv;
+            }
+            return invItem;
+          }));
+        });
+      }
+
+      if (isSupabaseConfigured()) {
+        api.updateItem('purchase_orders', ord.id, ord).catch(e => console.error('Error updating PO in Supabase', e));
+      }
+
+      broadcastCrossTab({
+        type: 'PO_RECEIVED',
+        payload: {
+          order: ord,
+          transaction: expenseTx,
+          stockUpdates
+        }
+      });
+    }
   };
 
-  // Vehicles
+  // Fleet
   const addVehicle = (vehicle: FleetVehicle) => syncAdd('fleet', vehicle, setFleet);
   const updateVehicle = (updatedVehicle: FleetVehicle) => syncUpdate('fleet', updatedVehicle.id, updatedVehicle, setFleet);
   const updateVehicleStatus = (id: string, status: FleetVehicle['status']) => {
-    setFleet(prev => prev.map(v => v.id === id ? { ...v, status } : v));
-    if (isSupabaseConfigured()) api.updateItem('fleet', id, { status });
+    setFleet(prev => prev.map(v => {
+      if (v.id === id) {
+        const updated = { ...v, status };
+        if (isSupabaseConfigured()) api.updateItem('fleet', id, { status });
+        broadcastCrossTab({
+          type: 'MUTATION',
+          table: 'fleet',
+          action: 'update',
+          id,
+          item: updated
+        });
+        return updated;
+      }
+      return v;
+    }));
   };
-  const deleteVehicle = (id: string) => syncDelete('fleet', id, setFleet);
+  const deleteVehicle = (id: string) => {
+    const v = fleet.find(item => item.id === id);
+    syncDelete('fleet', id, setFleet);
+    addAuditLog({
+      userId: currentUser?.id || 'system',
+      userName: currentUser?.name || 'Sistema',
+      action: 'Exclusão de Veículo',
+      module: 'Frota',
+      details: `Veículo ${v?.plate || id} (${v?.name || ''}) removido.`,
+      severity: 'warning'
+    });
+  };
 
   const addMaintenanceRecord = (vehicleId: string, record: MaintenanceRecord) => {
     const vehicle = fleet.find(v => v.id === vehicleId);
     if (!vehicle) return;
 
+    const recordId = isValidUUID(record.id) ? record.id : toDeterministicUUID(record.id);
     const ledgerCode = record.ledgerCode || '2.02.02';
     const ledgerName = record.ledgerName || 'Manutenção de Frota';
 
     const recordWithLedger: MaintenanceRecord = {
       ...record,
+      id: recordId,
+      vehicleId,
       ledgerCode,
       ledgerName
     };
 
     const debitAccount = accounts.find(a => a.id === record.debitAccountId);
+    const expenseTxId = toDeterministicUUID(`maint-${recordId}`);
     const expense: Transaction = {
-      id: `maint-${record.id}`,
+      id: expenseTxId,
       date: record.date,
+      dueDate: record.date,
       description: `Manutenção: ${vehicle.plate} - ${record.description}`,
       category: 'Manutenção',
-      account: debitAccount?.name || 'Caixa',
-      accountId: debitAccount?.id || '',
+      account: debitAccount?.name || 'Caixa Geral',
+      accountId: debitAccount?.id ? (isValidUUID(debitAccount.id) ? debitAccount.id : toDeterministicUUID(debitAccount.id)) : (record.debitAccountId ? toDeterministicUUID(record.debitAccountId) : ''),
       amount: record.cost,
       status: 'Conciliado',
       type: 'Despesa',
+      originModule: 'Frota',
+      originId: vehicleId ? (isValidUUID(vehicleId) ? vehicleId : toDeterministicUUID(vehicleId)) : undefined,
       ledgerCode,
       ledgerName
     };
+
     addTransaction(expense);
 
-    // Deduct stock if product is used
     if (record.productId && record.productQuantity) {
-      updateStock(record.productId, -record.productQuantity);
+      updateStock(record.productId, -record.productQuantity, `Manutenção Veículo ${vehicle.plate}`, recordId);
     }
+
+    const newKm = Math.max(vehicle.km || 0, record.km || 0);
 
     setFleet(prev => prev.map(v => {
       if (v.id === vehicleId) {
         return {
           ...v,
           maintenanceHistory: [recordWithLedger, ...(v.maintenanceHistory || [])],
-          km: Math.max(v.km, record.km),
+          km: newKm,
           lastMaintenance: record.date
         };
       }
       return v;
     }));
+
+    broadcastCrossTab({
+      type: 'MUTATION',
+      table: 'fleet',
+      action: 'update',
+      id: vehicleId,
+      item: { km: newKm, lastMaintenance: record.date }
+    });
+
+    if (isSupabaseConfigured()) {
+      api.createItem('maintenance_records', recordWithLedger).catch(e => console.error('Error saving maintenance record to Supabase', e));
+      api.updateItem('fleet', vehicleId, { km: newKm, lastMaintenance: record.date }).catch(e => console.error('Error updating fleet km in Supabase', e));
+    }
   };
 
   const deleteMaintenanceRecord = (vehicleId: string, recordId: string) => {
@@ -1366,12 +2012,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const recordToDelete = vehicle.maintenanceHistory?.find(r => r.id === recordId);
     if (recordToDelete) {
       if (recordToDelete.productId && recordToDelete.productQuantity) {
-        updateStock(recordToDelete.productId, recordToDelete.productQuantity);
+        updateStock(recordToDelete.productId, recordToDelete.productQuantity, `Estorno Manutenção Veículo ${vehicle.plate}`, recordId);
       }
-      // Remove transaction
-      // We can use deleteTransaction but need to ensure it handles the ID format or we manually filter
-      // The ID used in add was `maint-${record.id}`
-      setTransactions(txs => txs.filter(t => t.id !== `maint-${recordId}`));
+      const expenseTxId = toDeterministicUUID(`maint-${recordId}`);
+      deleteTransaction(expenseTxId);
     }
 
     setFleet(prev => prev.map(v => {
@@ -1383,51 +2027,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return v;
     }));
+
+    if (isSupabaseConfigured()) {
+      api.deleteItem('maintenance_records', recordId).catch(e => console.error('Error deleting maintenance record in Supabase', e));
+    }
   };
 
   const addFuelLog = (vehicleId: string, log: FuelLog) => {
     const vehicle = fleet.find(v => v.id === vehicleId);
     if (!vehicle) return;
 
+    const logId = isValidUUID(log.id) ? log.id : toDeterministicUUID(log.id);
     const ledgerCode = log.ledgerCode || '2.02.01';
     const ledgerName = log.ledgerName || 'Combustível';
 
     const logWithLedger: FuelLog = {
       ...log,
+      id: logId,
+      vehicleId,
       ledgerCode,
       ledgerName
     };
 
+    const expenseTxId = toDeterministicUUID(`fuel-${logId}`);
     const expense: Transaction = {
-      id: `fuel-${log.id}`,
+      id: expenseTxId,
       date: log.date,
+      dueDate: log.date,
       description: `Abastecimento: ${vehicle.plate} - ${log.liters}L`,
       category: 'Combustível',
-      account: 'Cofre',
+      account: 'Caixa Geral',
       accountId: '',
       amount: log.cost,
       status: 'Conciliado',
       type: 'Despesa',
+      originModule: 'Frota',
+      originId: vehicleId ? (isValidUUID(vehicleId) ? vehicleId : toDeterministicUUID(vehicleId)) : undefined,
       ledgerCode,
       ledgerName
     };
 
     addTransaction(expense);
 
+    const newKm = Math.max(vehicle.km || 0, log.km || 0);
+
     setFleet(prev => prev.map(v => {
       if (v.id === vehicleId) {
         return {
           ...v,
           fuelLogs: [logWithLedger, ...(v.fuelLogs || [])],
-          km: Math.max(v.km, log.km)
+          km: newKm
         };
       }
       return v;
     }));
+
+    broadcastCrossTab({
+      type: 'MUTATION',
+      table: 'fleet',
+      action: 'update',
+      id: vehicleId,
+      item: { km: newKm }
+    });
+
+    if (isSupabaseConfigured()) {
+      api.createItem('fuel_logs', logWithLedger).catch(e => console.error('Error saving fuel log to Supabase', e));
+      api.updateItem('fleet', vehicleId, { km: newKm }).catch(e => console.error('Error updating fleet km in Supabase', e));
+    }
   };
 
   const deleteFuelLog = (vehicleId: string, logId: string) => {
-    setTransactions(txs => txs.filter(t => t.id !== `fuel-${logId}`));
+    const expenseTxId = toDeterministicUUID(`fuel-${logId}`);
+    deleteTransaction(expenseTxId);
 
     setFleet(prev => prev.map(v => {
       if (v.id === vehicleId) {
@@ -1438,19 +2109,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return v;
     }));
+
+    if (isSupabaseConfigured()) {
+      api.deleteItem('fuel_logs', logId).catch(e => console.error('Error deleting fuel log in Supabase', e));
+    }
   };
 
   // Tires
   const addTire = (tire: Tire) => syncAdd('tires', tire, setTires);
   const updateTire = (updatedTire: Tire) => syncUpdate('tires', updatedTire.id, updatedTire, setTires);
-  const deleteTire = (id: string) => syncDelete('tires', id, setTires);
+  const deleteTire = (id: string) => {
+    const t = tires.find(item => item.id === id);
+    syncDelete('tires', id, setTires);
+    addAuditLog({
+      userId: currentUser?.id || 'system',
+      userName: currentUser?.name || 'Sistema',
+      action: 'Exclusão de Pneu',
+      module: 'Frota',
+      details: `Pneu ${t?.serialNumber || id} (${t?.brand || ''}) removido.`,
+      severity: 'warning'
+    });
+  };
+
   const addTireHistory = (tireId: string, entry: TireHistory) => {
+    const entryId = isValidUUID(entry.id) ? entry.id : toDeterministicUUID(entry.id);
+    const entryWithId: TireHistory = { ...entry, id: entryId };
+
     setTires(prev => prev.map(t => {
       if (t.id === tireId) {
         const updated = {
           ...t,
-          history: [entry, ...t.history],
-          currentKm: Math.max(t.currentKm, entry.km)
+          history: [entryWithId, ...(t.history || [])],
+          currentKm: Math.max(t.currentKm || 0, entry.km || 0)
         };
 
         if (entry.type === 'Retirada') {
@@ -1463,9 +2153,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updated.position = entry.position;
           if (entry.type === 'Instalação') updated.installKm = entry.km;
         } else if (entry.type === 'Recapagem') {
-          updated.status = 'Novo'; // Becomes "Novo" (Recapado)
-          updated.recapCount += 1;
+          updated.status = 'Novo';
+          updated.recapCount = (updated.recapCount || 0) + 1;
         }
+
+        if (isSupabaseConfigured()) {
+          api.updateItem('tires', tireId, updated);
+          api.createItem('tire_history', { ...entryWithId, tireId });
+        }
+
+        broadcastCrossTab({
+          type: 'MUTATION',
+          table: 'tires',
+          action: 'update',
+          id: tireId,
+          item: updated
+        });
 
         return updated;
       }
@@ -1476,10 +2179,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteTireHistory = (tireId: string, historyId: string) => {
     setTires(prev => prev.map(t => {
       if (t.id === tireId) {
-        return {
-          ...t,
-          history: t.history.filter(h => h.id !== historyId)
-        };
+        const updatedHistory = (t.history || []).filter(h => h.id !== historyId);
+        const updated = { ...t, history: updatedHistory };
+        if (isSupabaseConfigured()) {
+          api.updateItem('tires', tireId, { history: updatedHistory });
+          api.deleteItem('tire_history', historyId);
+        }
+        broadcastCrossTab({
+          type: 'MUTATION',
+          table: 'tires',
+          action: 'update',
+          id: tireId,
+          item: updated
+        });
+        return updated;
       }
       return t;
     }));
@@ -1488,7 +2201,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Production
   const addProductionOrder = (order: ProductionOrder) => syncAdd('production_orders', order, setProductionOrders);
   const updateProductionOrder = (order: ProductionOrder) => syncUpdate('production_orders', order.id, order, setProductionOrders);
-  const deleteProductionOrder = (id: string) => syncDelete('production_orders', id, setProductionOrders);
+  const deleteProductionOrder = (id: string) => {
+    const o = productionOrders.find(item => item.id === id);
+    syncDelete('production_orders', id, setProductionOrders);
+    addAuditLog({
+      userId: currentUser?.id || 'system',
+      userName: currentUser?.name || 'Sistema',
+      action: 'Exclusão de Ordem de Produção',
+      module: 'Produção',
+      details: `OP #${o?.orderNumber || id} removida.`,
+      severity: 'warning'
+    });
+  };
 
   const addFormula = (formula: ProductionFormula) => syncAdd('production_formulas', formula, setFormulas);
   const updateFormula = (formula: ProductionFormula) => syncUpdate('production_formulas', formula.id, formula, setFormulas);
@@ -1499,65 +2223,102 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteProductionUnit = (id: string) => syncDelete('production_units', id, setProductionUnits);
 
   const startProduction = (id: string) => {
+    let orderToUpdate: ProductionOrder | null = null;
+    const stockDeductions: Array<{ productId: string, qty: number }> = [];
+
     setProductionOrders(prev => prev.map(o => {
       if (o.id === id) {
         const updated = { ...o, status: 'Em Produção' as const, progress: 10 };
-        if (isSupabaseConfigured()) api.updateItem('production_orders', id, { status: 'Em Produção', progress: 10 });
+        orderToUpdate = updated;
 
-        // Deduct inventory if not deducted
         if (!o.rawMaterialsDeducted) {
           const formula = formulas.find(f => f.id === o.formulaId);
           if (formula) {
             if (formula.type === 'Britagem') {
-              // Britagem: Deduct Main Input (Ingredient 0)
               const input = formula.ingredients?.[0];
               if (input && input.productId) {
-                updateStock(input.productId, -(o.quantity), `Produção OP #${o.orderNumber}`, o.id);
+                stockDeductions.push({ productId: input.productId, qty: o.quantity });
               }
-            } else {
-              // Composicao: Deduct all ingredients
+            } else if (Array.isArray(formula.ingredients)) {
               formula.ingredients.forEach(ing => {
-                updateStock(ing.productId, -(ing.qty * o.quantity), `Produção OP #${o.orderNumber}`, o.id);
+                if (ing.productId) {
+                  stockDeductions.push({ productId: ing.productId, qty: ing.qty * o.quantity });
+                }
               });
             }
-
             updated.rawMaterialsDeducted = true;
-            if (isSupabaseConfigured()) api.updateItem('production_orders', id, { rawMaterialsDeducted: true });
           }
         }
         return updated;
       }
       return o;
     }));
+
+    if (orderToUpdate) {
+      const ord = orderToUpdate as ProductionOrder;
+      stockDeductions.forEach(d => {
+        updateStock(d.productId, -d.qty, `Produção OP #${ord.orderNumber || ord.id.slice(0, 8)}`, ord.id);
+      });
+
+      if (isSupabaseConfigured()) {
+        api.updateItem('production_orders', id, { status: 'Em Produção', progress: 10, rawMaterialsDeducted: ord.rawMaterialsDeducted }).catch(() => {});
+      }
+
+      broadcastCrossTab({
+        type: 'MUTATION',
+        table: 'production_orders',
+        action: 'update',
+        id,
+        item: ord
+      });
+    }
   };
 
   const completeProduction = (id: string) => {
+    let orderToUpdate: ProductionOrder | null = null;
+    const stockAdditions: Array<{ productId: string, qty: number }> = [];
+
     setProductionOrders(prev => prev.map(o => {
       if (o.id === id) {
         const updated = { ...o, status: 'Finalizado' as const, progress: 100 };
-        if (isSupabaseConfigured()) api.updateItem('production_orders', id, { status: 'Finalizado', progress: 100 });
+        orderToUpdate = updated;
 
         const formula = formulas.find(f => f.id === o.formulaId);
-
         if (formula?.type === 'Britagem') {
-          // Britagem: Add multiple outputs based on percentage
-          if (formula.outputs) {
+          if (Array.isArray(formula.outputs)) {
             formula.outputs.forEach(out => {
-              // Qty = Order Quantity * (Percentage / 100)
-              const yieldQty = o.quantity * (out.percentage / 100);
-              updateStock(out.productId, yieldQty, `Produção OP #${o.orderNumber}`, o.id);
+              if (out.productId) {
+                const yieldQty = o.quantity * (out.percentage / 100);
+                stockAdditions.push({ productId: out.productId, qty: yieldQty });
+              }
             });
           }
-        } else {
-          // Standard: Add single product
-          if (o.productId) {
-            updateStock(o.productId, o.quantity, `Produção OP #${o.orderNumber}`, o.id);
-          }
+        } else if (o.productId) {
+          stockAdditions.push({ productId: o.productId, qty: o.quantity });
         }
         return updated;
       }
       return o;
     }));
+
+    if (orderToUpdate) {
+      const ord = orderToUpdate as ProductionOrder;
+      stockAdditions.forEach(a => {
+        updateStock(a.productId, a.qty, `Produção Concluída OP #${ord.orderNumber || ord.id.slice(0, 8)}`, ord.id);
+      });
+
+      if (isSupabaseConfigured()) {
+        api.updateItem('production_orders', id, { status: 'Finalizado', progress: 100 }).catch(() => {});
+      }
+
+      broadcastCrossTab({
+        type: 'MUTATION',
+        table: 'production_orders',
+        action: 'update',
+        id,
+        item: ord
+      });
+    }
   };
 
   const addQualityTest = (orderId: string, test: QualityTest) => {
@@ -1565,89 +2326,128 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (o.id === orderId) {
         const updatedTests = [test, ...(o.qualityTests || [])];
         if (isSupabaseConfigured()) api.updateItem('production_orders', orderId, { qualityTests: updatedTests });
+        broadcastCrossTab({
+          type: 'MUTATION',
+          table: 'production_orders',
+          action: 'update',
+          id: orderId,
+          item: { qualityTests: updatedTests }
+        });
         return { ...o, qualityTests: updatedTests };
       }
       return o;
     }));
   };
 
-  // Settings & User Management replaced above
-  // const addUser = ... 
-  // const updateSettings ...
-
-  // Remaining unmodified implementations...
-
   // Financial Accounts and Plan of Accounts
   const addAccount = (acc: any) => syncAdd('financial_accounts', acc, setAccounts);
-  const deleteAccount = (id: string) => syncDelete('financial_accounts', id, setAccounts);
+  const deleteAccount = (id: string) => {
+    const acc = accounts.find(a => a.id === id);
+    syncDelete('financial_accounts', id, setAccounts);
+    addAuditLog({
+      userId: currentUser?.id || 'system',
+      userName: currentUser?.name || 'Sistema',
+      action: 'Exclusão de Conta Financeira',
+      module: 'Financeiro',
+      details: `Conta ${acc?.name || id} foi removida.`,
+      severity: 'warning'
+    });
+  };
 
   const addPlanAccount = (parentId: string | null, name: string, type: 'Receita' | 'Despesa' = 'Despesa') => {
     setPlanOfAccounts(prev => {
+      let updatedState: any[];
       if (!parentId) {
-        // Add new Group
-        const newId = Date.now().toString(); // Use timestamp for unique ID to avoid collision
-        // Determine code base
+        const newId = generateUUID();
         const nextCode = (prev.length + 1).toString() + ".01";
-        return [...prev, {
+        updatedState = [...prev, {
           id: newId,
           code: nextCode,
           name,
           type,
           children: []
         }];
+      } else {
+        updatedState = prev.map(group => {
+          if (group.id === parentId) {
+            return {
+              ...group,
+              children: [...(group.children || []), {
+                id: generateUUID(),
+                code: `${group.code}.${(group.children?.length || 0) + 1}`,
+                name,
+                type: group.type
+              }]
+            };
+          }
+          return group;
+        });
       }
-      return prev.map(group => {
-        if (group.id === parentId) {
-          return {
-            ...group,
-            children: [...(group.children || []), {
-              id: Date.now().toString(),
-              code: `${group.code}.${(group.children?.length || 0) + 1}`,
-              name,
-              type: group.type
-            }]
-          };
-        }
-        return group;
+
+      broadcastCrossTab({
+        type: 'FULL_SYNC'
       });
+      return updatedState;
     });
   };
 
   const deletePlanAccount = (id: string, parentId?: string | null) => {
     setPlanOfAccounts(prev => {
+      let updatedState: any[];
       if (!parentId) {
-        return prev.filter(g => g.id !== id);
+        updatedState = prev.filter(g => g.id !== id);
+      } else {
+        updatedState = prev.map(group => {
+          if (group.id === parentId) {
+            return { ...group, children: group.children?.filter((c: any) => c.id !== id) };
+          }
+          return group;
+        });
       }
-      return prev.map(group => {
-        if (group.id === parentId) {
-          return { ...group, children: group.children?.filter(c => c.id !== id) };
-        }
-        return group;
+
+      broadcastCrossTab({
+        type: 'FULL_SYNC'
       });
+      return updatedState;
+    });
+
+    addAuditLog({
+      userId: currentUser?.id || 'system',
+      userName: currentUser?.name || 'Sistema',
+      action: 'Exclusão de Categoria no Plano de Contas',
+      module: 'Financeiro',
+      details: `Categoria de conta ID ${id} foi removida.`,
+      severity: 'warning'
     });
   };
 
   const updatePlanAccount = (id: string, name: string, parentId?: string | null) => {
     setPlanOfAccounts(prev => {
+      let updatedState: any[];
       if (!parentId) {
-        return prev.map(g => g.id === id ? { ...g, name } : g);
+        updatedState = prev.map(g => g.id === id ? { ...g, name } : g);
+      } else {
+        updatedState = prev.map(group => {
+          if (group.id === parentId) {
+            return {
+              ...group,
+              children: group.children?.map((c: any) => c.id === id ? { ...c, name } : c)
+            };
+          }
+          return group;
+        });
       }
-      return prev.map(group => {
-        if (group.id === parentId) {
-          return {
-            ...group,
-            children: group.children?.map(c => c.id === id ? { ...c, name } : c)
-          };
-        }
-        return group;
+
+      broadcastCrossTab({
+        type: 'FULL_SYNC'
       });
+      return updatedState;
     });
   };
 
   // Dynamic Account Balance Calculation
   const calculatedAccounts = useMemo(() => {
     return accounts.map(acc => {
-      // Create a unified matcher for Account ID or Name (Legacy support)
       const accTxs = transactions.filter(t =>
         t.status === 'Conciliado' &&
         (t.accountId === acc.id || t.account === acc.name)
@@ -1661,22 +2461,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .filter(t => t.type === 'Despesa')
         .reduce((sum, t) => sum + t.amount, 0);
 
-      // We maintain the 'balance' property in the state as the "Initial Balance"
-      // The displayed balance is Initial + Revenue - Expenses
-      // If 'initialBalance' doesn't exist (legacy data), we treat the stored 'balance' as initial.
       const startBalance = acc.initialBalance !== undefined ? acc.initialBalance : (acc.balance || 0);
 
       return {
         ...acc,
         balance: startBalance + totalIncome - totalExpense,
-        initialBalance: startBalance // Ensure this persists
+        initialBalance: startBalance
       };
     });
   }, [accounts, transactions]);
 
+  // Financial Health & Dashboard Metrics (Real-Time Reactive)
   const financials = useMemo(() => {
-    // 1. Real Balance (Cash on Hand) - CAIXA REAL
-    // Only 'Conciliado' transactions affect the actual money the company has.
     const realizedRevenue = transactions
       .filter(t => t.type === 'Receita' && t.status === 'Conciliado')
       .reduce((acc, curr) => acc + curr.amount, 0);
@@ -1685,11 +2481,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .filter(t => t.type === 'Despesa' && t.status === 'Conciliado')
       .reduce((acc, curr) => acc + curr.amount, 0);
 
-    // Initial Balances of all accounts (Starting Capital)
     const totalInitialBalance = accounts.reduce((sum, acc) => sum + (acc.initialBalance !== undefined ? acc.initialBalance : (acc.balance || 0)), 0);
 
-    // 2. Projected Balance (Forecast) - COMPETÊNCIA / PREVISÃO
-    // Includes everything not cancelled.
     const projectedRevenue = transactions
       .filter(t => t.type === 'Receita' && t.status !== 'Cancelado')
       .reduce((acc, curr) => acc + curr.amount, 0);
@@ -1701,13 +2494,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return {
       totalRevenue: realizedRevenue,
       totalExpenses: realizedExpenses,
-      balance: totalInitialBalance + realizedRevenue - realizedExpenses, // Real Cash Flow
-
-      // New Indicators for Dashboard
+      balance: totalInitialBalance + realizedRevenue - realizedExpenses,
       projectedBalance: totalInitialBalance + projectedRevenue - projectedExpenses,
-      receivables: projectedRevenue - realizedRevenue, // To Collect
-      payables: projectedExpenses - realizedExpenses,  // To Pay
-
+      receivables: projectedRevenue - realizedRevenue,
+      payables: projectedExpenses - realizedExpenses,
       recentTransactions: transactions.slice(0, 10)
     };
   }, [transactions, accounts]);
@@ -1728,14 +2518,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (data.productionOrders) setProductionOrders(data.productionOrders);
     if (data.formulas) setFormulas(data.formulas);
     if (data.productionUnits) setProductionUnits(data.productionUnits);
-    // For fuelLogs/maintenance, they are nested in fleet, so setFleet handles it.
   };
 
   return (
     <AppContext.Provider value={{
       clients, suppliers, employees, transactions, sales, budgets, purchaseOrders, fleet, inventory, payroll, timeLogs, vacations, salaryAdvances, tires,
       productionOrders, formulas, productionUnits, users, roles, settings, auditLogs, stockMovements,
-      accounts: calculatedAccounts, // Use the dynamically calculated accounts
+      accounts: calculatedAccounts,
       planOfAccounts,
       currentUser, login, logout, hasPermission,
       addClient, updateClient, deleteClient,

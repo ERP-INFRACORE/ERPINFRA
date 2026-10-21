@@ -71,54 +71,226 @@ const Fleet = () => {
     const [isTireLayoutOpen, setIsTireLayoutOpen] = useState(false);
     const [layoutVehicle, setLayoutVehicle] = useState<FleetVehicle | null>(null);
 
+    // Helper para cálculo preciso de consumo de combustível e custos por veículo
+    const getVehicleFuelMetrics = (vehicle: FleetVehicle) => {
+        const logs = vehicle.fuelLogs || [];
+        const totalLiters = logs.reduce((acc, l) => acc + (l.liters || 0), 0);
+        const totalFuelCost = logs.reduce((acc, l) => acc + (l.cost || 0), 0);
+        const maintTotal = (vehicle.maintenanceHistory || []).reduce((acc, m) => acc + (m.cost || 0), 0);
+
+        // Ordenar abastecimentos cronologicamente por data e depois por hodômetro
+        const sorted = [...logs].sort((a, b) => {
+            const dateA = new Date(a.date).getTime() || 0;
+            const dateB = new Date(b.date).getTime() || 0;
+            if (dateA !== dateB) return dateA - dateB;
+            return (a.km || 0) - (b.km || 0);
+        });
+
+        // Cálculo de consumo por trecho (entre abastecimentos consecutivos)
+        let validDeltaKm = 0;
+        let validLiters = 0;
+        const logMetrics = new Map<string, { deltaKm: number; kmPerLiter: number; pricePerLiter: number }>();
+
+        for (let i = 0; i < sorted.length; i++) {
+            const current = sorted[i];
+            const pricePerLiter = current.liters > 0 ? current.cost / current.liters : 0;
+
+            if (i === 0) {
+                logMetrics.set(current.id, {
+                    deltaKm: 0,
+                    kmPerLiter: 0,
+                    pricePerLiter
+                });
+            } else {
+                const prev = sorted[i - 1];
+                const dKm = (current.km || 0) - (prev.km || 0);
+                const cLiters = current.liters || 0;
+                const kml = (dKm > 0 && cLiters > 0) ? Number((dKm / cLiters).toFixed(2)) : 0;
+
+                if (dKm > 0 && cLiters > 0) {
+                    validDeltaKm += dKm;
+                    validLiters += cLiters;
+                }
+
+                logMetrics.set(current.id, {
+                    deltaKm: Math.max(0, dKm),
+                    kmPerLiter: kml,
+                    pricePerLiter
+                });
+            }
+        }
+
+        // Consumo médio ponderado (km/L)
+        let avgKmPerLiter = 0;
+        if (validDeltaKm > 0 && validLiters > 0) {
+            avgKmPerLiter = Number((validDeltaKm / validLiters).toFixed(2));
+        } else if (sorted.length === 1 && vehicle.km > sorted[0].km && sorted[0].liters > 0) {
+            const dKm = vehicle.km - sorted[0].km;
+            avgKmPerLiter = Number((dKm / sorted[0].liters).toFixed(2));
+            validDeltaKm = dKm;
+        }
+
+        // Custo por km (R$/KM)
+        const avgPricePerLiter = totalLiters > 0 ? totalFuelCost / totalLiters : 0;
+        const fuelCostPerKm = avgKmPerLiter > 0 ? (avgPricePerLiter / avgKmPerLiter) : (validDeltaKm > 0 ? totalFuelCost / validDeltaKm : 0);
+        const maintCostPerKm = vehicle.km > 0 ? (maintTotal / vehicle.km) : 0;
+        const totalCostPerKm = fuelCostPerKm + maintCostPerKm;
+
+        return {
+            totalLiters,
+            totalFuelCost,
+            maintTotal,
+            totalCost: totalFuelCost + maintTotal,
+            validDeltaKm,
+            avgKmPerLiter,
+            avgPricePerLiter,
+            fuelCostPerKm: Number(fuelCostPerKm.toFixed(2)),
+            totalCostPerKm: Number(totalCostPerKm.toFixed(2)),
+            logMetrics
+        };
+    };
+
+    // Helper para cálculo da vida útil, desgaste e sulco do pneu
+    const getTireMetrics = (tire: Tire, currentVehicle?: FleetVehicle) => {
+        // Se estiver montado, soma os KM rodados no veículo desde a montagem
+        const runningKm = (tire.status === 'Em uso' && currentVehicle && tire.installKm !== undefined && currentVehicle.km > tire.installKm)
+            ? (currentVehicle.km - tire.installKm)
+            : 0;
+        const totalAccumulatedKm = (tire.currentKm || 0) + runningKm;
+        const maxKm = Math.max(1, tire.maxKm || 100000);
+        const wearPercent = Math.min(100, Math.round((totalAccumulatedKm / maxKm) * 100));
+        const remainingKm = Math.max(0, maxKm - totalAccumulatedKm);
+
+        // Sulco do pneu em mm (novo: 16mm, limite de descarte CONTRAN: 1.6mm)
+        const treadDepth = Math.max(1.6, Number((16 - ((totalAccumulatedKm / maxKm) * (16 - 1.6))).toFixed(1)));
+
+        // Nível de criticidade
+        let healthBadge: { label: string; color: string; bg: string };
+        if (wearPercent >= 85 || treadDepth <= 3.0) {
+            healthBadge = { label: 'Crítico / Troca', color: 'text-rose-600', bg: 'bg-rose-100 dark:bg-rose-900/30' };
+        } else if (wearPercent >= 65 || treadDepth <= 5.0) {
+            healthBadge = { label: 'Atenção / Rodízio', color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' };
+        } else if (wearPercent >= 30) {
+            healthBadge = { label: 'Bom', color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' };
+        } else {
+            healthBadge = { label: 'Excelente', color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' };
+        }
+
+        // CPK (Custo por KM estimado - base R$ 2.400,00)
+        const estimatedTireCost = 2400;
+        const cpk = totalAccumulatedKm > 0 ? (estimatedTireCost / totalAccumulatedKm).toFixed(3) : '0.000';
+
+        return {
+            totalAccumulatedKm,
+            runningKm,
+            wearPercent,
+            remainingKm,
+            treadDepth,
+            healthBadge,
+            cpk
+        };
+    };
+
     const handleTireChange = (vehicleId: string, position: string, tireId: string) => {
+        const vehicle = fleet.find(v => v.id === vehicleId);
+        const today = new Date().toISOString().split('T')[0];
+
+        // 1. Desmontar pneu se tireId estiver vazio
         if (!tireId) {
-            // Unmount
             const currentTire = tires.find(t => t.currentVehicleId === vehicleId && t.position === position);
             if (currentTire) {
-                updateTire({ ...currentTire, currentVehicleId: undefined, position: undefined, status: 'Estoque' });
+                const distanceRun = (vehicle && currentTire.installKm !== undefined && vehicle.km > currentTire.installKm)
+                    ? (vehicle.km - currentTire.installKm)
+                    : 0;
+                const newTotalKm = (currentTire.currentKm || 0) + distanceRun;
+
+                updateTire({
+                    ...currentTire,
+                    currentVehicleId: undefined,
+                    position: undefined,
+                    installKm: undefined,
+                    currentKm: newTotalKm,
+                    status: newTotalKm >= currentTire.maxKm ? 'Descartado' : 'Estoque'
+                });
+
+                addTireHistory(currentTire.id, {
+                    id: `H-${Date.now()}`,
+                    date: today,
+                    type: 'Retirada',
+                    km: newTotalKm,
+                    vehicleId,
+                    position,
+                    notes: `Desmontado de ${vehicle?.plate || vehicleId} (${position}). Rodou ${distanceRun.toLocaleString()} km nesta posição.`
+                });
+                addToast(`Pneu ${currentTire.serialNumber} retirado e retornado ao estoque! (${distanceRun.toLocaleString()} km rodados nesta posição)`, 'info');
             }
             return;
         }
 
         const newTire = tires.find(t => t.id === tireId);
-        if (!newTire) return;
+        if (!newTire || !vehicle) return;
 
-        // Check availability
-        if (newTire.currentVehicleId && newTire.currentVehicleId !== vehicleId) {
-            addToast(`Este pneu está montado no veículo com ID ${newTire.currentVehicleId}. Deseja movê-lo?`, 'warning', 10000, {
-                label: 'MOVER',
-                onClick: () => {
-                    // Proceed with logic in a safe way if needed or just inform user
-                    // Original code logic was just to return if not confirmed. 
-                    // If confirmed, it continues. 
-                    // Since this is inside a function called by UI, I need to wrap the rest of the logic.
-                    // But wait, the rest of the logic is below.
-                    // I cannot easily wrap the rest of the function if it's synchronous.
-                    // I need to refactor handleTireChange to stop if moving, and resume in callback.
-
-                    // Logic for moving:
-                    const currentOccupant = tires.find(t => t.currentVehicleId === vehicleId && t.position === position);
-                    if (currentOccupant) {
-                        updateTire({ ...currentOccupant, currentVehicleId: undefined, position: undefined, status: 'Estoque' });
-                    }
-                    updateTire({ ...newTire, currentVehicleId: vehicleId, position, status: 'Em uso' });
-                }
-            });
-            return;
-        }
-        // Logic handled by updateTire overwriting? No, I should ideally clear the old position explicitly if needed, but updateTire updates the tire.
-        // If another tire was in that position on the OLD vehicle, it remains? No, the tire moves. 
-        // What if I mount tire A to Pos X. Tire A was at Pos Y. Pos Y becomes empty. Correct.
-
-
-        // Check if target position is occupied
+        // 2. Se a posição de destino já tem um pneu montado, desmonte-o primeiro
         const currentOccupant = tires.find(t => t.currentVehicleId === vehicleId && t.position === position);
-        if (currentOccupant) {
-            updateTire({ ...currentOccupant, currentVehicleId: undefined, position: undefined, status: 'Estoque' });
+        if (currentOccupant && currentOccupant.id !== newTire.id) {
+            const occDistanceRun = (currentOccupant.installKm !== undefined && vehicle.km > currentOccupant.installKm)
+                ? (vehicle.km - currentOccupant.installKm)
+                : 0;
+            const occTotalKm = (currentOccupant.currentKm || 0) + occDistanceRun;
+
+            updateTire({
+                ...currentOccupant,
+                currentVehicleId: undefined,
+                position: undefined,
+                installKm: undefined,
+                currentKm: occTotalKm,
+                status: occTotalKm >= currentOccupant.maxKm ? 'Descartado' : 'Estoque'
+            });
+
+            addTireHistory(currentOccupant.id, {
+                id: `H-${Date.now()}-occ`,
+                date: today,
+                type: 'Retirada',
+                km: occTotalKm,
+                vehicleId,
+                position,
+                notes: `Substituído na posição ${position} por ${newTire.serialNumber}. Rodou ${occDistanceRun.toLocaleString()} km.`
+            });
         }
 
-        updateTire({ ...newTire, currentVehicleId: vehicleId, position, status: 'Em uso' });
+        // 3. Se o pneu a montar estava montado em outro veículo/posição, calcular km acumulados
+        let baseKm = newTire.currentKm || 0;
+        if (newTire.currentVehicleId) {
+            const oldVeh = fleet.find(v => v.id === newTire.currentVehicleId);
+            if (oldVeh && newTire.installKm !== undefined && oldVeh.km > newTire.installKm) {
+                baseKm += (oldVeh.km - newTire.installKm);
+            }
+        }
+
+        const isRotation = newTire.currentVehicleId === vehicleId;
+
+        updateTire({
+            ...newTire,
+            currentVehicleId: vehicleId,
+            position,
+            installKm: vehicle.km,
+            currentKm: baseKm,
+            status: 'Em uso'
+        });
+
+        addTireHistory(newTire.id, {
+            id: `H-${Date.now()}`,
+            date: today,
+            type: isRotation ? 'Rodízio' : 'Instalação',
+            km: baseKm,
+            vehicleId,
+            position,
+            notes: isRotation
+                ? `Rodízio de posição para ${position} no veículo ${vehicle.plate}.`
+                : `Montado no veículo ${vehicle.plate} (${position}) com odômetro em ${vehicle.km.toLocaleString()} km.`
+        });
+
+        addToast(`Pneu ${newTire.serialNumber} montado na posição ${position} (${vehicle.plate})!`, 'success');
     };
 
     // Forms
@@ -169,24 +341,18 @@ const Fleet = () => {
 
     const vehicleCosts = useMemo(() => {
         return fleet.map(v => {
-            const fuelTotal = (v.fuelLogs || []).reduce((acc, log) => acc + log.cost, 0);
-            const maintTotal = (v.maintenanceHistory || []).reduce((acc, log) => acc + log.cost, 0);
-            const total = fuelTotal + maintTotal;
-            const avgConsumption = (v.fuelLogs && v.fuelLogs.length > 0)
-                ? (v.km / v.fuelLogs.reduce((acc, l) => acc + l.liters, 0)).toFixed(2)
-                : '0.00';
-
+            const metrics = getVehicleFuelMetrics(v);
             return {
                 id: v.id,
                 modelo: v.name,
                 placa: v.plate,
                 tipo: v.type,
                 odometro: v.km,
-                totalAbastecimento: fuelTotal,
-                totalManutencao: maintTotal,
-                custoTotal: total,
-                kmPorLitro: avgConsumption,
-                custoPorKm: v.km > 0 ? (total / v.km).toFixed(2) : '0.00'
+                totalAbastecimento: metrics.totalFuelCost,
+                totalManutencao: metrics.maintTotal,
+                custoTotal: metrics.totalCost,
+                kmPorLitro: metrics.avgKmPerLiter > 0 ? metrics.avgKmPerLiter.toFixed(2) : 'N/D',
+                custoPorKm: metrics.totalCostPerKm > 0 ? metrics.totalCostPerKm.toFixed(2) : (metrics.totalCost > 0 && v.km > 0 ? (metrics.totalCost / v.km).toFixed(2) : '0.00')
             };
         });
     }, [fleet]);
@@ -300,22 +466,34 @@ const Fleet = () => {
         e.preventDefault();
         if (!selectedVehicleId) return;
 
+        const vehicle = fleet.find(v => v.id === selectedVehicleId);
+        const fuelKm = Number(newFuel.km) || (vehicle?.km || 0);
+        const liters = Number(newFuel.liters) || 0;
+        const cost = Number(newFuel.cost) || 0;
+        const pricePerLiter = liters > 0 ? Number((cost / liters).toFixed(2)) : 0;
+
         const log: FuelLog = {
             id: `F-${Date.now()}`,
             vehicleId: selectedVehicleId,
-            date: newFuel.date || '',
-            liters: Number(newFuel.liters) || 0,
-            cost: Number(newFuel.cost) || 0,
-            km: Number(newFuel.km) || 0,
+            date: newFuel.date || new Date().toISOString().split('T')[0],
+            liters,
+            cost,
+            km: fuelKm,
             fuelType: newFuel.fuelType || 'Diesel',
             attachments: newFuel.attachments,
             ledgerCode: newFuel.ledgerCode,
             ledgerName: newFuel.ledgerName,
-            pricePerLiter: 0,
+            pricePerLiter,
             isPaid: true
         };
 
         addFuelLog(selectedVehicleId, log);
+
+        // Se o hodômetro lançado no abastecimento for maior que o atual do veículo, atualiza o veículo
+        if (vehicle && fuelKm > vehicle.km) {
+            updateVehicle({ ...vehicle, km: fuelKm });
+        }
+
         setIsFuelModalOpen(false);
         setNewFuel({
             date: new Date().toISOString().split('T')[0],
@@ -325,7 +503,7 @@ const Fleet = () => {
             fuelType: 'Diesel',
             attachments: []
         });
-        addToast("Abastecimento registrado com sucesso!", 'success');
+        addToast("Abastecimento registrado com sucesso e odômetro atualizado!", 'success');
     };
 
     const handleSaveTire = (e: React.FormEvent) => {
@@ -441,7 +619,7 @@ const Fleet = () => {
                         {/* Alertas - Col 1 */}
                         <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 h-[320px] flex flex-col">
                             <h3 className="text-sm font-black text-slate-900 dark:text-white mb-4 uppercase tracking-tight flex items-center gap-2 shrink-0">
-                                <AlertTriangle className="text-orange-500" size={16} /> Alertas ({fleet.filter(v => v.km > 10000).length + tires.filter(t => t.currentKm > t.maxKm * 0.9).length})
+                                <AlertTriangle className="text-orange-500" size={16} /> Alertas ({fleet.filter(v => v.km > 10000).length + tires.filter(t => { const v = fleet.find(veh => veh.id === t.currentVehicleId); const m = getTireMetrics(t, v); return m.wearPercent >= 85 || m.treadDepth <= 3.0 || (t.status === 'Em uso' && m.runningKm > 10000); }).length})
                             </h3>
                             <div className="space-y-3 overflow-y-auto pr-1 flex-1 custom-scrollbar">
                                 {fleet.map(v => {
@@ -450,25 +628,47 @@ const Fleet = () => {
                                         <div key={v.id} className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-800 rounded-xl">
                                             <div>
                                                 <p className="font-black text-[10px] text-slate-800 dark:text-slate-200 uppercase">{v.plate}</p>
-                                                <p className="text-[9px] font-bold text-orange-700">Prev. Necessária</p>
+                                                <p className="text-[9px] font-bold text-orange-700">Prev. Necessária ({v.km.toLocaleString()} KM)</p>
                                             </div>
-                                            <button onClick={() => { setSelectedVehicleId(v.id); setActiveTab('maintenance'); setIsMaintModalOpen(true); }} className="p-1.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700"><Wrench size={12} /></button>
+                                            <button onClick={() => { setSelectedVehicleId(v.id); setActiveTab('maintenance'); setIsMaintModalOpen(true); }} className="p-1.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700" title="Criar Ordem de Manutenção"><Wrench size={12} /></button>
                                         </div>
                                     ) : null;
                                 })}
-                                {tires.filter(t => t.currentKm > t.maxKm * 0.9).map(t => (
-                                    <div key={t.id} className="flex items-center justify-between p-3 bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-800 rounded-xl">
-                                        <div>
-                                            <p className="font-black text-[10px] text-slate-800 dark:text-slate-200 uppercase">Pneu {t.serialNumber}</p>
-                                            <p className="text-[9px] font-bold text-rose-700">Troca Sugerida</p>
-                                        </div>
-                                        <button onClick={() => setActiveTab('tires')} className="p-1.5 bg-rose-600 text-white rounded-lg hover:bg-rose-700"><Disc size={12} /></button>
-                                    </div>
-                                ))}
-                                {fleet.every(v => v.km <= 10000) && tires.every(t => t.currentKm <= t.maxKm * 0.9) && (
+                                {tires.map(t => {
+                                    const v = fleet.find(veh => veh.id === t.currentVehicleId);
+                                    const m = getTireMetrics(t, v);
+                                    if (m.wearPercent >= 85 || m.treadDepth <= 3.0) {
+                                        return (
+                                            <div key={t.id} className="flex items-center justify-between p-3 bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-800 rounded-xl">
+                                                <div>
+                                                    <p className="font-black text-[10px] text-slate-800 dark:text-slate-200 uppercase">Pneu {t.serialNumber} {v ? `(${v.plate})` : ''}</p>
+                                                    <p className="text-[9px] font-bold text-rose-700">Troca Crítica • {m.wearPercent}% Desgaste • Sulco {m.treadDepth}mm</p>
+                                                </div>
+                                                <button onClick={() => setActiveTab('tires')} className="p-1.5 bg-rose-600 text-white rounded-lg hover:bg-rose-700" title="Ver Inventário de Pneus"><Disc size={12} /></button>
+                                            </div>
+                                        );
+                                    }
+                                    if (t.status === 'Em uso' && m.runningKm > 10000) {
+                                        return (
+                                            <div key={t.id} className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800 rounded-xl">
+                                                <div>
+                                                    <p className="font-black text-[10px] text-slate-800 dark:text-slate-200 uppercase">Pneu {t.serialNumber} ({v?.plate || 'Frota'})</p>
+                                                    <p className="text-[9px] font-bold text-amber-700">Sugerir Rodízio • {m.runningKm.toLocaleString()} km no mesmo eixo</p>
+                                                </div>
+                                                <button onClick={() => { if (v) { setSelectedVehicleId(v.id); setLayoutVehicle(v); setIsTireLayoutOpen(true); } else { setActiveTab('tires'); } }} className="p-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700" title="Fazer Rodízio"><RefreshCw size={12} /></button>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })}
+                                {fleet.every(v => v.km <= 10000) && tires.every(t => {
+                                    const v = fleet.find(veh => veh.id === t.currentVehicleId);
+                                    const m = getTireMetrics(t, v);
+                                    return m.wearPercent < 85 && m.treadDepth > 3.0 && !(t.status === 'Em uso' && m.runningKm > 10000);
+                                }) && (
                                     <div className="flex flex-col items-center justify-center h-full text-slate-400">
                                         <CheckCircle size={32} className="opacity-20 mb-2" />
-                                        <p className="text-[10px] font-bold uppercase">Tudo certo!</p>
+                                        <p className="text-[10px] font-bold uppercase">Tudo certo com a frota e pneus!</p>
                                     </div>
                                 )}
                             </div>
@@ -617,8 +817,9 @@ const Fleet = () => {
                             // Calculate metrics for this vehicle
                             const fuelLogs = v.fuelLogs || [];
                             const maintHistory = v.maintenanceHistory || [];
-                            const totalLiters = fuelLogs.reduce((acc, log) => acc + (log.liters || 0), 0);
-                            const avgConsumption = totalLiters > 0 ? (v.km / totalLiters).toFixed(1) : '0.0';
+                            const fuelMetrics = getVehicleFuelMetrics(v);
+                            const totalLiters = fuelMetrics.totalLiters;
+                            const avgConsumption = fuelMetrics.avgKmPerLiter > 0 ? `${fuelMetrics.avgKmPerLiter.toFixed(1)} km/l` : 'N/D';
                             const sortedFuelLogs = [...fuelLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                             const lastRefuel = sortedFuelLogs[0];
                             const oilChanges = maintHistory.filter(m =>
@@ -836,7 +1037,7 @@ const Fleet = () => {
                                             <Droplets size={10} /> Abast.
                                         </button>
                                         <button
-                                            onClick={() => { setSelectedVehicleId(v.id); setIsTireLayoutOpen(true); }}
+                                            onClick={() => { setSelectedVehicleId(v.id); setLayoutVehicle(v); setIsTireLayoutOpen(true); }}
                                             className="flex-1 py-1 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-600 hover:text-white rounded-lg text-[8px] font-black uppercase transition-all flex items-center justify-center gap-1"
                                             title="Mapa de Pneus Detalhado"
                                         >
@@ -1009,12 +1210,15 @@ const Fleet = () => {
                                         <th className="px-6 py-4 text-center">Litragem</th>
                                         <th className="px-6 py-4 text-right">Preço Un.</th>
                                         <th className="px-6 py-4 text-right">Total Pago</th>
+                                        <th className="px-6 py-4 text-center">Consumo Trecho</th>
                                         <th className="px-6 py-4 text-right">KM</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y dark:divide-gray-700">
                                     {fleet.flatMap(v => v.fuelLogs || []).sort((a, b) => b.date.localeCompare(a.date)).map(l => {
                                         const veh = fleet.find(v => v.id === l.vehicleId);
+                                        const metrics = veh ? getVehicleFuelMetrics(veh) : null;
+                                        const logMetric = metrics?.logMetrics.get(l.id);
                                         return (
                                             <tr key={l.id} className="hover:bg-slate-50 dark:hover:bg-teal-900/10 transition-all group">
                                                 <td className="px-6 py-5 font-bold text-slate-500">{l.date}</td>
@@ -1026,7 +1230,7 @@ const Fleet = () => {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-5 text-center font-black text-slate-700 dark:text-slate-300">{l.liters} L</td>
-                                                <td className="px-6 py-4 text-right text-xs text-slate-400">{formatBRL(l.cost / l.liters)}</td>
+                                                <td className="px-6 py-4 text-right text-xs text-slate-400">{formatBRL(l.liters > 0 ? l.cost / l.liters : 0)}</td>
                                                 <td className="px-6 py-5 text-right font-black text-emerald-600">
                                                     <div className="flex flex-col items-end">
                                                         <span>{formatBRL(l.cost)}</span>
@@ -1036,6 +1240,18 @@ const Fleet = () => {
                                                             </span>
                                                         )}
                                                     </div>
+                                                </td>
+                                                <td className="px-6 py-5 text-center">
+                                                    {logMetric && logMetric.kmPerLiter > 0 ? (
+                                                        <div>
+                                                            <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-mono font-black rounded-lg text-xs">
+                                                                {logMetric.kmPerLiter} KM/L
+                                                            </span>
+                                                            <p className="text-[9px] text-slate-400 font-bold mt-0.5">+{logMetric.deltaKm.toLocaleString()} km no trecho</p>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-400 text-xs italic">-</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-5 text-right font-mono text-xs">
                                                     <div className="flex items-center justify-end gap-3">
@@ -1095,7 +1311,7 @@ const Fleet = () => {
                                         );
                                     })}
                                     {fleet.every(v => !v.fuelLogs?.length) && (
-                                        <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic font-medium uppercase text-xs tracking-widest">Sem registros de consumo ativos...</td></tr>
+                                        <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic font-medium uppercase text-xs tracking-widest">Sem registros de consumo ativos...</td></tr>
                                     )}
                                 </tbody>
                             </table>
@@ -1107,16 +1323,17 @@ const Fleet = () => {
             {
                 activeTab === 'tires' && (
                     <div className="space-y-6 animate-in fade-in duration-500">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                             {[
                                 { label: 'TOTAL DE PNEUS', value: tires.length, icon: <Disc />, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-900/10' },
                                 { label: 'EM OPERAÇÃO', value: tires.filter(t => t.status === 'Em uso').length, icon: <Activity />, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-900/10' },
                                 { label: 'EM ESTOQUE', value: tires.filter(t => t.status === 'Estoque' || t.status === 'Novo').length, icon: <LayoutDashboard />, color: 'text-teal-500', bg: 'bg-teal-50 dark:bg-teal-900/10' },
-                                { label: 'ALERTA DE TROCA', value: tires.filter(t => t.currentKm > t.maxKm * 0.9).length, icon: <AlertTriangle />, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-rose-900/10' },
+                                { label: 'ALERTA DE TROCA', value: tires.filter(t => { const v = fleet.find(veh => veh.id === t.currentVehicleId); const m = getTireMetrics(t, v); return m.wearPercent >= 85 || m.treadDepth <= 3.0; }).length, icon: <AlertTriangle />, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-rose-900/10' },
+                                { label: 'SUGESTÃO RODÍZIO', value: tires.filter(t => { const v = fleet.find(veh => veh.id === t.currentVehicleId); const m = getTireMetrics(t, v); return t.status === 'Em uso' && m.runningKm > 10000; }).length, icon: <RefreshCw />, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/10' },
                             ].map((kpi, i) => (
-                                <div key={i} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div className={`p-3 rounded-2xl ${kpi.bg} ${kpi.color}`}>{kpi.icon}</div>
+                                <div key={i} className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div className={`p-2.5 rounded-2xl ${kpi.bg} ${kpi.color}`}>{kpi.icon}</div>
                                     </div>
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{kpi.label}</p>
                                     <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">{kpi.value}</h3>
@@ -1128,7 +1345,10 @@ const Fleet = () => {
                             <div className="p-6 border-b dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/50">
                                 <div className="flex items-center gap-3">
                                     <Disc className="text-teal-600" size={24} />
-                                    <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">Inventário Global de Pneus</h3>
+                                    <div>
+                                        <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">Inventário & Vida Útil de Pneus</h3>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Controle telemétrico de desgaste, sulco (mm), rodagem acumulada e trocas</p>
+                                    </div>
                                 </div>
                                 <div className="flex gap-3">
                                     <button
@@ -1150,8 +1370,9 @@ const Fleet = () => {
                                             <th className="px-6 py-4">Nº Série / Modelo</th>
                                             <th className="px-6 py-4">Status</th>
                                             <th className="px-6 py-4">Veículo / Posição</th>
-                                            <th className="px-6 py-4 text-center">KM Atual</th>
-                                            <th className="px-6 py-4 text-center">Vida Útil</th>
+                                            <th className="px-6 py-4 text-center">KM Acumulado</th>
+                                            <th className="px-6 py-4 text-center">Vida Útil & Sulco</th>
+                                            <th className="px-6 py-4 text-center">Custo/KM</th>
                                             <th className="px-6 py-4 text-center">Recapagens</th>
                                             <th className="px-6 py-4 text-right">Ações</th>
                                         </tr>
@@ -1159,13 +1380,13 @@ const Fleet = () => {
                                     <tbody className="divide-y dark:divide-gray-700">
                                         {tires.map(tire => {
                                             const vehicle = fleet.find(v => v.id === tire.currentVehicleId);
-                                            const wearPercent = (tire.currentKm / tire.maxKm) * 100;
+                                            const metrics = getTireMetrics(tire, vehicle);
 
                                             return (
                                                 <tr key={tire.id} className="hover:bg-slate-50 dark:hover:bg-teal-900/10 transition-all group">
                                                     <td className="px-6 py-4">
                                                         <p className="font-black text-slate-900 dark:text-white uppercase text-xs">{tire.serialNumber}</p>
-                                                        <p className="text-[10px] text-slate-400 font-bold uppercase">{tire.brand} {tire.model}</p>
+                                                        <p className="text-[10px] text-slate-400 font-bold uppercase">{tire.brand} {tire.model} • {tire.size}</p>
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase ${tire.status === 'Em uso' ? 'bg-emerald-100 text-emerald-700' :
@@ -1184,11 +1405,11 @@ const Fleet = () => {
                                                                 </div>
                                                                 <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-bold uppercase mt-0.5">
                                                                     <ArrowRight size={10} />
-                                                                    {vehicle.name} • Eixo: {tire.position || 'N/A'}
+                                                                    {vehicle.name} • Posição: {tire.position || 'N/A'}
                                                                 </div>
                                                                 {tire.installKm !== undefined && (
-                                                                    <div className="text-[9px] text-teal-600/60 font-bold mt-1 uppercase tracking-tighter">
-                                                                        Montado c/ {tire.installKm.toLocaleString()} KM
+                                                                    <div className="text-[9px] text-teal-600/70 font-bold mt-1 uppercase tracking-tighter">
+                                                                        Montado c/ {tire.installKm.toLocaleString()} KM (+{metrics.runningKm.toLocaleString()} KM rodados)
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -1199,21 +1420,38 @@ const Fleet = () => {
                                                             </div>
                                                         )}
                                                     </td>
-                                                    <td className="px-6 py-4 text-center font-mono text-xs font-bold text-slate-700 dark:text-slate-300">
-                                                        {tire.currentKm.toLocaleString()} KM
+                                                    <td className="px-6 py-4 text-center">
+                                                        <span className="font-mono text-xs font-black text-slate-800 dark:text-slate-200">
+                                                            {metrics.totalAccumulatedKm.toLocaleString()} KM
+                                                        </span>
+                                                        <p className="text-[9px] text-slate-400 font-bold">Máx: {tire.maxKm?.toLocaleString() || '100.000'} KM</p>
                                                     </td>
                                                     <td className="px-6 py-4 text-center">
-                                                        <div className="w-24 mx-auto">
+                                                        <div className="w-32 mx-auto">
                                                             <div className="flex justify-between items-center mb-1">
-                                                                <span className={`text-[9px] font-black ${wearPercent > 90 ? 'text-rose-500' : 'text-slate-400'}`}>{wearPercent.toFixed(0)}%</span>
+                                                                <span className={`text-[9px] font-black ${metrics.wearPercent >= 85 ? 'text-rose-500' : 'text-slate-400'}`}>
+                                                                    {metrics.wearPercent}%
+                                                                </span>
+                                                                <span className="text-[9px] font-bold text-slate-500">
+                                                                    {metrics.remainingKm.toLocaleString()} KM rest.
+                                                                </span>
                                                             </div>
-                                                            <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                            <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-1">
                                                                 <div
-                                                                    className={`h-full rounded-full transition-all duration-500 ${wearPercent > 90 ? 'bg-rose-500' : wearPercent > 70 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                                                                    style={{ width: `${Math.min(100, wearPercent)}%` }}
+                                                                    className={`h-full rounded-full transition-all duration-500 ${metrics.wearPercent >= 85 ? 'bg-rose-500' : metrics.wearPercent >= 65 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                                                    style={{ width: `${Math.min(100, metrics.wearPercent)}%` }}
                                                                 ></div>
                                                             </div>
+                                                            <div className="flex justify-between items-center text-[9px]">
+                                                                <span className="font-mono text-slate-400">Sulco: {metrics.treadDepth}mm</span>
+                                                                <span className={`px-1.5 py-0.5 rounded font-black text-[8px] ${metrics.healthBadge.bg} ${metrics.healthBadge.color}`}>
+                                                                    {metrics.healthBadge.label}
+                                                                </span>
+                                                            </div>
                                                         </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-300">
+                                                        R$ {metrics.cpk}
                                                     </td>
                                                     <td className="px-6 py-4 text-center">
                                                         <span className="px-2 py-1 bg-slate-100 dark:bg-slate-900 rounded-lg text-[10px] font-black text-slate-600 dark:text-slate-400">
@@ -1225,10 +1463,11 @@ const Fleet = () => {
                                                             <button
                                                                 onClick={() => {
                                                                     setSelectedTireId(tire.id);
-                                                                    setHistoryEntry({ ...historyEntry, km: tire.currentKm });
+                                                                    setHistoryEntry({ ...historyEntry, km: metrics.totalAccumulatedKm });
                                                                     setIsTireHistoryModalOpen(true);
                                                                 }}
                                                                 className="p-2 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-teal-600 rounded-xl transition-all"
+                                                                title="Registrar Rodízio / Movimentação"
                                                             >
                                                                 <RefreshCw size={14} />
                                                             </button>
@@ -1239,6 +1478,7 @@ const Fleet = () => {
                                                                     setIsTireModalOpen(true);
                                                                 }}
                                                                 className="p-2 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-blue-600 rounded-xl transition-all"
+                                                                title="Editar Pneu"
                                                             >
                                                                 <Settings size={14} />
                                                             </button>
@@ -1247,6 +1487,7 @@ const Fleet = () => {
                                                                     if (confirm("Deseja excluir este pneu do inventário?")) deleteTire(tire.id);
                                                                 }}
                                                                 className="p-2 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-rose-600 rounded-xl transition-all"
+                                                                title="Excluir Pneu"
                                                             >
                                                                 <Trash2 size={14} />
                                                             </button>
@@ -1452,11 +1693,18 @@ const Fleet = () => {
                                     <select
                                         className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm"
                                         value={selectedVehicleId}
-                                        onChange={e => setSelectedVehicleId(e.target.value)}
+                                        onChange={e => {
+                                            const vId = e.target.value;
+                                            setSelectedVehicleId(vId);
+                                            const v = fleet.find(veh => veh.id === vId);
+                                            if (v && (!newFuel.km || newFuel.km === 0)) {
+                                                setNewFuel(prev => ({ ...prev, km: v.km }));
+                                            }
+                                        }}
                                         required
                                     >
                                         <option value="">Selecione o veículo...</option>
-                                        {fleet.map(v => <option key={v.id} value={v.id}>{v.plate} - {v.name}</option>)}
+                                        {fleet.map(v => <option key={v.id} value={v.id}>{v.plate} - {v.name} (Atual: {v.km.toLocaleString()} KM)</option>)}
                                     </select>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
@@ -1477,17 +1725,26 @@ const Fleet = () => {
                                 <div className="grid grid-cols-3 gap-4">
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Litros</label>
-                                        <input type="number" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm" placeholder="0.00" value={newFuel.liters || ''} onChange={e => setNewFuel({ ...newFuel, liters: Number(e.target.value) })} required />
+                                        <input type="number" step="0.01" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm" placeholder="0.00" value={newFuel.liters || ''} onChange={e => setNewFuel({ ...newFuel, liters: Number(e.target.value) })} required />
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Total Pago</label>
-                                        <input type="number" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm" placeholder="R$" value={newFuel.cost || ''} onChange={e => setNewFuel({ ...newFuel, cost: Number(e.target.value) })} required />
+                                        <input type="number" step="0.01" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm" placeholder="R$" value={newFuel.cost || ''} onChange={e => setNewFuel({ ...newFuel, cost: Number(e.target.value) })} required />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">KM Atual</label>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">KM no Abastecimento</label>
                                         <input type="number" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm" placeholder="0" value={newFuel.km || ''} onChange={e => setNewFuel({ ...newFuel, km: Number(e.target.value) })} required />
                                     </div>
                                 </div>
+
+                                {Number(newFuel.liters) > 0 && Number(newFuel.cost) > 0 && (
+                                    <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-xl flex justify-between items-center text-xs">
+                                        <span className="font-bold text-emerald-800 dark:text-emerald-200">Preço Médio por Litro:</span>
+                                        <span className="font-mono font-black text-emerald-700 dark:text-emerald-300">
+                                            {formatBRL((Number(newFuel.cost) || 0) / (Number(newFuel.liters) || 1))}/L
+                                        </span>
+                                    </div>
+                                )}
 
                                 <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Plano de Contas</label>
@@ -1930,132 +2187,142 @@ const Fleet = () => {
             }
             {/* Tire Layout Manager Modal */}
             {
-                isTireLayoutOpen && layoutVehicle && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-                        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-2xl border dark:border-slate-700 h-[80vh] flex flex-col">
-                            <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center">
-                                <div>
-                                    <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Gestão de Rodado</h3>
-                                    <p className="text-xs text-slate-400 font-bold uppercase">{layoutVehicle.name} • {layoutVehicle.plate}</p>
-                                </div>
-                                <button onClick={() => setIsTireLayoutOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto p-8 flex justify-center items-center bg-slate-50 dark:bg-slate-900/50">
-                                {/* Vehicle Schematic */}
-                                <div className="relative w-64 h-[500px] bg-slate-200 dark:bg-slate-700 rounded-[3rem] shadow-2xl border-4 border-slate-300 dark:border-slate-600">
-                                    {/* Cabin Area */}
-                                    <div className="absolute top-6 left-6 right-6 h-32 bg-slate-300 dark:bg-slate-600 rounded-2xl border-4 border-slate-400/30 flex items-center justify-center">
-                                        <span className="text-slate-400 font-black text-xs uppercase opacity-50">Cabine</span>
+                isTireLayoutOpen && layoutVehicle && (() => {
+                    const currentLayoutVehicle = fleet.find(v => v.id === layoutVehicle.id) || layoutVehicle;
+                    return (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                            <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-2xl border dark:border-slate-700 h-[80vh] flex flex-col">
+                                <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center">
+                                    <div>
+                                        <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Gestão de Rodado</h3>
+                                        <p className="text-xs text-slate-400 font-bold uppercase">{currentLayoutVehicle.name} • {currentLayoutVehicle.plate} • Odômetro: {currentLayoutVehicle.km.toLocaleString()} KM</p>
                                     </div>
+                                    <button onClick={() => { setIsTireLayoutOpen(false); setLayoutVehicle(null); }} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+                                </div>
 
-                                    {/* Axle Lines */}
-                                    <div className="absolute top-48 left-0 right-0 h-1 bg-slate-400/30"></div>
-                                    <div className="absolute bottom-32 left-0 right-0 h-1 bg-slate-400/30"></div>
-                                    <div className="absolute bottom-16 left-0 right-0 h-1 bg-slate-400/30"></div>
+                                <div className="flex-1 overflow-y-auto p-8 flex justify-center items-center bg-slate-50 dark:bg-slate-900/50">
+                                    {/* Vehicle Schematic */}
+                                    <div className="relative w-64 h-[500px] bg-slate-200 dark:bg-slate-700 rounded-[3rem] shadow-2xl border-4 border-slate-300 dark:border-slate-600">
+                                        {/* Cabin Area */}
+                                        <div className="absolute top-6 left-6 right-6 h-32 bg-slate-300 dark:bg-slate-600 rounded-2xl border-4 border-slate-400/30 flex items-center justify-center">
+                                            <span className="text-slate-400 font-black text-xs uppercase opacity-50">Cabine</span>
+                                        </div>
 
-                                    {/* Tire Slots */}
-                                    {[/* Logic handled below */].length === 0 ? [] : []}
-                                    {(() => {
-                                        // Dynamic Slots based on Type
-                                        const getSlots = (type: string) => {
-                                            const slots: any[] = [];
+                                        {/* Axle Lines */}
+                                        <div className="absolute top-48 left-0 right-0 h-1 bg-slate-400/30"></div>
+                                        <div className="absolute bottom-32 left-0 right-0 h-1 bg-slate-400/30"></div>
+                                        <div className="absolute bottom-16 left-0 right-0 h-1 bg-slate-400/30"></div>
 
-                                            // Configs
-                                            const isToco = type === 'Toco' || type === 'Caminhão'; // 2 Axles (2 + 4)
-                                            const isTruck = type === 'Truck'; // 3 Axles (2 + 4 + 4)
-                                            const isCarreta = type === 'Carreta LS'; // 3 Axles (4 + 4 + 4) - Trailer
+                                        {/* Tire Slots */}
+                                        {(() => {
+                                            const getSlots = (type: string) => {
+                                                const slots: any[] = [];
+                                                const isTruck = type === 'Truck';
+                                                const isCarreta = type === 'Carreta LS';
 
-                                            // Front Axle (E1)
-                                            if (isCarreta) {
-                                                // 3 Rear Axles Dual
-                                                [1, 2, 3].forEach((axle, idx) => {
-                                                    const baseTop = 130 + (idx * 110);
+                                                if (isCarreta) {
+                                                    [1, 2, 3].forEach((axle, idx) => {
+                                                        const baseTop = 130 + (idx * 110);
+                                                        slots.push(
+                                                            { id: `E${axle}_LE_EXT`, label: `E${axle} LE EXT`, style: { top: `${baseTop}px`, left: '-20px' } },
+                                                            { id: `E${axle}_LE_INT`, label: `E${axle} LE INT`, style: { top: `${baseTop}px`, left: '30px' } },
+                                                            { id: `E${axle}_LD_INT`, label: `E${axle} LD INT`, style: { top: `${baseTop}px`, right: '30px' } },
+                                                            { id: `E${axle}_LD_EXT`, label: `E${axle} LD EXT`, style: { top: `${baseTop}px`, right: '-20px' } }
+                                                        );
+                                                    });
+                                                } else {
                                                     slots.push(
-                                                        { id: `E${axle}_LE_EXT`, label: `E${axle} LE EXT`, style: { top: `${baseTop}px`, left: '-20px' } },
-                                                        { id: `E${axle}_LE_INT`, label: `E${axle} LE INT`, style: { top: `${baseTop}px`, left: '30px' } },
-                                                        { id: `E${axle}_LD_INT`, label: `E${axle} LD INT`, style: { top: `${baseTop}px`, right: '30px' } },
-                                                        { id: `E${axle}_LD_EXT`, label: `E${axle} LD EXT`, style: { top: `${baseTop}px`, right: '-20px' } }
+                                                        { id: 'E1_LE', label: 'E1 LE (Dianteiro Esq.)', style: { top: '80px', left: '-20px' } },
+                                                        { id: 'E1_LD', label: 'E1 LD (Dianteiro Dir.)', style: { top: '80px', right: '-20px' } }
                                                     );
-                                                });
-                                            } else {
-                                                // Toco or Truck - Front Single
-                                                slots.push(
-                                                    { id: 'E1_LE', label: 'E1 LE', style: { top: '80px', left: '-20px' } },
-                                                    { id: 'E1_LD', label: 'E1 LD', style: { top: '80px', right: '-20px' } }
-                                                );
 
-                                                // Axle 2: Dual (Drive)
-                                                const a2Top = isTruck ? 280 : 350;
-                                                slots.push(
-                                                    { id: 'E2_LE_EXT', label: 'E2 EXT', style: { top: `${a2Top}px`, left: '-20px' } },
-                                                    { id: 'E2_LE_INT', label: 'E2 INT', style: { top: `${a2Top}px`, left: '30px' } },
-                                                    { id: 'E2_LD_INT', label: 'E2 INT', style: { top: `${a2Top}px`, right: '30px' } },
-                                                    { id: 'E2_LD_EXT', label: 'E2 EXT', style: { top: `${a2Top}px`, right: '-20px' } }
-                                                );
-
-                                                if (isTruck) {
-                                                    // Axle 3: Dual (Trailing/Tag)
-                                                    const a3Top = 380;
+                                                    const a2Top = isTruck ? 280 : 350;
                                                     slots.push(
-                                                        { id: 'E3_LE_EXT', label: 'E3 EXT', style: { top: `${a3Top}px`, left: '-20px' } },
-                                                        { id: 'E3_LE_INT', label: 'E3 INT', style: { top: `${a3Top}px`, left: '30px' } },
-                                                        { id: 'E3_LD_INT', label: 'E3 INT', style: { top: `${a3Top}px`, right: '30px' } },
-                                                        { id: 'E3_LD_EXT', label: 'E3 EXT', style: { top: `${a3Top}px`, right: '-20px' } }
+                                                        { id: 'E2_LE_EXT', label: 'E2 LE EXT', style: { top: `${a2Top}px`, left: '-20px' } },
+                                                        { id: 'E2_LE_INT', label: 'E2 LE INT', style: { top: `${a2Top}px`, left: '30px' } },
+                                                        { id: 'E2_LD_INT', label: 'E2 LD INT', style: { top: `${a2Top}px`, right: '30px' } },
+                                                        { id: 'E2_LD_EXT', label: 'E2 LD EXT', style: { top: `${a2Top}px`, right: '-20px' } }
                                                     );
+
+                                                    if (isTruck) {
+                                                        const a3Top = 380;
+                                                        slots.push(
+                                                            { id: 'E3_LE_EXT', label: 'E3 LE EXT', style: { top: `${a3Top}px`, left: '-20px' } },
+                                                            { id: 'E3_LE_INT', label: 'E3 LE INT', style: { top: `${a3Top}px`, left: '30px' } },
+                                                            { id: 'E3_LD_INT', label: 'E3 LD INT', style: { top: `${a3Top}px`, right: '30px' } },
+                                                            { id: 'E3_LD_EXT', label: 'E3 LD EXT', style: { top: `${a3Top}px`, right: '-20px' } }
+                                                        );
+                                                    }
                                                 }
-                                            }
+                                                return slots;
+                                            };
 
-                                            return slots;
-                                        };
+                                            return getSlots(currentLayoutVehicle.type).map(slot => {
+                                                const mountedTire = tires.find(t => t.currentVehicleId === currentLayoutVehicle.id && t.position === slot.id);
+                                                const metrics = mountedTire ? getTireMetrics(mountedTire, currentLayoutVehicle) : null;
 
-                                        return getSlots(layoutVehicle.type).map(slot => {
-                                            const mountedTire = tires.find(t => t.currentVehicleId === layoutVehicle.id && t.position === slot.id);
+                                                return (
+                                                    <div key={slot.id} className="absolute flex flex-col items-center z-10" style={slot.style}>
+                                                        <div className="relative group/slot">
+                                                            <div className={`w-10 h-16 rounded-lg border-2 shadow-lg transition-all flex flex-col items-center justify-center cursor-pointer ${mountedTire
+                                                                ? metrics && metrics.wearPercent >= 85
+                                                                    ? 'bg-rose-900 border-rose-500 text-white hover:scale-110 shadow-rose-900/50'
+                                                                    : 'bg-slate-800 border-slate-900 text-white hover:scale-110 shadow-slate-900/50'
+                                                                : 'bg-white/50 border-dashed border-slate-400 hover:border-teal-500 hover:bg-teal-50'
+                                                                }`}>
+                                                                {mountedTire ? (
+                                                                    <div className="flex flex-col items-center">
+                                                                        <span className="text-[7px] font-bold rotate-90 whitespace-nowrap">{mountedTire.serialNumber?.slice(-5)}</span>
+                                                                        {metrics && (
+                                                                            <span className={`text-[6px] font-black mt-1 px-1 rounded ${metrics.wearPercent >= 85 ? 'bg-rose-600' : 'bg-slate-700'}`}>
+                                                                                {metrics.wearPercent}%
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                ) : (
+                                                                    <Plus size={12} className="text-slate-400" />
+                                                                )}
+                                                            </div>
 
-                                            return (
-                                                <div key={slot.id} className="absolute flex flex-col items-center z-10" style={slot.style}>
-                                                    <div className="relative group/slot">
-                                                        <div className={`w-10 h-16 rounded-lg border-2 shadow-lg transition-all flex flex-col items-center justify-center cursor-pointer ${mountedTire
-                                                            ? 'bg-slate-800 border-slate-900 text-white hover:scale-110 shadow-slate-900/50'
-                                                            : 'bg-white/50 border-dashed border-slate-400 hover:border-teal-500 hover:bg-teal-50'
-                                                            }`}>
-                                                            {mountedTire ? (
-                                                                <span className="text-[8px] font-bold rotate-90 whitespace-nowrap">{mountedTire.serialNumber}</span>
-                                                            ) : (
-                                                                <Plus size={12} className="text-slate-400" />
-                                                            )}
-                                                        </div>
-
-                                                        {/* Tooltip / Selector */}
-                                                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover/slot:block w-48 bg-white dark:bg-slate-800 p-3 rounded-xl shadow-xl z-50 border border-slate-100 dark:border-slate-600">
-                                                            <p className="text-[10px] font-black uppercase text-slate-400 mb-2">{slot.label}</p>
-                                                            <select
-                                                                className="w-full text-xs p-1 border rounded"
-                                                                value={mountedTire?.id || ''}
-                                                                onChange={(e) => handleTireChange(layoutVehicle.id, slot.id, e.target.value)}
-                                                            >
-                                                                <option value="">Vazio (Desmontar)</option>
-                                                                {tires.filter(t => t.status === 'Novo' || t.status === 'Estoque' || t.status === 'Recapagem' || t.id === mountedTire?.id).map(t => (
-                                                                    <option key={t.id} value={t.id}>
-                                                                        {t.serialNumber} - {t.brand} {t.position ? `(${t.position})` : ''}
-                                                                    </option>
-                                                                ))}
-                                                            </select>
+                                                            {/* Tooltip / Selector */}
+                                                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover/slot:block w-52 bg-white dark:bg-slate-800 p-3 rounded-xl shadow-xl z-50 border border-slate-100 dark:border-slate-600">
+                                                                <p className="text-[10px] font-black uppercase text-slate-400 mb-1">{slot.label}</p>
+                                                                {mountedTire && metrics && (
+                                                                    <div className="mb-2 p-1.5 bg-slate-50 dark:bg-slate-900 rounded-lg text-[9px] space-y-0.5">
+                                                                        <p className="font-bold text-slate-700 dark:text-slate-200">{mountedTire.brand} {mountedTire.model}</p>
+                                                                        <p className="text-teal-600 font-bold">KM Acumulado: {metrics.totalAccumulatedKm.toLocaleString()} km</p>
+                                                                        <p className="text-slate-500">Sulco: {metrics.treadDepth}mm ({metrics.wearPercent}% gasto)</p>
+                                                                    </div>
+                                                                )}
+                                                                <select
+                                                                    className="w-full text-xs p-1.5 border rounded bg-slate-50 dark:bg-slate-900 font-bold"
+                                                                    value={mountedTire?.id || ''}
+                                                                    onChange={(e) => handleTireChange(currentLayoutVehicle.id, slot.id, e.target.value)}
+                                                                >
+                                                                    <option value="">Vazio (Desmontar)</option>
+                                                                    {tires.filter(t => t.status === 'Novo' || t.status === 'Estoque' || t.status === 'Recapagem' || t.id === mountedTire?.id).map(t => (
+                                                                        <option key={t.id} value={t.id}>
+                                                                            {t.serialNumber} - {t.brand} {t.position ? `(${t.position})` : ''}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            );
-                                        });
-                                    })()}
+                                                );
+                                            });
+                                        })()}
+                                    </div>
+                                </div>
+
+                                <div className="p-6 border-t dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-center flex justify-between items-center text-xs text-slate-400">
+                                    <span>Passe o mouse sobre os slots para ver dados telemétricos e trocar pneus</span>
+                                    <button onClick={() => { setIsTireLayoutOpen(false); setLayoutVehicle(null); }} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 font-bold rounded-lg text-slate-700 dark:text-white uppercase text-[10px]">Fechar</button>
                                 </div>
                             </div>
-
-                            <div className="p-6 border-t dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-center">
-                                <p className="text-xs text-slate-400">Passe o mouse sobre os pneus para montar/desmontar</p>
-                            </div>
                         </div>
-                    </div>
-                )
+                    );
+                })()
             }
             {activeTab === 'almoxarifado' && (
                 <div className="space-y-6 animate-in slide-in-from-right duration-500">

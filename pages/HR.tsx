@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
     Plus, X, Users, UserPlus, Search, Download, Edit2, Trash2, Wallet, Clock, Calendar,
     CheckCircle, XCircle, DollarSign, ArrowUpRight, Fingerprint, Play, StopCircle, Timer,
-    Plane, TrendingUp, AlertCircle, Filter, ChevronDown, FileText
+    Plane, TrendingUp, AlertCircle, Filter, ChevronDown, FileText, Printer, Check
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -30,9 +30,6 @@ const HR = () => {
     const [isVacationModalOpen, setIsVacationModalOpen] = useState(false);
     const [isAdvanceModalOpen, setIsAdvanceModalOpen] = useState(false);
 
-    // Payment Modal State (Removed - Integrated with Purchases)
-    // const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-    // const [paymentRecord, setPaymentRecord] = useState<PayrollRecord | null>(null);
     const [selectedAccount, setSelectedAccount] = useState<string>('');
     const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
 
@@ -44,28 +41,218 @@ const HR = () => {
         admissionDate: new Date().toISOString().split('T')[0]
     });
 
-    // Tax Logic Helper
-    const calculateTaxes = (baseSalary: number) => {
-        // INSS 2024 (Progressive) - Simplified for Example
+    // Estados do Espelho de Ponto
+    const [timeViewMode, setTimeViewMode] = useState<'timesheet' | 'kiosk'>('timesheet');
+    const [selectedEspelhoEmpId, setSelectedEspelhoEmpId] = useState<string>('');
+    const [selectedEspelhoMonth, setSelectedEspelhoMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
+    const [isManualTimeModalOpen, setIsManualTimeModalOpen] = useState(false);
+    const [manualTimeForm, setManualTimeForm] = useState({
+        employeeId: '',
+        date: new Date().toISOString().split('T')[0],
+        checkIn: '08:00',
+        lunchStart: '12:00',
+        lunchEnd: '13:00',
+        checkOut: '17:00',
+        reason: 'Marcação normal de trabalho'
+    });
+
+    // Helper para converter string de horário "HH:MM" para minutos
+    const parseTimeToMinutes = (t?: string): number | null => {
+        if (!t) return null;
+        const parts = t.trim().split(':').map(Number);
+        if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            return parts[0] * 60 + parts[1];
+        }
+        return null;
+    };
+
+    // Helper para formatar minutos em string legível "Xh YYmin"
+    const formatMinutesToHours = (mins: number) => {
+        const sign = mins < 0 ? '-' : '';
+        const abs = Math.abs(mins);
+        const h = Math.floor(abs / 60);
+        const m = abs % 60;
+        return `${sign}${h}h ${m.toString().padStart(2, '0')}m`;
+    };
+
+    // Helper para cálculo progressivo oficial do INSS (CLT 2024/2026)
+    const calculateProgressiveINSS = (base: number) => {
         let inss = 0;
-        if (baseSalary <= 1412.00) inss = baseSalary * 0.075;
-        else if (baseSalary <= 2666.68) inss = baseSalary * 0.09;
-        else if (baseSalary <= 4000.03) inss = baseSalary * 0.12;
-        else inss = baseSalary * 0.14;
+        if (base <= 1412.00) {
+            inss = base * 0.075;
+        } else if (base <= 2666.68) {
+            inss = (base * 0.09) - 21.18;
+        } else if (base <= 4000.03) {
+            inss = (base * 0.12) - 101.18;
+        } else if (base <= 7786.02) {
+            inss = (base * 0.14) - 181.18;
+        } else {
+            inss = 908.86;
+        }
+        return Number(Math.min(908.86, Math.max(0, inss)).toFixed(2));
+    };
 
-        // Cap INSS
-        if (inss > 908.85) inss = 908.85;
-
-        // IRRF (Simplified Base)
-        const baseIRRF = baseSalary - inss;
+    // Helper para cálculo progressivo do IRRF (CLT / Receita Federal)
+    const calculateIRRF = (baseIRRF: number) => {
         let irrf = 0;
-        if (baseIRRF <= 2259.20) irrf = 0;
-        else if (baseIRRF <= 2826.65) irrf = (baseIRRF * 0.075) - 169.44;
-        else if (baseIRRF <= 3751.05) irrf = (baseIRRF * 0.15) - 381.44;
-        else if (baseIRRF <= 4664.68) irrf = (baseIRRF * 0.225) - 662.77;
-        else irrf = (baseIRRF * 0.275) - 896.00;
+        if (baseIRRF <= 2259.20) {
+            irrf = 0;
+        } else if (baseIRRF <= 2826.65) {
+            irrf = (baseIRRF * 0.075) - 169.44;
+        } else if (baseIRRF <= 3751.05) {
+            irrf = (baseIRRF * 0.15) - 381.44;
+        } else if (baseIRRF <= 4664.68) {
+            irrf = (baseIRRF * 0.225) - 662.77;
+        } else {
+            irrf = (baseIRRF * 0.275) - 896.00;
+        }
+        return Number(Math.max(0, irrf).toFixed(2));
+    };
 
-        return { inss, irrf: Math.max(0, irrf) };
+    // Helper para cálculo detalhado da folha de pagamento de um colaborador com consistência telemétrica de ponto
+    const calculateEmployeePayroll = (emp: Employee, month: string) => {
+        // Normalização de mês de competência (suporta 'MM/YYYY' ou 'YYYY-MM')
+        let targetMonth = '';
+        let targetYear = '';
+        if (month.includes('/')) {
+            const parts = month.split('/');
+            targetMonth = parts[0].padStart(2, '0');
+            targetYear = parts[1];
+        } else if (month.includes('-')) {
+            const parts = month.split('-');
+            targetYear = parts[0];
+            targetMonth = parts[1].padStart(2, '0');
+        }
+
+        // 1. Horas Extras e Atrasos a partir dos registros de ponto (timeLogs)
+        let extraMinutes = 0;
+        let delayMinutes = 0;
+        let daysWorked = 0;
+
+        const employeeLogs = timeLogs.filter(log => {
+            if (log.employeeId !== emp.id) return false;
+            const logDate = log.date || '';
+            let logM = '';
+            let logY = '';
+            if (logDate.includes('/')) {
+                const parts = logDate.split('/');
+                logM = parts[1]?.padStart(2, '0');
+                logY = parts[2];
+            } else if (logDate.includes('-')) {
+                const parts = logDate.split('-');
+                logY = parts[0];
+                logM = parts[1]?.padStart(2, '0');
+            }
+            return logM === targetMonth && logY === targetYear;
+        });
+
+        employeeLogs.forEach(log => {
+            if (log.checkIn) {
+                daysWorked++;
+                const inMin = parseTimeToMinutes(log.checkIn);
+                const outMin = parseTimeToMinutes(log.checkOut);
+
+                if (inMin !== null && outMin !== null && outMin > inMin) {
+                    let lunchMin = 60;
+                    if (log.lunchStart && log.lunchEnd) {
+                        const ls = parseTimeToMinutes(log.lunchStart);
+                        const le = parseTimeToMinutes(log.lunchEnd);
+                        if (ls !== null && le !== null && le > ls) lunchMin = le - ls;
+                    }
+                    const totalWorked = Math.max(0, (outMin - inMin) - lunchMin);
+                    const standardDay = 480; // 8h diárias
+
+                    if (totalWorked > standardDay) {
+                        extraMinutes += (totalWorked - standardDay);
+                    } else if (totalWorked < standardDay) {
+                        delayMinutes += (standardDay - totalWorked);
+                    }
+                } else if (log.status === 'Extra') {
+                    extraMinutes += 120; // 2 horas extras avulsas
+                } else if (log.status === 'Atraso') {
+                    delayMinutes += 60;
+                }
+            }
+        });
+
+        const overtimeHours = Number((extraMinutes / 60).toFixed(2));
+        const delayHours = Number((delayMinutes / 60).toFixed(2));
+
+        // Salário hora (divisor CLT 220 horas para jornada de 44h semanais)
+        const hourlyRate = emp.salary > 0 ? emp.salary / 220 : 0;
+        const overtimeEarnings = Number((overtimeHours * hourlyRate * 1.5).toFixed(2)); // Adicional 50%
+        const dsrEarnings = Number((overtimeEarnings * (1 / 6)).toFixed(2)); // DSR s/ Horas Extras (Súmula 172 TST)
+        const totalOvertime = Number((overtimeEarnings + dsrEarnings).toFixed(2));
+        const delayDiscounts = Number((delayHours * hourlyRate).toFixed(2));
+
+        // 2. Benefícios (VR / VA)
+        const benefits = 550.00;
+
+        // 3. Desconto legal de Vale Transporte (CLT Art. 458: até 6% do salário base)
+        const transportDiscount = Number(Math.min(emp.salary * 0.06, 180.00).toFixed(2));
+
+        // 4. Antecipações Salariais a descontar nesta competência
+        const advancesToDeduct = salaryAdvances.filter(adv => {
+            if (adv.employeeId !== emp.id) return false;
+            if (adv.status !== 'Pago' && adv.status !== 'Aprovado') return false;
+            const advMonth = adv.deductFromMonth || '';
+            let advM = '';
+            let advY = '';
+            if (advMonth.includes('/')) {
+                const p = advMonth.split('/');
+                advM = p[0].padStart(2, '0');
+                advY = p[1];
+            } else if (advMonth.includes('-')) {
+                const p = advMonth.split('-');
+                advY = p[0];
+                advM = p[1].padStart(2, '0');
+            }
+            return advM === targetMonth && advY === targetYear;
+        });
+        const totalAdvances = advancesToDeduct.reduce((sum, adv) => sum + adv.amount, 0);
+
+        // 5. Tributos (INSS e IRRF)
+        const baseINSS = Number((emp.salary + totalOvertime).toFixed(2));
+        const inss = calculateProgressiveINSS(baseINSS);
+
+        const baseIRRF = Math.max(0, Number((baseINSS - inss).toFixed(2)));
+        const irrf = calculateIRRF(baseIRRF);
+
+        // 6. FGTS e Encargos Patronais
+        const fgts = Number((baseINSS * 0.08).toFixed(2));
+        const inssPatronal = Number((baseINSS * 0.288).toFixed(2)); // 20% CPP + 5.8% Terceiros + 3% RAT
+        const provisaoFerias13 = Number((baseINSS * 0.1944).toFixed(2)); // 1/12 13º + 1/12 férias + 1/3
+
+        // 7. Totais de Vencimentos, Descontos e Líquido
+        const totalEarnings = Number((emp.salary + totalOvertime + benefits).toFixed(2));
+        const totalDiscounts = Number((inss + irrf + totalAdvances + delayDiscounts + transportDiscount).toFixed(2));
+        const totalNet = Number(Math.max(0, totalEarnings - totalDiscounts).toFixed(2));
+        const totalCompanyCost = Number((totalEarnings + fgts + inssPatronal + provisaoFerias13).toFixed(2));
+
+        return {
+            baseSalary: emp.salary,
+            daysWorked,
+            overtimeHours,
+            overtimeEarnings,
+            dsrEarnings,
+            totalOvertime,
+            delayHours,
+            delayDiscounts,
+            benefits,
+            transportDiscount,
+            totalAdvances,
+            baseINSS,
+            inss,
+            baseIRRF,
+            irrf,
+            fgts,
+            inssPatronal,
+            provisaoFerias13,
+            totalEarnings,
+            totalDiscounts,
+            totalNet,
+            totalCompanyCost
+        };
     };
 
     const [vacationForm, setVacationForm] = useState<Partial<Vacation>>({
@@ -87,6 +274,258 @@ const HR = () => {
     const formatCurrency = (val: number) => {
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
     };
+
+    const handleSaveManualTime = (e: React.FormEvent) => {
+        e.preventDefault();
+        const targetEmpId = manualTimeForm.employeeId || selectedEspelhoEmpId || employees[0]?.id;
+        if (!targetEmpId) {
+            addToast("Selecione um colaborador.", 'warning');
+            return;
+        }
+
+        const inMin = parseTimeToMinutes(manualTimeForm.checkIn);
+        const outMin = parseTimeToMinutes(manualTimeForm.checkOut);
+        const lsMin = parseTimeToMinutes(manualTimeForm.lunchStart);
+        const leMin = parseTimeToMinutes(manualTimeForm.lunchEnd);
+
+        let lunchDuration = 60;
+        if (lsMin !== null && leMin !== null && leMin > lsMin) {
+            lunchDuration = leMin - lsMin;
+        }
+
+        let workedMin = 0;
+        if (inMin !== null && outMin !== null && outMin > inMin) {
+            workedMin = Math.max(0, (outMin - inMin) - lunchDuration);
+        }
+
+        const totalHours = (workedMin / 60).toFixed(2);
+        let status: 'Regular' | 'Extra' | 'Atraso' | 'Presente' = 'Presente';
+        if (workedMin > 480) {
+            status = 'Extra';
+        } else if (workedMin < 480 && workedMin > 0) {
+            status = 'Atraso';
+        }
+
+        const newLog: TimeLog = {
+            id: `log-manual-${Date.now()}`,
+            employeeId: targetEmpId,
+            date: manualTimeForm.date,
+            checkIn: manualTimeForm.checkIn,
+            lunchStart: manualTimeForm.lunchStart,
+            lunchEnd: manualTimeForm.lunchEnd,
+            checkOut: manualTimeForm.checkOut,
+            totalHours,
+            status
+        };
+
+        addTimeLog(newLog);
+        addToast(`Marcação manual registrada com sucesso!`, 'success');
+        setIsManualTimeModalOpen(false);
+    };
+
+    const currentEspelhoEmp = useMemo(() => {
+        if (selectedEspelhoEmpId) {
+            return employees.find(e => e.id === selectedEspelhoEmpId) || employees[0];
+        }
+        return employees[0];
+    }, [selectedEspelhoEmpId, employees]);
+
+    const espelhoData = useMemo(() => {
+        if (!currentEspelhoEmp) {
+            return {
+                daysData: [],
+                totals: {
+                    expectedMins: 0,
+                    expectedStr: '0h 00m',
+                    workedMins: 0,
+                    workedStr: '0h 00m',
+                    overtimeMins: 0,
+                    overtimeStr: '0h 00m',
+                    delayMins: 0,
+                    delayStr: '0h 00m',
+                    balanceMins: 0,
+                    balanceStr: '0h 00m'
+                }
+            };
+        }
+
+        const [yStr, mStr] = selectedEspelhoMonth.split('-');
+        const year = parseInt(yStr, 10);
+        const monthNum = parseInt(mStr, 10);
+        const daysInMonth = new Date(year, monthNum, 0).getDate();
+
+        let totalExpectedMins = 0;
+        let totalWorkedMins = 0;
+        let totalOvertimeMins = 0;
+        let totalDelayMins = 0;
+
+        const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const daysData = [];
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateObj = new Date(year, monthNum - 1, day);
+            const dayOfWeek = dateObj.getDay();
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            const weekday = weekdayNames[dayOfWeek];
+
+            const dayPadded = String(day).padStart(2, '0');
+            const monthPadded = String(monthNum).padStart(2, '0');
+            const dateIso = `${year}-${monthPadded}-${dayPadded}`;
+            const dateBr = `${dayPadded}/${monthPadded}/${year}`;
+
+            // Férias
+            const onVacation = vacations.some(v => {
+                if (v.employeeId !== currentEspelhoEmp.id || v.status !== 'Aprovado') return false;
+                const parseD = (dStr: string) => {
+                    if (dStr.includes('/')) {
+                        const parts = dStr.split('/');
+                        return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
+                    }
+                    return new Date(dStr).getTime();
+                };
+                const cur = dateObj.getTime();
+                return cur >= parseD(v.startDate) && cur <= parseD(v.endDate);
+            });
+
+            // Log de ponto
+            const log = timeLogs.find(l => {
+                if (l.employeeId !== currentEspelhoEmp.id) return false;
+                const ld = l.date || '';
+                return ld === dateIso || ld === dateBr;
+            });
+
+            let checkIn = log?.checkIn || '';
+            let lunchStart = log?.lunchStart || '';
+            let lunchEnd = log?.lunchEnd || '';
+            let checkOut = log?.checkOut || '';
+
+            let expectedMins = 0;
+            let workedMins = 0;
+            let occurrence = '';
+
+            if (onVacation) {
+                occurrence = 'Férias Regulamentares';
+            } else if (isWeekend) {
+                occurrence = dayOfWeek === 0 ? 'DSR (Descanso Semanal)' : 'Sábado (Compensado)';
+                if (log?.checkIn && log?.checkOut) {
+                    occurrence = 'Trabalho em DSR/Fim de Semana (100%)';
+                }
+            } else {
+                expectedMins = 480; // 8h
+                totalExpectedMins += expectedMins;
+                occurrence = 'Dia Útil Normal';
+            }
+
+            if (log) {
+                if (checkIn && checkOut) {
+                    const inMin = parseTimeToMinutes(checkIn);
+                    const outMin = parseTimeToMinutes(checkOut);
+                    if (inMin !== null && outMin !== null && outMin > inMin) {
+                        let lunchDuration = 60;
+                        if (lunchStart && lunchEnd) {
+                            const ls = parseTimeToMinutes(lunchStart);
+                            const le = parseTimeToMinutes(lunchEnd);
+                            if (ls !== null && le !== null && le > ls) lunchDuration = le - ls;
+                        }
+                        workedMins = Math.max(0, (outMin - inMin) - lunchDuration);
+                    }
+                } else if (log.status === 'Extra') {
+                    workedMins = 600;
+                } else if (log.status === 'Presente') {
+                    workedMins = 480;
+                }
+            }
+
+            totalWorkedMins += workedMins;
+
+            const deltaMin = workedMins - expectedMins;
+            if (deltaMin > 0) {
+                totalOvertimeMins += deltaMin;
+                if (!occurrence.includes('DSR') && !occurrence.includes('Férias')) {
+                    occurrence = `Hora Extra (+${formatMinutesToHours(deltaMin)})`;
+                }
+            } else if (deltaMin < 0) {
+                if (!isWeekend && !onVacation) {
+                    totalDelayMins += Math.abs(deltaMin);
+                    if (workedMins === 0) {
+                        occurrence = 'Falta / Sem Registro';
+                    } else {
+                        occurrence = `Atraso / Saída Antecipada (-${formatMinutesToHours(Math.abs(deltaMin))})`;
+                    }
+                }
+            }
+
+            daysData.push({
+                day,
+                dateStr: dateBr,
+                dateIso,
+                weekday,
+                isWeekend,
+                onVacation,
+                checkIn,
+                lunchStart,
+                lunchEnd,
+                checkOut,
+                workedMins,
+                workedStr: formatMinutesToHours(workedMins),
+                expectedMins,
+                expectedStr: formatMinutesToHours(expectedMins),
+                deltaMin,
+                deltaStr: deltaMin > 0 ? `+${formatMinutesToHours(deltaMin)}` : deltaMin < 0 ? `-${formatMinutesToHours(Math.abs(deltaMin))}` : '0h 00m',
+                occurrence
+            });
+        }
+
+        const balanceMins = totalOvertimeMins - totalDelayMins;
+
+        const totals = {
+            expectedMins: totalExpectedMins,
+            expectedStr: formatMinutesToHours(totalExpectedMins),
+            workedMins: totalWorkedMins,
+            workedStr: formatMinutesToHours(totalWorkedMins),
+            overtimeMins: totalOvertimeMins,
+            overtimeStr: formatMinutesToHours(totalOvertimeMins),
+            delayMins: totalDelayMins,
+            delayStr: formatMinutesToHours(totalDelayMins),
+            balanceMins,
+            balanceStr: balanceMins >= 0 ? `+${formatMinutesToHours(balanceMins)}` : `-${formatMinutesToHours(Math.abs(balanceMins))}`
+        };
+
+        return { daysData, totals };
+    }, [currentEspelhoEmp, selectedEspelhoMonth, timeLogs, vacations]);
+
+    const payrollSummary = useMemo(() => {
+        const activeEmps = employees.filter(e => e.status === 'Ativo');
+        const currentMonth = new Date().toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' });
+        let totalBase = 0;
+        let totalOvertime = 0;
+        let totalNet = 0;
+        let totalINSSPatronal = 0;
+        let totalFGTS = 0;
+        let totalProvisao13Ferias = 0;
+        let totalCompanyCost = 0;
+
+        activeEmps.forEach(emp => {
+            const calc = calculateEmployeePayroll(emp, currentMonth);
+            totalBase += calc.baseSalary;
+            totalOvertime += calc.totalOvertime;
+            totalNet += calc.totalNet;
+            totalINSSPatronal += calc.inssPatronal;
+            totalFGTS += calc.fgts;
+            totalProvisao13Ferias += calc.provisaoFerias13;
+            totalCompanyCost += calc.totalCompanyCost;
+        });
+
+        return {
+            totalBase,
+            totalOvertime,
+            totalNet,
+            totalINSSPatronal,
+            totalFGTS,
+            totalProvisao13Ferias,
+            totalCompanyCost
+        };
+    }, [employees, timeLogs, salaryAdvances]);
 
     const handleSaveEmployee = (e: React.FormEvent) => {
         e.preventDefault();
@@ -138,19 +577,9 @@ const HR = () => {
     };
 
     const generatePayrollLogic = (month: string) => {
-
         let count = 0;
         employees.filter(emp => emp.status === 'Ativo').forEach(emp => {
-            // Verificar se há antecipações a descontar
-            const advancesToDeduct = salaryAdvances.filter(
-                adv => adv.employeeId === emp.id && adv.status === 'Pago' && adv.deductFromMonth === month
-            );
-            const totalAdvances = advancesToDeduct.reduce((sum, adv) => sum + adv.amount, 0);
-
-            // Calculate Taxes
-            const { inss, irrf } = calculateTaxes(emp.salary);
-            const benefits = 500; // Mock VR/VA
-            const totalDiscounts = inss + irrf + totalAdvances;
+            const payrollCalc = calculateEmployeePayroll(emp, month);
 
             const record: PayrollRecord = {
                 id: `pay-${emp.id}-${Date.now()}`,
@@ -158,12 +587,11 @@ const HR = () => {
                 employeeName: emp.name,
                 month,
                 baseSalary: emp.salary,
-                benefits: benefits,
-                overtime: 0,
-                discounts: parseFloat(totalDiscounts.toFixed(2)),
-                totalNet: parseFloat((emp.salary + benefits - totalDiscounts).toFixed(2)),
+                benefits: payrollCalc.benefits,
+                overtime: payrollCalc.totalOvertime,
+                discounts: payrollCalc.totalDiscounts,
+                totalNet: payrollCalc.totalNet,
                 status: 'Pendente'
-
             };
             addPayroll(record);
 
@@ -175,7 +603,7 @@ const HR = () => {
                 date: new Date().toLocaleDateString('pt-BR'),
                 items: [{
                     id: `PAY-${record.id}`,
-                    name: `Salário Mensal - Competência ${month}`,
+                    name: `Salário Mensal - Competência ${month} (Líq: ${formatCurrency(record.totalNet)})`,
                     quantity: 1,
                     unit: 'UN',
                     price: record.totalNet
@@ -184,105 +612,277 @@ const HR = () => {
                 total: record.totalNet,
                 status: 'Pendente',
                 attachments: [],
-                paymentTerms: 'Transferência Bancária',
+                paymentTerms: 'Transferência Bancária / PIX',
                 shippingCost: 0,
                 ledgerName: 'Salários e Ordenados',
-                targetAccountId: selectedAccount, // Selected by user
+                targetAccountId: selectedAccount,
                 ledgerCode: '2.03.01'
             };
             addPurchaseOrder(odp);
 
             count++;
         });
-        addToast(`Folha de ${month} gerada com sucesso para ${count} colaboradores!`, 'success');
+        addToast(`Folha de ${month} processada com sucesso para ${count} colaboradores!`, 'success');
         setIsPayrollModalOpen(false);
     };
 
-
-
     const handlePrintReceipt = (record: PayrollRecord) => {
-        const companyName = settings?.companyName || "INFRACORE ERP";
-        const companyDoc = settings?.document || "00.000.000/0000-00";
+        const companyName = settings?.companyName || "INFRACORE ERP CONSTRUTORA LTDA";
+        const companyDoc = settings?.document || "00.000.000/0001-90";
+        const emp = employees.find(e => e.id === record.employeeId);
+        const calc = emp ? calculateEmployeePayroll(emp, record.month) : null;
 
-        // Simple HTML Template for Pay Slip (Holerite)
+        const baseSalary = record.baseSalary;
+        const overtimeVal = record.overtime || (calc?.totalOvertime || 0);
+        const benefitsVal = record.benefits || (calc?.benefits || 0);
+        const inssVal = calc?.inss || 0;
+        const irrfVal = calc?.irrf || 0;
+        const advancesVal = calc?.totalAdvances || 0;
+        const delaysVal = calc?.delayDiscounts || 0;
+        const transportVal = calc?.transportDiscount || 0;
+
+        const totalEarnings = baseSalary + overtimeVal + benefitsVal;
+        const totalDiscounts = record.discounts;
+        const netSalary = record.totalNet;
+
         const html = `
-            <div style="font-family: monospace; padding: 40px; border: 1px solid #ccc; max-width: 800px; margin: 0 auto;">
-                <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 30px;">
-                    <h1 style="margin: 0; font-size: 24px; text-transform: uppercase;">Recibo de Pagamento de Salário</h1>
-                    <p style="margin: 5px 0; font-size: 14px;">${companyName} - CNPJ: ${companyDoc}</p>
-                </div>
-
-                <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
+            <div style="font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; border: 2px solid #334155; max-width: 820px; margin: 0 auto; color: #1e293b; background: #fff;">
+                <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #0d9488; padding-bottom: 15px; margin-bottom: 20px;">
                     <div>
-                        <p style="margin: 2px 0; font-weight: bold;">Colaborador:</p>
-                        <p style="margin: 2px 0;">${record.employeeName}</p>
+                        <h2 style="margin: 0; font-size: 20px; text-transform: uppercase; color: #0d9488; font-weight: 900;">${companyName}</h2>
+                        <p style="margin: 3px 0; font-size: 11px; color: #64748b;">CNPJ: ${companyDoc} • Sistema InfraCore RH</p>
                     </div>
                     <div style="text-align: right;">
-                        <p style="margin: 2px 0; font-weight: bold;">Competência:</p>
-                        <p style="margin: 2px 0;">${record.month}</p>
+                        <h3 style="margin: 0; font-size: 16px; font-weight: bold; text-transform: uppercase;">Recibo de Pagamento (Holerite)</h3>
+                        <p style="margin: 3px 0; font-size: 12px; font-weight: bold; color: #0d9488;">Competência: ${record.month}</p>
                     </div>
                 </div>
 
-                <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; background: #f8fafc; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 11px; border: 1px solid #e2e8f0;">
+                    <div><strong>Colaborador:</strong> ${record.employeeName}</div>
+                    <div><strong>Cargo:</strong> ${emp?.role || 'N/D'}</div>
+                    <div><strong>Depto:</strong> ${emp?.department || 'Operacional'}</div>
+                    <div><strong>Matrícula:</strong> ${record.employeeId}</div>
+                    <div><strong>Admissão:</strong> ${emp?.admissionDate || '01/01/2024'}</div>
+                    <div><strong>Status:</strong> ${emp?.status || 'Ativo'}</div>
+                </div>
+
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 11px;">
                     <thead>
-                        <tr style="border-bottom: 2px solid #000;">
-                            <th style="text-align: left; padding: 10px;">Descrição</th>
-                            <th style="text-align: right; padding: 10px;">Vencimentos</th>
-                            <th style="text-align: right; padding: 10px;">Descontos</th>
+                        <tr style="background-color: #0d9488; color: #fff;">
+                            <th style="text-align: center; padding: 8px; width: 60px;">Cód.</th>
+                            <th style="text-align: left; padding: 8px;">Descrição do Evento</th>
+                            <th style="text-align: center; padding: 8px; width: 80px;">Ref.</th>
+                            <th style="text-align: right; padding: 8px; width: 120px;">Vencimentos</th>
+                            <th style="text-align: right; padding: 8px; width: 120px;">Descontos</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr>
-                            <td style="padding: 10px; border-bottom: 1px solid #eee;">Salário Base</td>
-                            <td style="text-align: right; padding: 10px; border-bottom: 1px solid #eee;">R$ ${record.baseSalary.toFixed(2)}</td>
-                            <td style="text-align: right; padding: 10px; border-bottom: 1px solid #eee;">-</td>
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 8px; text-align: center; font-mono;">001</td>
+                            <td style="padding: 8px;">Salário Base Mensal</td>
+                            <td style="padding: 8px; text-align: center;">30 dias</td>
+                            <td style="padding: 8px; text-align: right; font-weight: bold;">R$ ${baseSalary.toFixed(2)}</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
                         </tr>
-                        ${record.benefits ? `
-                        <tr>
-                            <td style="padding: 10px; border-bottom: 1px solid #eee;">Benefícios / Adicionais</td>
-                            <td style="text-align: right; padding: 10px; border-bottom: 1px solid #eee;">R$ ${record.benefits.toFixed(2)}</td>
-                            <td style="text-align: right; padding: 10px; border-bottom: 1px solid #eee;">-</td>
+                        ${overtimeVal > 0 ? `
+                        <tr style="border-bottom: 1px solid #e2e8f0; background: #f0fdf4;">
+                            <td style="padding: 8px; text-align: center; font-mono;">050</td>
+                            <td style="padding: 8px;">Horas Extras 50% + DSR (Ponto Eletrônico)</td>
+                            <td style="padding: 8px; text-align: center;">${calc?.overtimeHours || 0}h</td>
+                            <td style="padding: 8px; text-align: right; font-weight: bold; color: #16a34a;">R$ ${overtimeVal.toFixed(2)}</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
                         </tr>` : ''}
-                        ${record.discounts ? `
-                        <tr>
-                            <td style="padding: 10px; border-bottom: 1px solid #eee;">Descontos (INSS/IRRF/Adiantamentos)</td>
-                            <td style="text-align: right; padding: 10px; border-bottom: 1px solid #eee;">-</td>
-                            <td style="text-align: right; padding: 10px; border-bottom: 1px solid #eee;">R$ ${record.discounts.toFixed(2)}</td>
+                        ${benefitsVal > 0 ? `
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 8px; text-align: center; font-mono;">101</td>
+                            <td style="padding: 8px;">Auxílio Alimentação / Refeição (VA/VR)</td>
+                            <td style="padding: 8px; text-align: center;">Integral</td>
+                            <td style="padding: 8px; text-align: right; font-weight: bold;">R$ ${benefitsVal.toFixed(2)}</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
                         </tr>` : ''}
-                        <tr style="font-weight: bold; background-color: #f9f9f9;">
-                            <td style="padding: 15px 10px;">TOTAIS</td>
-                            <td style="text-align: right; padding: 15px 10px;">R$ ${(record.baseSalary + (record.benefits || 0)).toFixed(2)}</td>
-                            <td style="text-align: right; padding: 15px 10px;">R$ ${(record.discounts || 0).toFixed(2)}</td>
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 8px; text-align: center; font-mono;">901</td>
+                            <td style="padding: 8px;">INSS (Tabela Progressiva Oficial)</td>
+                            <td style="padding: 8px; text-align: center;">CLT</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
+                            <td style="padding: 8px; text-align: right; color: #dc2626; font-weight: bold;">R$ ${(inssVal || (totalDiscounts * 0.4)).toFixed(2)}</td>
+                        </tr>
+                        ${irrfVal > 0 ? `
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 8px; text-align: center; font-mono;">902</td>
+                            <td style="padding: 8px;">IRRF Retido na Fonte</td>
+                            <td style="padding: 8px; text-align: center;">CLT</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
+                            <td style="padding: 8px; text-align: right; color: #dc2626; font-weight: bold;">R$ ${irrfVal.toFixed(2)}</td>
+                        </tr>` : ''}
+                        ${advancesVal > 0 ? `
+                        <tr style="border-bottom: 1px solid #e2e8f0; background: #fff1f2;">
+                            <td style="padding: 8px; text-align: center; font-mono;">905</td>
+                            <td style="padding: 8px;">Adiantamento / Antecipação Salarial Quitado</td>
+                            <td style="padding: 8px; text-align: center;">Adiant.</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
+                            <td style="padding: 8px; text-align: right; color: #dc2626; font-weight: bold;">R$ ${advancesVal.toFixed(2)}</td>
+                        </tr>` : ''}
+                        ${delaysVal > 0 ? `
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 8px; text-align: center; font-mono;">915</td>
+                            <td style="padding: 8px;">Desconto Atrasos / Faltas Não Justificadas</td>
+                            <td style="padding: 8px; text-align: center;">${calc?.delayHours || 0}h</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
+                            <td style="padding: 8px; text-align: right; color: #dc2626; font-weight: bold;">R$ ${delaysVal.toFixed(2)}</td>
+                        </tr>` : ''}
+                        ${transportVal > 0 ? `
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 8px; text-align: center; font-mono;">920</td>
+                            <td style="padding: 8px;">Desconto Vale Transporte (CLT 6%)</td>
+                            <td style="padding: 8px; text-align: center;">6%</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
+                            <td style="padding: 8px; text-align: right; color: #dc2626;">R$ ${transportVal.toFixed(2)}</td>
+                        </tr>` : ''}
+                        <tr style="font-weight: bold; background-color: #f1f5f9; border-top: 2px solid #334155;">
+                            <td colspan="3" style="padding: 10px; text-align: right; text-transform: uppercase;">TOTAIS BRUTOS:</td>
+                            <td style="padding: 10px; text-align: right; color: #0f766e;">R$ ${totalEarnings.toFixed(2)}</td>
+                            <td style="padding: 10px; text-align: right; color: #b91c1c;">R$ ${totalDiscounts.toFixed(2)}</td>
                         </tr>
                     </tbody>
                 </table>
 
-                <div style="background: #eee; padding: 15px; border-radius: 8px; text-align: right; margin-bottom: 60px;">
-                    <span style="font-weight: bold; font-size: 18px;">LÍQUIDO A RECEBER: R$ ${record.totalNet.toFixed(2)}</span>
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 2px solid #0d9488; padding: 14px 20px; border-radius: 8px; margin-bottom: 25px;">
+                    <div style="font-size: 11px; line-height: 1.6;">
+                        <div><strong>Base Cálc. INSS:</strong> R$ ${(calc?.baseINSS || baseSalary).toFixed(2)}</div>
+                        <div><strong>Base Cálc. FGTS:</strong> R$ ${(calc?.baseINSS || baseSalary).toFixed(2)} • <strong>FGTS Mês (8%):</strong> R$ ${(calc?.fgts || baseSalary * 0.08).toFixed(2)}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="font-size: 10px; font-weight: bold; color: #64748b; text-transform: uppercase; display: block;">Valor Líquido a Receber</span>
+                        <span style="font-size: 22px; font-weight: 900; color: #0d9488;">R$ ${netSalary.toFixed(2)}</span>
+                    </div>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; gap: 40px;">
+                <div style="font-size: 10px; line-height: 1.5; color: #64748b; border: 1px dashed #cbd5e1; padding: 10px; border-radius: 6px; margin-bottom: 40px;">
+                    Declaro ter recebido a importância líquida discriminada neste recibo, referente aos serviços prestados na competência indicada, dando plena e irrevogável quitação.
+                </div>
+
+                <div style="display: flex; justify-content: space-between; gap: 60px; margin-top: 30px;">
                     <div style="flex: 1; text-align: center;">
-                        <div style="border-bottom: 1px solid #000; height: 1px; margin-bottom: 10px;"></div>
-                        <p style="font-size: 10px;">${companyName}</p>
+                        <div style="border-bottom: 1px solid #475569; margin-bottom: 6px;"></div>
+                        <p style="font-size: 10px; margin: 0; font-weight: bold;">${companyName}</p>
+                        <p style="font-size: 9px; margin: 0; color: #64748b;">Empregador</p>
                     </div>
                     <div style="flex: 1; text-align: center;">
-                        <div style="border-bottom: 1px solid #000; height: 1px; margin-bottom: 10px;"></div>
-                        <p style="font-size: 10px;">${record.employeeName}</p>
+                        <div style="border-bottom: 1px solid #475569; margin-bottom: 6px;"></div>
+                        <p style="font-size: 10px; margin: 0; font-weight: bold;">${record.employeeName}</p>
+                        <p style="font-size: 9px; margin: 0; color: #64748b;">Assinatura do Colaborador • Data: ___/___/______</p>
                     </div>
                 </div>
-                
-                <p style="text-align: center; margin-top: 40px; font-size: 10px; color: #999;">Documento gerado eletronicamente em ${new Date().toLocaleDateString()}</p>
             </div>
         `;
 
-        const printWindow = window.open('', '', 'height=600,width=800');
+        const printWindow = window.open('', '', 'height=750,width=900');
         if (printWindow) {
-            printWindow.document.write('<html><head><title>Recibo de Pagamento</title></head><body>');
+            printWindow.document.write('<html><head><title>Holerite - ' + record.employeeName + '</title></head><body>');
             printWindow.document.write(html);
             printWindow.document.write('</body></html>');
             printWindow.document.close();
             printWindow.print();
+        }
+    };
+
+    // Impressão Oficial do Espelho de Ponto (Portaria MTE nº 671/2021)
+    const handlePrintEspelhoPonto = (emp: Employee, monthStr: string, daysData: any[], totals: any) => {
+        const companyName = settings?.companyName || "INFRACORE ERP CONSTRUTORA LTDA";
+        const companyDoc = settings?.document || "00.000.000/0001-90";
+        const companyAddress = settings?.address || "Av. Paulista, 1000 - São Paulo/SP";
+
+        const html = `
+            <div style="font-family: Arial, sans-serif; padding: 25px; border: 2px solid #0f172a; max-width: 900px; margin: 0 auto; color: #0f172a; font-size: 10px;">
+                <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 15px;">
+                    <h2 style="margin: 0; font-size: 16px; text-transform: uppercase; font-weight: 900;">${companyName}</h2>
+                    <p style="margin: 3px 0;">CNPJ: ${companyDoc} • ${companyAddress}</p>
+                    <h3 style="margin: 6px 0 0; font-size: 13px; text-transform: uppercase; background: #e2e8f0; padding: 4px; border-radius: 4px;">
+                        Espelho de Ponto Eletrônico (Portaria MTE Nº 671/2021 - Art. 74 CLT)
+                    </h3>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; background: #f8fafc; padding: 10px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #cbd5e1;">
+                    <div><strong>Empregado:</strong> ${emp.name}</div>
+                    <div><strong>Cargo:</strong> ${emp.role}</div>
+                    <div><strong>Departamento:</strong> ${emp.department}</div>
+                    <div><strong>Matrícula:</strong> ${emp.id}</div>
+                    <div><strong>Admissão:</strong> ${emp.admissionDate || 'N/D'}</div>
+                    <div><strong>Competência:</strong> ${monthStr}</div>
+                    <div><strong>Jornada Padrão:</strong> 44h semanais (8h/dia)</div>
+                    <div><strong>Regime:</strong> CLT Mensalista</div>
+                    <div><strong>Emissão:</strong> ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>
+                </div>
+
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 9px; text-align: center;">
+                    <thead>
+                        <tr style="background-color: #0f172a; color: #fff;">
+                            <th style="padding: 5px; border: 1px solid #0f172a;">Data / Dia</th>
+                            <th style="padding: 5px; border: 1px solid #0f172a;">1ª Entrada</th>
+                            <th style="padding: 5px; border: 1px solid #0f172a;">1ª Saída</th>
+                            <th style="padding: 5px; border: 1px solid #0f172a;">2ª Entrada</th>
+                            <th style="padding: 5px; border: 1px solid #0f172a;">2ª Saída</th>
+                            <th style="padding: 5px; border: 1px solid #0f172a;">Realizado</th>
+                            <th style="padding: 5px; border: 1px solid #0f172a;">Previsto</th>
+                            <th style="padding: 5px; border: 1px solid #0f172a;">Saldo</th>
+                            <th style="padding: 5px; border: 1px solid #0f172a;">Ocorrência</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${daysData.map(d => `
+                            <tr style="background: ${d.isWeekend ? '#f1f5f9' : '#fff'}; border-bottom: 1px solid #e2e8f0;">
+                                <td style="padding: 4px; border: 1px solid #cbd5e1; font-weight: bold;">${d.dateStr} (${d.weekday})</td>
+                                <td style="padding: 4px; border: 1px solid #cbd5e1;">${d.checkIn || '-'}</td>
+                                <td style="padding: 4px; border: 1px solid #cbd5e1;">${d.lunchStart || '-'}</td>
+                                <td style="padding: 4px; border: 1px solid #cbd5e1;">${d.lunchEnd || '-'}</td>
+                                <td style="padding: 4px; border: 1px solid #cbd5e1;">${d.checkOut || '-'}</td>
+                                <td style="padding: 4px; border: 1px solid #cbd5e1; font-weight: bold;">${d.workedStr}</td>
+                                <td style="padding: 4px; border: 1px solid #cbd5e1;">${d.expectedStr}</td>
+                                <td style="padding: 4px; border: 1px solid #cbd5e1; font-weight: bold; color: ${d.deltaMin > 0 ? '#16a34a' : d.deltaMin < 0 ? '#dc2626' : '#64748b'};">
+                                    ${d.deltaStr}
+                                </td>
+                                <td style="padding: 4px; border: 1px solid #cbd5e1; font-size: 8px;">${d.occurrence}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+
+                <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; background: #f8fafc; padding: 10px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #0f172a; text-align: center;">
+                    <div><span style="font-size: 8px; text-transform: uppercase; color: #64748b;">Horas Previstas:</span><br/><strong>${totals.expectedStr}</strong></div>
+                    <div><span style="font-size: 8px; text-transform: uppercase; color: #64748b;">Horas Trabalhadas:</span><br/><strong style="color: #0f172a;">${totals.workedStr}</strong></div>
+                    <div><span style="font-size: 8px; text-transform: uppercase; color: #16a34a;">Horas Extras (50%):</span><br/><strong style="color: #16a34a;">+${totals.overtimeStr}</strong></div>
+                    <div><span style="font-size: 8px; text-transform: uppercase; color: #dc2626;">Atrasos / Faltas:</span><br/><strong style="color: #dc2626;">-${totals.delayStr}</strong></div>
+                    <div><span style="font-size: 8px; text-transform: uppercase; color: #0284c7;">Saldo Banco de Horas:</span><br/><strong style="color: #0284c7;">${totals.balanceStr}</strong></div>
+                </div>
+
+                <div style="font-size: 9px; line-height: 1.4; color: #475569; border: 1px dashed #94a3b8; padding: 8px; border-radius: 4px; margin-bottom: 35px;">
+                    Reconheço a exatidão das marcações, horários e intervalos consignados neste espelho de ponto, correspondendo à expressão da verdade em cumprimento ao Art. 74 da Consolidação das Leis do Trabalho e Portaria MTE 671/2021.
+                </div>
+
+                <div style="display: flex; justify-content: space-between; gap: 60px;">
+                    <div style="flex: 1; text-align: center;">
+                        <div style="border-bottom: 1px solid #000; margin-bottom: 4px;"></div>
+                        <p style="font-size: 9px; margin: 0; font-weight: bold;">${companyName}</p>
+                        <p style="font-size: 8px; margin: 0; color: #64748b;">Assinatura do Empregador / Recursos Humanos</p>
+                    </div>
+                    <div style="flex: 1; text-align: center;">
+                        <div style="border-bottom: 1px solid #000; margin-bottom: 4px;"></div>
+                        <p style="font-size: 9px; margin: 0; font-weight: bold;">${emp.name}</p>
+                        <p style="font-size: 8px; margin: 0; color: #64748b;">Assinatura do Colaborador • Data: ___/___/______</p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const printWin = window.open('', '', 'height=800,width=1000');
+        if (printWin) {
+            printWin.document.write('<html><head><title>Espelho de Ponto - ' + emp.name + '</title></head><body>');
+            printWin.document.write(html);
+            printWin.document.write('</body></html>');
+            printWin.document.close();
+            printWin.print();
         }
     };
 
@@ -827,133 +1427,346 @@ const HR = () => {
                                 </div>
 
                                 <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-8 rounded-3xl shadow-2xl text-white">
-                                    <h3 className="text-2xl font-black mb-6 flex items-center gap-2"><DollarSign className="text-emerald-400" /> Resumo</h3>
-                                    <div className="space-y-6">
-                                        <div className="p-4 bg-white/5 rounded-2xl">
-                                            <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Total Provisão Mensal</p>
-                                            <p className="text-3xl font-black text-emerald-400">{formatCurrency(employees.reduce((acc, e) => acc + e.salary * 1.5, 0))}</p>
-                                            <p className="text-[10px] text-slate-500 font-bold mt-1">Incluindo encargos patronais</p>
+                                    <h3 className="text-2xl font-black mb-6 flex items-center gap-2"><DollarSign className="text-emerald-400" /> Resumo Provisão Folha</h3>
+                                    <div className="space-y-4">
+                                        <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Custo Total Empresa (Competência Atual)</p>
+                                            <p className="text-3xl font-black text-emerald-400">{formatCurrency(payrollSummary.totalCompanyCost)}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold mt-1">Salários + HE + DSR + Encargos + Provisões</p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3 text-xs">
+                                            <div className="p-3 bg-white/5 rounded-xl">
+                                                <span className="text-[10px] text-slate-400 uppercase block font-bold">Salários Base</span>
+                                                <span className="font-bold text-white">{formatCurrency(payrollSummary.totalBase)}</span>
+                                            </div>
+                                            <div className="p-3 bg-white/5 rounded-xl">
+                                                <span className="text-[10px] text-emerald-400 uppercase block font-bold">Horas Extras + DSR</span>
+                                                <span className="font-bold text-emerald-300">+{formatCurrency(payrollSummary.totalOvertime)}</span>
+                                            </div>
+                                            <div className="p-3 bg-white/5 rounded-xl">
+                                                <span className="text-[10px] text-cyan-400 uppercase block font-bold">Líquido a Pagar</span>
+                                                <span className="font-bold text-cyan-300">{formatCurrency(payrollSummary.totalNet)}</span>
+                                            </div>
+                                            <div className="p-3 bg-white/5 rounded-xl">
+                                                <span className="text-[10px] text-amber-400 uppercase block font-bold">FGTS (8%)</span>
+                                                <span className="font-bold text-amber-300">{formatCurrency(payrollSummary.totalFGTS)}</span>
+                                            </div>
+                                            <div className="p-3 bg-white/5 rounded-xl">
+                                                <span className="text-[10px] text-rose-400 uppercase block font-bold">INSS Patronal (28.8%)</span>
+                                                <span className="font-bold text-rose-300">{formatCurrency(payrollSummary.totalINSSPatronal)}</span>
+                                            </div>
+                                            <div className="p-3 bg-white/5 rounded-xl">
+                                                <span className="text-[10px] text-purple-400 uppercase block font-bold">Provisão 13º / Férias</span>
+                                                <span className="font-bold text-purple-300">{formatCurrency(payrollSummary.totalProvisao13Ferias)}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         )}
 
-                        {/* Time Clock Tab (Reformulated) */}
+                        {/* Time Clock Tab (Espelho de Ponto & Kiosk) */}
                         {activeTab === 'time' && (
-                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                                {/* Kiosk Panel */}
-                                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col">
-                                    <div className="p-6 border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-center">
-                                        <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-2">Relógio de Ponto</h3>
-                                        <p className="text-xs font-bold text-slate-400 uppercase">Selecione o método de identificação</p>
-                                    </div>
-
-                                    <div className="flex border-b dark:border-slate-700">
+                            <div className="space-y-6">
+                                {/* Subtab navigation between Espelho de Ponto and Kiosk */}
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                    <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-2xl">
                                         <button
-                                            onClick={() => setClockMethod('pin')}
-                                            className={`flex-1 py-4 text-xs font-black uppercase tracking-widest transition-colors ${clockMethod === 'pin' ? 'bg-white dark:bg-slate-800 text-cyan-600 border-b-2 border-cyan-600' : 'bg-slate-50 dark:bg-slate-900 text-slate-400'}`}
+                                            onClick={() => setTimeViewMode('timesheet')}
+                                            className={`px-5 py-2.5 text-xs font-black rounded-xl transition-all uppercase flex items-center gap-2 ${timeViewMode === 'timesheet' ? 'bg-white dark:bg-slate-800 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                                         >
-                                            Senha / PIN
+                                            <Calendar size={16} /> Espelho de Ponto (Portaria 671)
                                         </button>
                                         <button
-                                            onClick={() => setClockMethod('bio')}
-                                            className={`flex-1 py-4 text-xs font-black uppercase tracking-widest transition-colors ${clockMethod === 'bio' ? 'bg-white dark:bg-slate-800 text-cyan-600 border-b-2 border-cyan-600' : 'bg-slate-50 dark:bg-slate-900 text-slate-400'}`}
+                                            onClick={() => setTimeViewMode('kiosk')}
+                                            className={`px-5 py-2.5 text-xs font-black rounded-xl transition-all uppercase flex items-center gap-2 ${timeViewMode === 'kiosk' ? 'bg-white dark:bg-slate-800 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                                         >
-                                            Biometria (Serial)
+                                            <Fingerprint size={16} /> Relógio Kiosk / Registro
                                         </button>
                                     </div>
+                                    {timeViewMode === 'timesheet' && (
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <select
+                                                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white"
+                                                value={selectedEspelhoEmpId || (currentEspelhoEmp?.id || '')}
+                                                onChange={(e) => setSelectedEspelhoEmpId(e.target.value)}
+                                            >
+                                                {employees.map(emp => (
+                                                    <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>
+                                                ))}
+                                            </select>
+                                            <input
+                                                type="month"
+                                                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white"
+                                                value={selectedEspelhoMonth}
+                                                onChange={(e) => setSelectedEspelhoMonth(e.target.value)}
+                                            />
+                                            <button
+                                                onClick={() => {
+                                                    setManualTimeForm({
+                                                        employeeId: currentEspelhoEmp?.id || '',
+                                                        date: new Date().toISOString().split('T')[0],
+                                                        checkIn: '08:00',
+                                                        lunchStart: '12:00',
+                                                        lunchEnd: '13:00',
+                                                        checkOut: '17:00',
+                                                        reason: 'Ajuste operacional de marcação'
+                                                    });
+                                                    setIsManualTimeModalOpen(true);
+                                                }}
+                                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl uppercase flex items-center gap-1.5 shadow-sm transition-all"
+                                            >
+                                                <Plus size={15} /> Ajuste Manual
+                                            </button>
+                                            {currentEspelhoEmp && (
+                                                <button
+                                                    onClick={() => handlePrintEspelhoPonto(currentEspelhoEmp, selectedEspelhoMonth, espelhoData.daysData, espelhoData.totals)}
+                                                    className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-black text-xs rounded-xl uppercase flex items-center gap-1.5 shadow-sm transition-all"
+                                                >
+                                                    <Printer size={15} /> Imprimir Espelho Oficial
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
 
-                                    <div className="p-8 flex-1 flex flex-col justify-center">
-                                        {clockMethod === 'pin' ? (
-                                            <div className="space-y-6 max-w-sm mx-auto w-full">
+                                {timeViewMode === 'timesheet' && (
+                                    <>
+                                        {/* Espelho KPI Totals */}
+                                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                            <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Horas Previstas</span>
+                                                <p className="text-xl font-black text-slate-800 dark:text-white">{espelhoData.totals.expectedStr}</p>
+                                                <span className="text-[10px] text-slate-400">Jornada 44h semanais</span>
+                                            </div>
+                                            <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Horas Trabalhadas</span>
+                                                <p className="text-xl font-black text-slate-900 dark:text-white">{espelhoData.totals.workedStr}</p>
+                                                <span className="text-[10px] text-slate-400">Total realizado</span>
+                                            </div>
+                                            <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block mb-1">Horas Extras (+)</span>
+                                                <p className="text-xl font-black text-emerald-600">+{espelhoData.totals.overtimeStr}</p>
+                                                <span className="text-[10px] text-emerald-600/70">Adicional 50%</span>
+                                            </div>
+                                            <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                                <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest block mb-1">Atrasos / Faltas (-)</span>
+                                                <p className="text-xl font-black text-rose-500">-{espelhoData.totals.delayStr}</p>
+                                                <span className="text-[10px] text-rose-500/70">Horas a debitar</span>
+                                            </div>
+                                            <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm col-span-2 md:col-span-1">
+                                                <span className="text-[10px] font-black text-cyan-600 uppercase tracking-widest block mb-1">Saldo Banco</span>
+                                                <p className={`text-xl font-black ${espelhoData.totals.balanceMins >= 0 ? 'text-cyan-600' : 'text-rose-600'}`}>{espelhoData.totals.balanceStr}</p>
+                                                <span className="text-[10px] text-cyan-600/70">Compensação mensal</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Espelho Table */}
+                                        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+                                            <div className="p-4 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/30">
                                                 <div>
-                                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Colaborador</label>
-                                                    <select
-                                                        className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                                                        value={clockEmpId}
-                                                        onChange={e => setClockEmpId(e.target.value)}
-                                                    >
-                                                        <option value="">Selecione seu nome...</option>
-                                                        {employees.filter(e => e.status === 'Ativo').map(e => (
-                                                            <option key={e.id} value={e.id}>{e.name}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Senha / PIN</label>
-                                                    <input
-                                                        type="password"
-                                                        className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-center text-2xl tracking-widest"
-                                                        placeholder="••••"
-                                                        value={clockPass}
-                                                        onChange={e => setClockPass(e.target.value)}
-                                                    />
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-4 pt-4">
-                                                    <button
-                                                        onClick={() => handlePinClock('In')}
-                                                        className="py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase shadow-lg shadow-emerald-600/20 hover:scale-105 transition-transform"
-                                                    >
-                                                        Entrada
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handlePinClock('Out')}
-                                                        className="py-4 bg-rose-600 text-white rounded-2xl font-black uppercase shadow-lg shadow-rose-600/20 hover:scale-105 transition-transform"
-                                                    >
-                                                        Saída
-                                                    </button>
+                                                    <h4 className="font-black text-sm text-slate-800 dark:text-white uppercase tracking-tight">
+                                                        Espelho Mensal • {currentEspelhoEmp ? currentEspelhoEmp.name : 'Nenhum colaborador'} ({selectedEspelhoMonth})
+                                                    </h4>
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                                                        Conformidade Art. 74 CLT & Portaria MTE 671/2021
+                                                    </p>
                                                 </div>
                                             </div>
-                                        ) : (
-                                            <div className="text-center space-y-8">
-                                                <div className={`w-32 h-32 mx-auto rounded-full border-4 flex items-center justify-center transition-all ${isBioScanning ? 'border-cyan-400 bg-cyan-50 animate-pulse' : 'border-slate-100 bg-slate-50'}`}>
-                                                    <Fingerprint size={64} className={isBioScanning ? 'text-cyan-600' : 'text-slate-300'} />
-                                                </div>
-                                                <div>
-                                                    <h4 className="font-black text-slate-900 dark:text-white uppercase mb-2">Leitor Biométrico (COM3)</h4>
-                                                    <p className="text-sm text-slate-500">{isBioScanning ? 'Lendo impressão digital...' : 'Posicione o dedo no leitor'}</p>
-                                                </div>
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-xs text-left">
+                                                    <thead className="bg-slate-50 dark:bg-slate-900 text-[10px] font-black text-slate-400 uppercase border-b dark:border-slate-700">
+                                                        <tr>
+                                                            <th className="px-4 py-3">Data / Dia</th>
+                                                            <th className="px-4 py-3 text-center">1ª Entrada</th>
+                                                            <th className="px-4 py-3 text-center">Intervalo Intrajornada</th>
+                                                            <th className="px-4 py-3 text-center">2ª Saída</th>
+                                                            <th className="px-4 py-3 text-center">Realizado</th>
+                                                            <th className="px-4 py-3 text-center">Previsto</th>
+                                                            <th className="px-4 py-3 text-center">Saldo Diário</th>
+                                                            <th className="px-4 py-3">Ocorrência</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y dark:divide-slate-700">
+                                                        {espelhoData.daysData.map((d) => (
+                                                            <tr key={d.day} className={`hover:bg-slate-50/80 dark:hover:bg-cyan-900/10 transition-colors ${d.isWeekend ? 'bg-slate-50/40 dark:bg-slate-900/30' : ''}`}>
+                                                                <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-[11px] ${d.isWeekend ? 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' : 'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300'}`}>
+                                                                            {d.day}
+                                                                        </span>
+                                                                        <div>
+                                                                            <span className="block font-black">{d.weekday}</span>
+                                                                            <span className="text-[10px] text-slate-400">{d.dateStr}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center font-mono font-bold text-slate-700 dark:text-slate-300">
+                                                                    {d.checkIn || '—'}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center font-mono text-slate-600 dark:text-slate-400">
+                                                                    {d.lunchStart && d.lunchEnd ? `${d.lunchStart} - ${d.lunchEnd}` : (d.checkIn && d.checkOut ? '12:00 - 13:00' : '—')}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center font-mono font-bold text-slate-700 dark:text-slate-300">
+                                                                    {d.checkOut || '—'}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center font-black text-slate-900 dark:text-white">
+                                                                    {d.workedStr}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center text-slate-400 font-bold">
+                                                                    {d.expectedStr}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center font-black">
+                                                                    <span className={`px-2 py-0.5 rounded-md text-[10px] ${
+                                                                        d.deltaMin > 0
+                                                                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                                                            : d.deltaMin < 0 && !d.isWeekend && !d.onVacation
+                                                                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
+                                                                            : 'text-slate-400'
+                                                                    }`}>
+                                                                        {d.deltaStr}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-4 py-3">
+                                                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide ${
+                                                                        d.onVacation
+                                                                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                                                                            : d.isWeekend
+                                                                            ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                                                            : d.deltaMin > 0
+                                                                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                                                            : d.workedMins === 0
+                                                                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
+                                                                            : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                                                    }`}>
+                                                                        {d.occurrence}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {timeViewMode === 'kiosk' && (
+                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                                        {/* Kiosk Panel */}
+                                        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col">
+                                            <div className="p-6 border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-center">
+                                                <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-2">Relógio de Ponto</h3>
+                                                <p className="text-xs font-bold text-slate-400 uppercase">Selecione o método de identificação</p>
+                                            </div>
+
+                                            <div className="flex border-b dark:border-slate-700">
                                                 <button
-                                                    onClick={handleBioSimulation}
-                                                    disabled={isBioScanning}
-                                                    className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold uppercase text-xs tracking-widest disabled:opacity-50"
+                                                    onClick={() => setClockMethod('pin')}
+                                                    className={`flex-1 py-4 text-xs font-black uppercase tracking-widest transition-colors ${clockMethod === 'pin' ? 'bg-white dark:bg-slate-800 text-cyan-600 border-b-2 border-cyan-600' : 'bg-slate-50 dark:bg-slate-900 text-slate-400'}`}
                                                 >
-                                                    {isBioScanning ? 'Processando...' : 'Iniciar Leitura Manual'}
+                                                    Senha / PIN
+                                                </button>
+                                                <button
+                                                    onClick={() => setClockMethod('bio')}
+                                                    className={`flex-1 py-4 text-xs font-black uppercase tracking-widest transition-colors ${clockMethod === 'bio' ? 'bg-white dark:bg-slate-800 text-cyan-600 border-b-2 border-cyan-600' : 'bg-slate-50 dark:bg-slate-900 text-slate-400'}`}
+                                                >
+                                                    Biometria (Serial)
                                                 </button>
                                             </div>
-                                        )}
-                                    </div>
-                                </div>
 
-                                {/* Recent Logs (Existing) */}
-                                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
-                                    <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50">
-                                        <div className="flex items-center gap-3">
-                                            <Timer className="text-cyan-600" />
-                                            <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase">Últimos Registros</h3>
+                                            <div className="p-8 flex-1 flex flex-col justify-center">
+                                                {clockMethod === 'pin' ? (
+                                                    <div className="space-y-6 max-w-sm mx-auto w-full">
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Colaborador</label>
+                                                            <select
+                                                                className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
+                                                                value={clockEmpId}
+                                                                onChange={e => setClockEmpId(e.target.value)}
+                                                            >
+                                                                <option value="">Selecione seu nome...</option>
+                                                                {employees.filter(e => e.status === 'Ativo').map(e => (
+                                                                    <option key={e.id} value={e.id}>{e.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Senha / PIN</label>
+                                                            <input
+                                                                type="password"
+                                                                className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-center text-2xl tracking-widest"
+                                                                placeholder="••••"
+                                                                value={clockPass}
+                                                                onChange={e => setClockPass(e.target.value)}
+                                                            />
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-4 pt-4">
+                                                            <button
+                                                                onClick={() => handlePinClock('In')}
+                                                                className="py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase shadow-lg shadow-emerald-600/20 hover:scale-105 transition-transform"
+                                                            >
+                                                                Entrada
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handlePinClock('Out')}
+                                                                className="py-4 bg-rose-600 text-white rounded-2xl font-black uppercase shadow-lg shadow-rose-600/20 hover:scale-105 transition-transform"
+                                                            >
+                                                                Saída
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-center space-y-8">
+                                                        <div className={`w-32 h-32 mx-auto rounded-full border-4 flex items-center justify-center transition-all ${isBioScanning ? 'border-cyan-400 bg-cyan-50 animate-pulse' : 'border-slate-100 bg-slate-50'}`}>
+                                                            <Fingerprint size={64} className={isBioScanning ? 'text-cyan-600' : 'text-slate-300'} />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="font-black text-slate-900 dark:text-white uppercase mb-2">Leitor Biométrico (COM3)</h4>
+                                                            <p className="text-sm text-slate-500">{isBioScanning ? 'Lendo impressão digital...' : 'Posicione o dedo no leitor'}</p>
+                                                        </div>
+                                                        <button
+                                                            onClick={handleBioSimulation}
+                                                            disabled={isBioScanning}
+                                                            className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold uppercase text-xs tracking-widest disabled:opacity-50"
+                                                        >
+                                                            {isBioScanning ? 'Processando...' : 'Iniciar Leitura Manual'}
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Recent Logs (Existing) */}
+                                        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
+                                            <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50">
+                                                <div className="flex items-center gap-3">
+                                                    <Timer className="text-cyan-600" />
+                                                    <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase">Últimos Registros</h3>
+                                                </div>
+                                            </div>
+                                            <div className="flex-1 p-6 space-y-4 overflow-y-auto max-h-[500px]">
+                                                {timeLogs.map(log => (
+                                                    <div key={log.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-transparent hover:border-cyan-100 transition-all">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className={`w-12 h-12 rounded-xl shadow-sm flex items-center justify-center font-black ${log.status === 'Saída' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                                                {log.status === 'Saída' ? <StopCircle size={24} /> : <Play size={24} />}
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-bold text-sm text-slate-800 dark:text-white">{employees.find(e => e.id === log.employeeId)?.name || 'Colaborador'}</p>
+                                                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">{log.date} • {log.checkIn || log.checkOut}</p>
+                                                            </div>
+                                                        </div>
+                                                        <span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase ${log.status === 'Saída' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>{log.status === 'Presente' ? 'Entrada' : log.status}</span>
+                                                    </div>
+                                                ))}
+                                                {timeLogs.length === 0 && (
+                                                    <p className="text-center text-slate-400 py-10 italic font-medium uppercase text-xs tracking-widest">Nenhum registro hoje.</p>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="flex-1 p-6 space-y-4 overflow-y-auto max-h-[500px]">
-                                        {timeLogs.map(log => (
-                                            <div key={log.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-transparent hover:border-cyan-100 transition-all">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`w-12 h-12 rounded-xl shadow-sm flex items-center justify-center font-black ${log.status === 'Saída' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                                                        {log.status === 'Saída' ? <StopCircle size={24} /> : <Play size={24} />}
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-bold text-sm text-slate-800 dark:text-white">{employees.find(e => e.id === log.employeeId)?.name || 'Colaborador'}</p>
-                                                        <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">{log.date} • {log.checkIn || log.checkOut}</p>
-                                                    </div>
-                                                </div>
-                                                <span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase ${log.status === 'Saída' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>{log.status === 'Presente' ? 'Entrada' : log.status}</span>
-                                            </div>
-                                        ))}
-                                        {timeLogs.length === 0 && (
-                                            <p className="text-center text-slate-400 py-10 italic font-medium uppercase text-xs tracking-widest">Nenhum registro hoje.</p>
-                                        )}
-                                    </div>
-                                </div>
+                                )}
                             </div>
                         )}
 
@@ -1149,6 +1962,106 @@ const HR = () => {
 
                                         <button onClick={handleGeneratePayroll} className="w-full py-4 bg-emerald-600 text-white font-black rounded-2xl shadow-lg uppercase tracking-widest text-xs hover:bg-emerald-500 transition-all">Confirmar Geração</button>
                                     </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Manual Time Adjustment Modal (Portaria MTE 671) */}
+                        {isManualTimeModalOpen && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg border dark:border-slate-700 animate-in zoom-in duration-200">
+                                    <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center">
+                                        <div>
+                                            <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Marcação / Ajuste Manual de Ponto</h3>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Portaria MTE nº 671/2021</p>
+                                        </div>
+                                        <button onClick={() => setIsManualTimeModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+                                    </div>
+                                    <form onSubmit={handleSaveManualTime} className="p-6 space-y-4">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Colaborador</label>
+                                            <select
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-3 font-bold text-sm"
+                                                value={manualTimeForm.employeeId}
+                                                onChange={e => setManualTimeForm({ ...manualTimeForm, employeeId: e.target.value })}
+                                                required
+                                            >
+                                                <option value="">Selecione...</option>
+                                                {employees.filter(e => e.status === 'Ativo').map(emp => (
+                                                    <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Data do Ponto</label>
+                                            <input
+                                                type="date"
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-3 font-bold text-sm"
+                                                value={manualTimeForm.date}
+                                                onChange={e => setManualTimeForm({ ...manualTimeForm, date: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">1ª Entrada</label>
+                                                <input
+                                                    type="time"
+                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2 px-2 font-bold text-sm text-center"
+                                                    value={manualTimeForm.checkIn}
+                                                    onChange={e => setManualTimeForm({ ...manualTimeForm, checkIn: e.target.value })}
+                                                    required
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Início Intervalo</label>
+                                                <input
+                                                    type="time"
+                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2 px-2 font-bold text-sm text-center"
+                                                    value={manualTimeForm.lunchStart}
+                                                    onChange={e => setManualTimeForm({ ...manualTimeForm, lunchStart: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Fim Intervalo</label>
+                                                <input
+                                                    type="time"
+                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2 px-2 font-bold text-sm text-center"
+                                                    value={manualTimeForm.lunchEnd}
+                                                    onChange={e => setManualTimeForm({ ...manualTimeForm, lunchEnd: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">2ª Saída</label>
+                                                <input
+                                                    type="time"
+                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2 px-2 font-bold text-sm text-center"
+                                                    value={manualTimeForm.checkOut}
+                                                    onChange={e => setManualTimeForm({ ...manualTimeForm, checkOut: e.target.value })}
+                                                    required
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Motivo / Justificativa Legal (Obrigatório)</label>
+                                            <input
+                                                type="text"
+                                                placeholder="Ex: Esquecimento de crachá, serviço externo, autorização prévia"
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-3 font-bold text-sm"
+                                                value={manualTimeForm.reason}
+                                                onChange={e => setManualTimeForm({ ...manualTimeForm, reason: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="pt-2">
+                                            <button
+                                                type="submit"
+                                                className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black rounded-2xl shadow-lg uppercase tracking-widest text-xs transition-all"
+                                            >
+                                                Gravar Ajuste no Ponto
+                                            </button>
+                                        </div>
+                                    </form>
                                 </div>
                             </div>
                         )}

@@ -1,5 +1,15 @@
+export interface PermissionItem {
+    id: string;
+    name: string;
+    description: string;
+}
 
-export const APP_PERMISSIONS = [
+export interface PermissionCategory {
+    category: string;
+    permissions: PermissionItem[];
+}
+
+export const APP_PERMISSIONS: PermissionCategory[] = [
     {
         category: 'Vendas & CRM', // Sales
         permissions: [
@@ -13,6 +23,9 @@ export const APP_PERMISSIONS = [
             { id: 'clients.edit', name: 'Editar Clientes', description: 'Alterar dados cadastrais de clientes' },
             { id: 'clients.delete', name: 'Excluir Clientes', description: 'Remover clientes da base' },
             { id: 'clients.financial', name: 'Dados Financeiros (Cliente)', description: 'Ver/Editar crédito e prazos' },
+            { id: 'clients.manage', name: 'Gestão Completa de Clientes', description: 'Acesso unificado a visualização, criação e alteração' },
+            { id: 'sales.view.sales', name: 'Visualizar Vendas (Compatibilidade)', description: 'Identificador compatível para consulta comercial' },
+            { id: 'sales.create.sales', name: 'Criar Vendas (Compatibilidade)', description: 'Identificador compatível para lançamento de pedidos' }
         ]
     },
     {
@@ -27,6 +40,10 @@ export const APP_PERMISSIONS = [
             { id: 'finance.manage_accounts', name: 'Gerir Contas Bancárias', description: 'Cadastrar bancos e caixas' },
             { id: 'finance.manage_plan', name: 'Gerir Plano de Contas', description: 'Criar/Editar categorias financeiras' },
             { id: 'finance.reports', name: 'Relatórios Financeiros', description: 'DRE, Fluxo de Caixa e Extratos' },
+            { id: 'finance.delete_transaction', name: 'Excluir Transações', description: 'Remover lançamentos e contas do fluxo financeiro' },
+            { id: 'finance.admin', name: 'Administração Financeira', description: 'Acesso pleno a configurações bancárias e operações críticas' },
+            { id: 'finance.reconcile', name: 'Conciliação e Baixas', description: 'Compatibilidade com conciliação bancária' },
+            { id: 'finance.transact', name: 'Operações de Caixa', description: 'Compatibilidade com movimentações de receitas/despesas' }
         ]
     },
     {
@@ -49,6 +66,7 @@ export const APP_PERMISSIONS = [
             { id: 'inventory.edit', name: 'Editar Produtos', description: 'Alterar dados de itens existentes' },
             { id: 'inventory.adjust', name: 'Ajuste Manual', description: 'Lançar perdas, sobras ou correções' },
             { id: 'inventory.history', name: 'Ver Histórico', description: 'Auditar movimentações de estoque' },
+            { id: 'inventory.manage', name: 'Gestão Geral de Estoque', description: 'Cadastrar, alterar e ajustar saldos' },
         ]
     },
     {
@@ -81,6 +99,9 @@ export const APP_PERMISSIONS = [
             { id: 'hr.time', name: 'Controle de Ponto', description: 'Gerir registros de jornada' },
             { id: 'hr.vacations', name: 'Gestão de Férias', description: 'Agendar e aprovar férias' },
             { id: 'hr.advances', name: 'Vales & Adiantamentos', description: 'Gerir solicitações financeiras' },
+            { id: 'hr.manage_employees', name: 'Gestão de Colaboradores', description: 'Administração geral do quadro de funcionários' },
+            { id: 'employees.view', name: 'Visualizar Funcionários (Legado)', description: 'Compatibilidade com visualização de RH' },
+            { id: 'employees.manage', name: 'Gerir Funcionários (Legado)', description: 'Compatibilidade com gestão de RH' },
         ]
     },
     {
@@ -110,3 +131,35 @@ export const APP_PERMISSIONS = [
         ]
     }
 ];
+
+export const ALL_PERMISSIONS_FLAT: PermissionItem[] = APP_PERMISSIONS.flatMap(cat => cat.permissions);
+
+export const PERMISSION_MAP: Record<string, PermissionItem> = ALL_PERMISSIONS_FLAT.reduce((acc, item) => {
+    acc[item.id] = item;
+    return acc;
+}, {} as Record<string, PermissionItem>);
+
+export const PERMISSION_ALIAS_MAP: Record<string, string[]> = {
+    'sales.view': ['sales.view.sales'],
+    'sales.view.sales': ['sales.view'],
+    'sales.create': ['sales.create.sales'],
+    'sales.create.sales': ['sales.create'],
+    'clients.manage': ['clients.view', 'clients.create', 'clients.edit'],
+    'employees.view': ['hr.view'],
+    'employees.manage': ['hr.manage', 'hr.payroll'],
+    'hr.manage_employees': ['hr.manage'],
+    'inventory.manage': ['inventory.create', 'inventory.edit', 'inventory.adjust'],
+    'finance.view': ['finance.dashboard', 'finance.view_transactions'],
+    'finance.reconcile': ['finance.approve', 'finance.edit_transaction'],
+    'finance.transact': ['finance.add_revenue', 'finance.add_expense'],
+    'finance.delete': ['finance.manage_accounts', 'finance.edit_transaction', 'finance.delete_transaction'],
+    'finance.delete_transaction': ['finance.edit_transaction', 'finance.approve', 'finance.delete'],
+    'finance.admin': ['finance.dashboard', 'finance.view_transactions', 'finance.add_revenue', 'finance.add_expense', 'finance.edit_transaction', 'finance.approve', 'finance.manage_accounts', 'finance.manage_plan', 'finance.reports', 'finance.delete_transaction']
+};
+
+export const getPermissionLabel = (id: string): string => PERMISSION_MAP[id]?.name || id;
+
+export const isValidPermission = (id: string): boolean => {
+    if (id === 'all' || id === '*') return true;
+    return id in PERMISSION_MAP || id in PERMISSION_ALIAS_MAP;
+};
