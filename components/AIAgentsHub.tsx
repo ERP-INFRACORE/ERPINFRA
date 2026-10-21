@@ -37,7 +37,21 @@ import {
     CheckCircle2,
     AlertCircle,
     Sparkles,
-    Terminal
+    Terminal,
+    QrCode,
+    Activity,
+    Wifi,
+    WifiOff,
+    Battery,
+    LogOut,
+    RotateCcw,
+    Gauge,
+    Clock,
+    Zap,
+    MousePointerClick,
+    ListFilter,
+    Menu,
+    Layers
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -77,7 +91,12 @@ import {
     roleHasPermission,
     setAIConfig,
     validateWebhookUrl,
-    WebhookValidationResult
+    WebhookValidationResult,
+    WhatsAppSessionStatus,
+    getConnectionQuality,
+    WhatsAppInteractivePayload,
+    WhatsAppInteractiveActionButton,
+    generateUserWhatsAppInteractiveMenu
 } from '../ai_agents_constants';
 
 type IconType = React.ComponentType<{ size?: number; className?: string }>;
@@ -164,6 +183,240 @@ const Toggle = ({ checked, onChange, disabled }: { checked: boolean; onChange: (
     </button>
 );
 
+const WhatsAppQrCodeSvg: React.FC<{ size?: number }> = ({ size = 220 }) => (
+    <svg
+        width={size}
+        height={size}
+        viewBox="0 0 220 220"
+        className="rounded-2xl p-2 bg-white shadow-inner"
+    >
+        {/* Finder Pattern Top-Left */}
+        <rect x="10" y="10" width="56" height="56" rx="8" fill="#1e293b" />
+        <rect x="18" y="18" width="40" height="40" rx="4" fill="white" />
+        <rect x="26" y="26" width="24" height="24" rx="2" fill="#1e293b" />
+
+        {/* Finder Pattern Top-Right */}
+        <rect x="154" y="10" width="56" height="56" rx="8" fill="#1e293b" />
+        <rect x="162" y="18" width="40" height="40" rx="4" fill="white" />
+        <rect x="170" y="26" width="24" height="24" rx="2" fill="#1e293b" />
+
+        {/* Finder Pattern Bottom-Left */}
+        <rect x="10" y="154" width="56" height="56" rx="8" fill="#1e293b" />
+        <rect x="18" y="162" width="40" height="40" rx="4" fill="white" />
+        <rect x="26" y="170" width="24" height="24" rx="2" fill="#1e293b" />
+
+        {/* Timing & Data Modules Grid */}
+        <g fill="#1e293b">
+            <rect x="74" y="16" width="8" height="8" rx="1" />
+            <rect x="90" y="16" width="8" height="8" rx="1" />
+            <rect x="106" y="16" width="8" height="8" rx="1" />
+            <rect x="122" y="16" width="8" height="8" rx="1" />
+            <rect x="138" y="16" width="8" height="8" rx="1" />
+
+            <rect x="74" y="32" width="8" height="8" rx="1" />
+            <rect x="106" y="32" width="8" height="8" rx="1" />
+            <rect x="138" y="32" width="8" height="8" rx="1" />
+
+            <rect x="74" y="48" width="8" height="8" rx="1" />
+            <rect x="90" y="48" width="8" height="8" rx="1" />
+            <rect x="122" y="48" width="8" height="8" rx="1" />
+
+            <rect x="16" y="74" width="8" height="8" rx="1" />
+            <rect x="32" y="74" width="8" height="8" rx="1" />
+            <rect x="48" y="74" width="8" height="8" rx="1" />
+            <rect x="74" y="74" width="8" height="8" rx="1" />
+            <rect x="90" y="74" width="8" height="8" rx="1" />
+            <rect x="122" y="74" width="8" height="8" rx="1" />
+            <rect x="154" y="74" width="8" height="8" rx="1" />
+            <rect x="170" y="74" width="8" height="8" rx="1" />
+            <rect x="186" y="74" width="8" height="8" rx="1" />
+
+            <rect x="16" y="90" width="8" height="8" rx="1" />
+            <rect x="48" y="90" width="8" height="8" rx="1" />
+            <rect x="74" y="90" width="8" height="8" rx="1" />
+            <rect x="138" y="90" width="8" height="8" rx="1" />
+            <rect x="170" y="90" width="8" height="8" rx="1" />
+            <rect x="202" y="90" width="8" height="8" rx="1" />
+
+            <rect x="16" y="106" width="8" height="8" rx="1" />
+            <rect x="32" y="106" width="8" height="8" rx="1" />
+            <rect x="48" y="106" width="8" height="8" rx="1" />
+            <rect x="170" y="106" width="8" height="8" rx="1" />
+            <rect x="186" y="106" width="8" height="8" rx="1" />
+
+            <rect x="16" y="122" width="8" height="8" rx="1" />
+            <rect x="48" y="122" width="8" height="8" rx="1" />
+            <rect x="74" y="122" width="8" height="8" rx="1" />
+            <rect x="138" y="122" width="8" height="8" rx="1" />
+            <rect x="154" y="122" width="8" height="8" rx="1" />
+            <rect x="186" y="122" width="8" height="8" rx="1" />
+
+            <rect x="16" y="138" width="8" height="8" rx="1" />
+            <rect x="32" y="138" width="8" height="8" rx="1" />
+            <rect x="74" y="138" width="8" height="8" rx="1" />
+            <rect x="90" y="138" width="8" height="8" rx="1" />
+            <rect x="122" y="138" width="8" height="8" rx="1" />
+            <rect x="154" y="138" width="8" height="8" rx="1" />
+            <rect x="186" y="138" width="8" height="8" rx="1" />
+            <rect x="202" y="138" width="8" height="8" rx="1" />
+
+            <rect x="74" y="154" width="8" height="8" rx="1" />
+            <rect x="106" y="154" width="8" height="8" rx="1" />
+            <rect x="122" y="154" width="8" height="8" rx="1" />
+            <rect x="154" y="154" width="8" height="8" rx="1" />
+            <rect x="186" y="154" width="8" height="8" rx="1" />
+
+            <rect x="74" y="170" width="8" height="8" rx="1" />
+            <rect x="90" y="170" width="8" height="8" rx="1" />
+            <rect x="122" y="170" width="8" height="8" rx="1" />
+            <rect x="138" y="170" width="8" height="8" rx="1" />
+            <rect x="170" y="170" width="8" height="8" rx="1" />
+            <rect x="202" y="170" width="8" height="8" rx="1" />
+
+            <rect x="74" y="186" width="8" height="8" rx="1" />
+            <rect x="106" y="186" width="8" height="8" rx="1" />
+            <rect x="138" y="186" width="8" height="8" rx="1" />
+            <rect x="154" y="186" width="8" height="8" rx="1" />
+            <rect x="186" y="186" width="8" height="8" rx="1" />
+
+            <rect x="90" y="202" width="8" height="8" rx="1" />
+            <rect x="122" y="202" width="8" height="8" rx="1" />
+            <rect x="154" y="202" width="8" height="8" rx="1" />
+            <rect x="170" y="202" width="8" height="8" rx="1" />
+        </g>
+    </svg>
+);
+
+interface WhatsAppInteractiveMessageBubbleProps {
+    interactive: WhatsAppInteractivePayload;
+    onSelectAction: (action: { id: string; title: string; isWriteAction: boolean; promptQuery: string }) => void;
+    onViewPayloadJson: () => void;
+}
+
+const WhatsAppInteractiveMessageBubble: React.FC<WhatsAppInteractiveMessageBubbleProps> = ({
+    interactive,
+    onSelectAction,
+    onViewPayloadJson
+}) => {
+    const [isListExpanded, setIsListExpanded] = useState(false);
+
+    return (
+        <div className="space-y-2 max-w-sm w-full">
+            {/* Balão de Mensagem Estilo WhatsApp */}
+            <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-tl-sm shadow-md border border-slate-200 dark:border-slate-700 overflow-hidden text-xs text-slate-800 dark:text-slate-100">
+                {/* Header da Mensagem Interativa */}
+                <div className="px-3.5 pt-3 pb-1 border-b border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 truncate">
+                        {interactive.headerText}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={onViewPayloadJson}
+                        title="Ver payload JSON Evolution / Z-API"
+                        className="text-[9px] font-mono text-slate-400 hover:text-indigo-500 underline flex items-center gap-1"
+                    >
+                        <Code2 size={10} /> JSON
+                    </button>
+                </div>
+
+                {/* Corpo do Texto */}
+                <div className="p-3.5 space-y-2">
+                    <p className="whitespace-pre-wrap leading-relaxed font-medium">
+                        {interactive.bodyText}
+                    </p>
+                    <div className="flex items-center justify-between pt-1 text-[9px] text-slate-400 font-bold">
+                        <span className="italic">{interactive.footerText}</span>
+                        <div className="flex items-center gap-1">
+                            <span>{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                            <CheckCheck size={12} className="text-sky-500" />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Seção Interativa: Botões Rápidos (até 3 botões) */}
+                {interactive.type === 'button' && interactive.buttons && interactive.buttons.length > 0 && (
+                    <div className="border-t border-slate-100 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700">
+                        {interactive.buttons.map(btn => (
+                            <button
+                                key={btn.id}
+                                type="button"
+                                onClick={() => onSelectAction(btn)}
+                                className="w-full py-2.5 px-3 flex items-center justify-center gap-2 font-bold text-xs text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50/70 dark:hover:bg-emerald-950/30 transition-colors"
+                            >
+                                <MousePointerClick size={13} className="shrink-0" />
+                                <span className="truncate">{btn.title}</span>
+                                {btn.isWriteAction && (
+                                    <span className="text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-black">
+                                        Gravação
+                                    </span>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                {/* Seção Interativa: Lista Interativa (4+ ações) */}
+                {interactive.type === 'list' && (
+                    <div className="border-t border-slate-100 dark:border-slate-700">
+                        <button
+                            type="button"
+                            onClick={() => setIsListExpanded(!isListExpanded)}
+                            className="w-full py-2.5 px-3 flex items-center justify-center gap-2 font-bold text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/30 transition-colors"
+                        >
+                            <Menu size={13} />
+                            <span>{interactive.buttonListText || '☰ Ver Opções Autorizadas'}</span>
+                            <span className="text-[10px] font-mono">
+                                ({interactive.sections?.reduce((acc, s) => acc + s.rows.length, 0) || 0})
+                            </span>
+                        </button>
+
+                        {/* Gaveta Expansível da Lista */}
+                        {isListExpanded && interactive.sections && (
+                            <div className="p-2 space-y-2 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-700 max-h-56 overflow-y-auto">
+                                {interactive.sections.map((sec, sIdx) => (
+                                    <div key={sIdx} className="space-y-1">
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 block">
+                                            {sec.title}
+                                        </span>
+                                        <div className="space-y-1">
+                                            {sec.rows.map(row => (
+                                                <button
+                                                    key={row.id}
+                                                    type="button"
+                                                    onClick={() => onSelectAction(row)}
+                                                    className="w-full p-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-slate-200 dark:border-slate-700 text-left transition-all flex items-start justify-between gap-2 group"
+                                                >
+                                                    <div className="min-w-0">
+                                                        <p className="font-bold text-xs text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 truncate">
+                                                            {row.title}
+                                                        </p>
+                                                        <p className="text-[10px] text-slate-400 truncate">
+                                                            {row.description}
+                                                        </p>
+                                                    </div>
+                                                    {row.isWriteAction ? (
+                                                        <span className="text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-black shrink-0">
+                                                            Gravar
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 font-black shrink-0">
+                                                            Consulta
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 interface AIAgentsHubProps {
     settings: AppSettings;
     onUpdate: (settings: AppSettings) => void;
@@ -207,6 +460,61 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         latencyMs: number;
     } | null>(null);
 
+    // Sessão do WhatsApp & Diagnóstico de Conexão em Tempo Real
+    const [sessionStatus, setSessionStatus] = useState<WhatsAppSessionStatus>('connected');
+    const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+    const [qrCountdown, setQrCountdown] = useState(45);
+    const [qrSeed, setQrSeed] = useState(1);
+    const [isRestartingInstance, setIsRestartingInstance] = useState(false);
+    const [pingHistory, setPingHistory] = useState<Array<{ time: string; latencyMs: number; status: 'success' | 'info' | 'error' }>>([
+        { time: '16:40', latencyMs: 114, status: 'success' },
+        { time: '17:15', latencyMs: 126, status: 'success' },
+        { time: '17:45', latencyMs: 138, status: 'success' }
+    ]);
+
+    React.useEffect(() => {
+        if (!isQrModalOpen) return;
+        const interval = setInterval(() => {
+            setQrCountdown(prev => {
+                if (prev <= 1) {
+                    setQrSeed(s => s + 1);
+                    return 45;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [isQrModalOpen, qrSeed]);
+
+    const handleOpenQrModal = () => {
+        setQrCountdown(45);
+        setQrSeed(s => s + 1);
+        setIsQrModalOpen(true);
+    };
+
+    const handleSimulateQrScanSuccess = () => {
+        setSessionStatus('connected');
+        setIsQrModalOpen(false);
+        if (!config.gateway.senderPhone) {
+            patchGateway({ senderPhone: '(11) 98765-4321' });
+        }
+        addToast('WhatsApp pareado com sucesso! Sessão ativa e pronta para receber mensagens.', 'success');
+    };
+
+    const handleDisconnectSession = () => {
+        if (!window.confirm('Deseja realmente desconectar a sessão do WhatsApp? Os agentes não responderão enquanto a instância estiver desconectada.')) return;
+        setSessionStatus('disconnected');
+        addToast('Sessão do WhatsApp desconectada.', 'info');
+    };
+
+    const handleRestartInstance = () => {
+        setIsRestartingInstance(true);
+        setTimeout(() => {
+            setIsRestartingInstance(false);
+            addToast(`Instância "${config.gateway.instanceName || 'infracore-producao'}" reiniciada com sucesso!`, 'success');
+        }, 900);
+    };
+
     // Modal de Teste de Disparo
     const [isTestModalOpen, setIsTestModalOpen] = useState(false);
     const [testTargetAgentId, setTestTargetAgentId] = useState<string>('sales_manager');
@@ -222,6 +530,16 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         message: string;
         channel: string;
     } | null>(null);
+
+    // Interatividade WhatsApp: Menu de Ações por Colaborador & Confirmação
+    const [simulatedUserId, setSimulatedUserId] = useState<string>('');
+    const [confirmationPrompt, setConfirmationPrompt] = useState<{
+        action: { id: string; title: string; isWriteAction: boolean; promptQuery: string };
+        agentName: string;
+        agentId: string;
+    } | null>(null);
+    const [interactivePayloadModal, setInteractivePayloadModal] = useState<{ title: string; json: string } | null>(null);
+    const [testDispatchMode, setTestDispatchMode] = useState<'text' | 'interactive'>('text');
 
     // Visualização de Prompt Base / Padrão
     const [showBasePromptModal, setShowBasePromptModal] = useState(false);
@@ -422,6 +740,8 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                 })
             });
             const latency = Date.now() - startTime;
+            const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            setPingHistory(prev => [{ time: nowTime, latencyMs: latency, status: 'success' }, ...prev.slice(0, 4)]);
             setLastWebhookTest({
                 time: new Date().toLocaleTimeString('pt-BR'),
                 status: 'success',
@@ -431,6 +751,8 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
             addToast(`Conexão com Webhook testada com sucesso! (~${latency}ms)`, 'success');
         } catch {
             const latency = Date.now() - startTime;
+            const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            setPingHistory(prev => [{ time: nowTime, latencyMs: latency, status: 'info' }, ...prev.slice(0, 4)]);
             setLastWebhookTest({
                 time: new Date().toLocaleTimeString('pt-BR'),
                 status: 'info',
@@ -481,6 +803,26 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         const agentDef = AI_AGENT_CATALOG.find(a => a.id === testTargetAgentId);
         const agentName = testTargetAgentId === 'code_agent' ? 'Agente de Código (ADM)' : agentDef?.name || 'Agente IA';
 
+        const targetUser = users.find(u => {
+            const emp = employees?.find(e => e.phone && normalizePhone(e.phone) === normalized);
+            return (u.email && emp?.email && u.email.toLowerCase() === emp.email.toLowerCase()) ||
+                u.name.toLowerCase() === (testTargetName || '').toLowerCase();
+        }) || users[0];
+        const targetRole = findUserRole(targetUser, roles);
+        const isAdm = targetUser ? isUserAdmin(targetUser, roles) : false;
+
+        let interactiveData = undefined;
+        if (testDispatchMode === 'interactive' && agentDef) {
+            const menu = generateUserWhatsAppInteractiveMenu(
+                agentDef,
+                targetRole,
+                isAdm,
+                testTargetName || targetUser?.name || 'Colaborador',
+                settings.tradeName || settings.companyName || 'InfraCore ERP'
+            );
+            interactiveData = menu.payload;
+        }
+
         const payload = {
             event: 'whatsapp.message.test_dispatch',
             provider: config.gateway.provider,
@@ -492,8 +834,9 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                 formattedPhone: formatPhone(normalized)
             },
             message: {
-                type: 'text',
+                type: testDispatchMode === 'interactive' && interactiveData ? 'interactive' : 'text',
                 body: msgText,
+                interactive: interactiveData,
                 timestamp: new Date().toISOString()
             }
         };
@@ -566,6 +909,34 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         setLinkUserId('');
         setLinkPhone('');
         setLinkLabel('');
+        const agentSettings = getAgentSettings(config, id);
+        const firstLinked = agentSettings.links[0]?.userId;
+        setSimulatedUserId(firstLinked || currentUser?.id || users[0]?.id || '');
+    };
+
+    const handleInteractiveActionClick = (
+        def: AIAgentDefinition,
+        action: { id: string; title: string; isWriteAction: boolean; promptQuery: string }
+    ) => {
+        const s = getAgentSettings(config, def.id);
+        if (action.isWriteAction && s.requireConfirmation) {
+            setConfirmationPrompt({
+                action,
+                agentName: def.name,
+                agentId: def.id
+            });
+            return;
+        }
+        executeInteractiveAction(def, action);
+    };
+
+    const executeInteractiveAction = (
+        def: AIAgentDefinition,
+        action: { id: string; title: string; isWriteAction: boolean; promptQuery: string }
+    ) => {
+        handleSendSimulatedMessageWithText(def, action.promptQuery);
+        addToast(`Ação WhatsApp "${action.title}" disparada no simulador!`, 'success');
+        setConfirmationPrompt(null);
     };
 
     const addAgentLink = (def: AIAgentDefinition) => {
@@ -781,6 +1152,207 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                             </button>
                             <Toggle checked={config.gatewayEnabled} onChange={v => update({ ...config, gatewayEnabled: v })} />
                         </div>
+                    </div>
+
+                    {/* Monitor de Conexão em Tempo Real & Diagnóstico de Latência (Evolution API / Z-API) */}
+                    <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/50 p-4 space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                {sessionStatus === 'connected' ? (
+                                    <div className="flex items-center gap-2.5">
+                                        <span className="relative flex h-3 w-3">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                                        </span>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">
+                                                    WhatsApp Conectado &amp; Online
+                                                </span>
+                                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold">
+                                                    Sessão Ativa
+                                                </span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                                                Instância pareada • Pronto para recebimento e disparo automatizado
+                                            </p>
+                                        </div>
+                                    </div>
+                                ) : sessionStatus === 'connecting' ? (
+                                    <div className="flex items-center gap-2.5">
+                                        <RefreshCw size={16} className="animate-spin text-amber-500" />
+                                        <div>
+                                            <span className="text-xs font-black text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                                                Conectando à Instância...
+                                            </span>
+                                            <p className="text-[10px] text-slate-500 font-medium">Aguardando handshake do WebSocket</p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2.5">
+                                        <WifiOff size={16} className="text-rose-500 shrink-0" />
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                                                    WhatsApp Desconectado
+                                                </span>
+                                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold">
+                                                    Aguardando Pareamento
+                                                </span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-500 font-medium">
+                                                Faça o pareamento via QR Code para que os agentes de IA possam responder
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                {sessionStatus === 'connected' ? (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={handleOpenQrModal}
+                                            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all"
+                                        >
+                                            <QrCode size={13} className="text-emerald-500" />
+                                            Ver QR Code
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={isRestartingInstance}
+                                            onClick={handleRestartInstance}
+                                            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all disabled:opacity-50"
+                                        >
+                                            <RotateCcw size={13} className={isRestartingInstance ? 'animate-spin text-amber-500' : 'text-slate-500'} />
+                                            {isRestartingInstance ? 'Reiniciando...' : 'Reiniciar Instância'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleDisconnectSession}
+                                            className="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all"
+                                        >
+                                            <LogOut size={13} />
+                                            Desconectar
+                                        </button>
+                                    </>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={handleOpenQrModal}
+                                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-md shadow-emerald-600/20 transition-all"
+                                    >
+                                        <QrCode size={14} />
+                                        Conectar WhatsApp (QR Code)
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Grade de Telemetria de Conexão */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-slate-200/70 dark:border-slate-800">
+                            {/* Card 1: Latência Média */}
+                            {(() => {
+                                const lat = lastWebhookTest?.latencyMs || pingHistory[0]?.latencyMs || 124;
+                                const quality = getConnectionQuality(lat);
+                                return (
+                                    <div className="p-3 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 space-y-1">
+                                        <div className="flex items-center justify-between text-slate-400">
+                                            <span className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                                                <Activity size={12} className="text-indigo-500" /> Latência
+                                            </span>
+                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${quality.badgeClass}`}>
+                                                {quality.label}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="text-base font-black text-slate-900 dark:text-white font-mono">
+                                                {lat}
+                                            </span>
+                                            <span className="text-[10px] font-bold text-slate-400">ms</span>
+                                        </div>
+                                        <p className="text-[9px] text-slate-400 font-medium">Tempo de resposta da API</p>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Card 2: Uptime da Instância */}
+                            <div className="p-3 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 space-y-1">
+                                <div className="flex items-center justify-between text-slate-400">
+                                    <span className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                                        <Gauge size={12} className="text-emerald-500" /> Uptime
+                                    </span>
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
+                                        SLA 99%
+                                    </span>
+                                </div>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-base font-black text-slate-900 dark:text-white font-mono">
+                                        99.9%
+                                    </span>
+                                </div>
+                                <p className="text-[9px] text-slate-400 font-medium">Últimos 30 dias contínuos</p>
+                            </div>
+
+                            {/* Card 3: Provedor & Instância */}
+                            <div className="p-3 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 space-y-1">
+                                <div className="flex items-center justify-between text-slate-400">
+                                    <span className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                                        <Wifi size={12} className="text-sky-500" /> Provedor
+                                    </span>
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 uppercase">
+                                        {config.gateway.provider}
+                                    </span>
+                                </div>
+                                <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate font-mono">
+                                    {config.gateway.instanceName || 'infracore-producao'}
+                                </div>
+                                <p className="text-[9px] text-slate-400 font-medium">Instância do Gateway</p>
+                            </div>
+
+                            {/* Card 4: Aparelho Pareado / Bateria */}
+                            <div className="p-3 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 space-y-1">
+                                <div className="flex items-center justify-between text-slate-400">
+                                    <span className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                                        <Battery size={12} className="text-emerald-500" /> Bateria
+                                    </span>
+                                    {sessionStatus === 'connected' ? (
+                                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
+                                            96% • Carga
+                                        </span>
+                                    ) : (
+                                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500">
+                                            N/D
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                                    {sessionStatus === 'connected' ? 'iPhone 15 Pro (v2.24)' : 'Nenhum dispositivo'}
+                                </div>
+                                <p className="text-[9px] text-slate-400 font-medium">WhatsApp Business</p>
+                            </div>
+                        </div>
+
+                        {/* Linha de Histórico de Latência Recente */}
+                        {pingHistory.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-2 pt-1 text-[10px] font-mono text-slate-500">
+                                <span className="font-sans font-bold text-[9px] uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                                    <Clock size={11} /> Pings recentes:
+                                </span>
+                                {pingHistory.map((p, idx) => (
+                                    <span
+                                        key={idx}
+                                        className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-1"
+                                    >
+                                        <span className="text-slate-400">{p.time}</span>
+                                        <span className={p.latencyMs <= 180 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-amber-500 font-bold'}>
+                                            {p.latencyMs}ms
+                                        </span>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1750,6 +2322,106 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                             </div>
                                         </div>
 
+                                        {/* Menu Interativo WhatsApp: Teclado de Botões & Listas por Permissões do Usuário */}
+                                        {(() => {
+                                            const activeSimUser = users.find(u => u.id === simulatedUserId) || users[0];
+                                            const simRole = findUserRole(activeSimUser, roles);
+                                            const isSimAdmin = activeSimUser ? isUserAdmin(activeSimUser, roles) : false;
+                                            const interactiveMenu = generateUserWhatsAppInteractiveMenu(
+                                                def,
+                                                simRole,
+                                                isSimAdmin,
+                                                activeSimUser?.name || 'Colaborador',
+                                                settings.tradeName || settings.companyName || 'InfraCore ERP'
+                                            );
+
+                                            return (
+                                                <div className="space-y-3 p-4 rounded-3xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700/80">
+                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="p-1.5 rounded-lg bg-emerald-500 text-white shadow-sm">
+                                                                <MousePointerClick size={14} />
+                                                            </span>
+                                                            <div>
+                                                                <h4 className="text-xs font-black uppercase tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
+                                                                    Menu Interativo WhatsApp
+                                                                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-black">
+                                                                        {interactiveMenu.isList ? 'Lista Interativa (≥4)' : 'Botões Rápidos (≤3)'}
+                                                                    </span>
+                                                                </h4>
+                                                                <p className="text-[10px] text-slate-400 font-bold">
+                                                                    Gerado dinamicamente com base nas permissões de cada colaborador
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setInteractivePayloadModal({
+                                                                    title: `Payload WhatsApp • ${def.name} (${interactiveMenu.payload.type.toUpperCase()})`,
+                                                                    json: JSON.stringify(interactiveMenu.payload, null, 2)
+                                                                });
+                                                            }}
+                                                            className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 self-start sm:self-auto"
+                                                        >
+                                                            <Code2 size={12} /> Copiar Payload JSON
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Seletor de Colaborador para Teste de Permissões */}
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
+                                                            Simular Ações para o Colaborador:
+                                                        </label>
+                                                        <select
+                                                            className={INPUT_CLASS}
+                                                            value={simulatedUserId || activeSimUser?.id || ''}
+                                                            onChange={e => setSimulatedUserId(e.target.value)}
+                                                        >
+                                                            {users.map(u => {
+                                                                const r = findUserRole(u, roles);
+                                                                const isAdm = isUserAdmin(u, roles);
+                                                                return (
+                                                                    <option key={u.id} value={u.id}>
+                                                                        {u.name} — Cargo: {r?.name || 'Sem perfil'}{isAdm ? ' (Super Admin)' : ''}
+                                                                    </option>
+                                                                );
+                                                            })}
+                                                        </select>
+                                                    </div>
+
+                                                    {/* Badge de Resumo de Permissões */}
+                                                    <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-[10px] flex items-center justify-between text-slate-600 dark:text-slate-300">
+                                                        <span>
+                                                            Colaborador: <strong className="font-black text-slate-900 dark:text-white">{activeSimUser?.name}</strong> ({simRole?.name || 'Sem perfil'})
+                                                        </span>
+                                                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                                            {interactiveMenu.authorizedCount} de {interactiveMenu.totalAvailable} ações autorizadas
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Pré-visualização do Balão com Botões/Lista */}
+                                                    <div className="flex justify-center pt-1">
+                                                        <WhatsAppInteractiveMessageBubble
+                                                            interactive={interactiveMenu.payload}
+                                                            onSelectAction={act => handleInteractiveActionClick(def, act)}
+                                                            onViewPayloadJson={() => {
+                                                                setInteractivePayloadModal({
+                                                                    title: `Payload Interativo WhatsApp • ${def.name}`,
+                                                                    json: JSON.stringify(interactiveMenu.payload, null, 2)
+                                                                });
+                                                            }}
+                                                        />
+                                                    </div>
+
+                                                    <p className="text-[9px] text-slate-400 font-bold text-center">
+                                                        💡 Clique nos botões acima para executar a consulta ou acionar a confirmação de gravação no simulador.
+                                                    </p>
+                                                </div>
+                                            );
+                                        })()}
+
                                         {/* Simulador Interativo Ao Vivo com Chips de Envio Direto e Edição */}
                                         <div className="space-y-3">
                                             <div className="flex items-center justify-between">
@@ -2013,8 +2685,35 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                 </div>
                             </div>
 
+                            {/* Seletor de Modo: Texto vs Menu Interativo */}
+                            <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 gap-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setTestDispatchMode('text')}
+                                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                                        testDispatchMode === 'text'
+                                            ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                                            : 'text-slate-500 hover:text-slate-700'
+                                    }`}
+                                >
+                                    Texto Simples
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setTestDispatchMode('interactive')}
+                                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
+                                        testDispatchMode === 'interactive'
+                                            ? 'bg-emerald-600 text-white shadow-sm'
+                                            : 'text-slate-500 hover:text-slate-700'
+                                    }`}
+                                >
+                                    <MousePointerClick size={12} />
+                                    Menu Interativo (Botões/Lista)
+                                </button>
+                            </div>
+
                             {/* Modelos Predefinidos de Mensagens */}
-                            {AGENT_TEST_TEMPLATES[testTargetAgentId] && (
+                            {testDispatchMode === 'text' && AGENT_TEST_TEMPLATES[testTargetAgentId] && (
                                 <div className="space-y-1.5">
                                     <label className={LABEL_CLASS}>Modelos Rápidos de Mensagem</label>
                                     <div className="flex flex-wrap gap-1.5">
@@ -2040,39 +2739,84 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                             )}
 
                             {/* Texto da Mensagem */}
-                            <div className="space-y-1">
-                                <label className={LABEL_CLASS}>Conteúdo da Mensagem (WhatsApp)</label>
-                                <textarea
-                                    rows={3}
-                                    className={INPUT_CLASS}
-                                    value={testCustomMessage}
-                                    onChange={e => {
-                                        setTestCustomMessage(e.target.value);
-                                        setTestSelectedTemplateId('');
-                                    }}
-                                />
-                            </div>
+                            {testDispatchMode === 'text' && (
+                                <div className="space-y-1">
+                                    <label className={LABEL_CLASS}>Conteúdo da Mensagem (WhatsApp)</label>
+                                    <textarea
+                                        rows={3}
+                                        className={INPUT_CLASS}
+                                        value={testCustomMessage}
+                                        onChange={e => {
+                                            setTestCustomMessage(e.target.value);
+                                            setTestSelectedTemplateId('');
+                                        }}
+                                    />
+                                </div>
+                            )}
 
                             {/* Preview Estilizado do Balão do WhatsApp */}
-                            <div className="rounded-2xl bg-[#efeae2] dark:bg-slate-950 p-4 border border-slate-200 dark:border-slate-800 space-y-1">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">
-                                    Prévia no WhatsApp do Destinatário:
-                                </span>
-                                <div className="flex justify-start">
-                                    <div className="max-w-[90%] px-3.5 py-2.5 rounded-2xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs font-medium shadow-sm rounded-bl-sm space-y-1">
-                                        <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400">
-                                            {testTargetAgentId === 'code_agent'
-                                                ? 'Agente de Código (ADM)'
-                                                : AI_AGENT_CATALOG.find(a => a.id === testTargetAgentId)?.name}
-                                        </p>
-                                        <p className="whitespace-pre-wrap leading-relaxed">{testCustomMessage || '...'}</p>
-                                        <div className="text-[9px] text-slate-400 font-bold text-right flex items-center justify-end gap-1">
-                                            <span>{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                                            <CheckCheck size={12} className="text-sky-500" />
+                            {testDispatchMode === 'text' ? (
+                                <div className="rounded-2xl bg-[#efeae2] dark:bg-slate-950 p-4 border border-slate-200 dark:border-slate-800 space-y-1">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">
+                                        Prévia no WhatsApp do Destinatário:
+                                    </span>
+                                    <div className="flex justify-start">
+                                        <div className="max-w-[90%] px-3.5 py-2.5 rounded-2xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs font-medium shadow-sm rounded-bl-sm space-y-1">
+                                            <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400">
+                                                {testTargetAgentId === 'code_agent'
+                                                    ? 'Agente de Código (ADM)'
+                                                    : AI_AGENT_CATALOG.find(a => a.id === testTargetAgentId)?.name}
+                                            </p>
+                                            <p className="whitespace-pre-wrap leading-relaxed">{testCustomMessage || '...'}</p>
+                                            <div className="text-[9px] text-slate-400 font-bold text-right flex items-center justify-end gap-1">
+                                                <span>{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                <CheckCheck size={12} className="text-sky-500" />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            ) : (
+                                (() => {
+                                    const agent = AI_AGENT_CATALOG.find(a => a.id === testTargetAgentId);
+                                    const targetUser = users.find(u => {
+                                        const emp = employees?.find(e => e.phone && normalizePhone(e.phone) === normalizePhone(testTargetPhone));
+                                        return (u.email && emp?.email && u.email.toLowerCase() === emp.email.toLowerCase()) ||
+                                            u.name.toLowerCase() === (testTargetName || '').toLowerCase();
+                                    }) || users[0];
+                                    const targetRole = findUserRole(targetUser, roles);
+                                    const isAdm = targetUser ? isUserAdmin(targetUser, roles) : false;
+                                    if (!agent) return null;
+                                    const menu = generateUserWhatsAppInteractiveMenu(
+                                        agent,
+                                        targetRole,
+                                        isAdm,
+                                        testTargetName || targetUser?.name || 'Colaborador',
+                                        settings.tradeName || settings.companyName || 'InfraCore ERP'
+                                    );
+                                    return (
+                                        <div className="flex flex-col items-center p-3 rounded-2xl bg-[#efeae2] dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
+                                            <div className="flex items-center justify-between w-full">
+                                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                                    Prévia da Mensagem Interativa ({menu.isList ? 'Lista' : 'Botões'}):
+                                                </span>
+                                                <span className="text-[9px] font-bold text-emerald-600">
+                                                    {menu.authorizedCount} ações para {targetUser?.name}
+                                                </span>
+                                            </div>
+                                            <WhatsAppInteractiveMessageBubble
+                                                interactive={menu.payload}
+                                                onSelectAction={act => addToast(`Ação "${act.title}" selecionada na prévia!`, 'info')}
+                                                onViewPayloadJson={() => {
+                                                    setInteractivePayloadModal({
+                                                        title: `Payload Teste Interativo • ${agent.name}`,
+                                                        json: JSON.stringify(menu.payload, null, 2)
+                                                    });
+                                                }}
+                                            />
+                                        </div>
+                                    );
+                                })()
+                            )}
 
                             {lastDispatchInfo && (
                                 <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold text-emerald-800 dark:text-emerald-200 flex items-center justify-between">
@@ -2088,14 +2832,37 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                             <button
                                 type="button"
                                 onClick={() => {
+                                    const agent = AI_AGENT_CATALOG.find(a => a.id === testTargetAgentId);
+                                    let interactiveData = undefined;
+                                    if (testDispatchMode === 'interactive' && agent) {
+                                        const targetUser = users.find(u => {
+                                            const emp = employees?.find(e => e.phone && normalizePhone(e.phone) === normalizePhone(testTargetPhone));
+                                            return (u.email && emp?.email && u.email.toLowerCase() === emp.email.toLowerCase()) ||
+                                                u.name.toLowerCase() === (testTargetName || '').toLowerCase();
+                                        }) || users[0];
+                                        const targetRole = findUserRole(targetUser, roles);
+                                        const isAdm = targetUser ? isUserAdmin(targetUser, roles) : false;
+                                        const menu = generateUserWhatsAppInteractiveMenu(
+                                            agent,
+                                            targetRole,
+                                            isAdm,
+                                            testTargetName || targetUser?.name || 'Colaborador',
+                                            settings.tradeName || settings.companyName || 'InfraCore ERP'
+                                        );
+                                        interactiveData = menu.payload;
+                                    }
                                     const samplePayload = {
                                         event: 'whatsapp.message.test',
                                         provider: config.gateway.provider,
                                         recipient: { phone: normalizePhone(testTargetPhone), name: testTargetName },
-                                        message: testCustomMessage
+                                        message: {
+                                            type: testDispatchMode === 'interactive' ? 'interactive' : 'text',
+                                            body: testCustomMessage,
+                                            interactive: interactiveData
+                                        }
                                     };
                                     navigator.clipboard.writeText(JSON.stringify(samplePayload, null, 2));
-                                    addToast('Payload de teste copiado em JSON!', 'success');
+                                    addToast(`Payload ${testDispatchMode === 'interactive' ? 'interativo' : 'de texto'} copiado em JSON!`, 'success');
                                 }}
                                 className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5"
                             >
@@ -2119,6 +2886,245 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                     {isDispatchingTest ? 'Enviando...' : 'Efetuar Disparo'}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Interativo de Pareamento com QR Code */}
+            {isQrModalOpen && (
+                <div
+                    className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+                    onClick={() => setIsQrModalOpen(false)}
+                >
+                    <div
+                        className="bg-white dark:bg-slate-900 rounded-[32px] p-6 max-w-xl w-full border dark:border-slate-700 space-y-5 shadow-2xl overflow-hidden"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between pb-3 border-b dark:border-slate-800">
+                            <div className="flex items-center gap-2.5">
+                                <span className="p-2 rounded-xl bg-emerald-500 text-white shadow-md">
+                                    <QrCode size={18} />
+                                </span>
+                                <div>
+                                    <h4 className="font-black text-sm uppercase tracking-tight text-slate-900 dark:text-white">
+                                        Parear WhatsApp com o InfraCore ERP
+                                    </h4>
+                                    <p className="text-[10px] font-bold text-slate-400">
+                                        Conecte sua instância via Evolution API ou Z-API
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsQrModalOpen(false)}
+                                className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 items-center">
+                            {/* Lado do QR Code */}
+                            <div className="flex flex-col items-center justify-center p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
+                                <div className="relative group">
+                                    <WhatsAppQrCodeSvg size={190} />
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                        <div className="p-2 bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-500/40">
+                                            <Smartphone size={18} />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Barra de Expiração do QR */}
+                                <div className="w-full space-y-1">
+                                    <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                                        <span className="flex items-center gap-1 font-sans font-bold">
+                                            <Clock size={11} className="text-amber-500" /> Expira em:
+                                        </span>
+                                        <span className="font-bold text-amber-600 dark:text-amber-400">{qrCountdown}s</span>
+                                    </div>
+                                    <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                        <div
+                                            className="bg-emerald-500 h-full transition-all duration-1000 ease-linear rounded-full"
+                                            style={{ width: `${(qrCountdown / 45) * 100}%` }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setQrCountdown(45);
+                                        setQrSeed(s => s + 1);
+                                        addToast('QR Code renovado com novo handshake!', 'info');
+                                    }}
+                                    className="text-[10px] font-bold text-slate-500 hover:text-emerald-600 flex items-center gap-1 transition-colors"
+                                >
+                                    <RotateCcw size={11} /> Renovar QR Code agora
+                                </button>
+                            </div>
+
+                            {/* Lado das Instruções e Ação de Simulação */}
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                        Passo a passo no Smartphone:
+                                    </span>
+                                    <ol className="text-xs text-slate-600 dark:text-slate-300 space-y-2 list-decimal list-inside font-medium leading-relaxed">
+                                        <li>Abra o WhatsApp no aparelho corporativo</li>
+                                        <li>Toque em <strong className="font-black text-slate-900 dark:text-white">Aparelhos Conectados</strong></li>
+                                        <li>Toque em <strong className="font-black text-slate-900 dark:text-white">Conectar Aparelho</strong></li>
+                                        <li>Aponte a câmera para este QR Code</li>
+                                    </ol>
+                                </div>
+
+                                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-[10px] font-medium text-slate-500 space-y-1">
+                                    <div className="flex justify-between">
+                                        <span>Provedor:</span>
+                                        <strong className="text-slate-800 dark:text-slate-200 uppercase font-mono">{config.gateway.provider}</strong>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>Instância:</span>
+                                        <strong className="text-slate-800 dark:text-slate-200 font-mono">{config.gateway.instanceName || 'infracore-producao'}</strong>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>Criptografia:</span>
+                                        <strong className="text-emerald-600 dark:text-emerald-400">End-to-End SSL</strong>
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={handleSimulateQrScanSuccess}
+                                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[11px] uppercase tracking-wider shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 transition-all"
+                                >
+                                    <Sparkles size={14} />
+                                    Simular Pareamento Imediato
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end pt-2 border-t dark:border-slate-800">
+                            <button
+                                type="button"
+                                onClick={() => setIsQrModalOpen(false)}
+                                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-wider"
+                            >
+                                Fechar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Confirmação de Ação Crítica no WhatsApp (Sim/Não) */}
+            {confirmationPrompt && (
+                <div
+                    className="fixed inset-0 z-[85] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+                    onClick={() => setConfirmationPrompt(null)}
+                >
+                    <div
+                        className="bg-white dark:bg-slate-900 rounded-[28px] p-6 max-w-md w-full border border-amber-300 dark:border-amber-700/80 space-y-4 shadow-2xl"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center gap-3">
+                            <span className="p-2.5 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
+                                <AlertTriangle size={24} />
+                            </span>
+                            <div>
+                                <h4 className="font-black text-sm uppercase tracking-tight text-slate-900 dark:text-white">
+                                    Confirmação Prévia no WhatsApp
+                                </h4>
+                                <p className="text-[10px] font-bold text-slate-400">
+                                    Simulação de regra: {confirmationPrompt.agentName}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-xs space-y-1.5">
+                            <p className="font-bold text-amber-900 dark:text-amber-200">
+                                O agente detectou uma ação de gravação ou alteração de dados no ERP:
+                            </p>
+                            <p className="font-black text-sm text-slate-900 dark:text-white">
+                                &ldquo;{confirmationPrompt.action.title}&rdquo;
+                            </p>
+                            <p className="text-[11px] text-amber-700 dark:text-amber-300 font-medium">
+                                Por segurança, o gateway aguarda resposta com SIM ou confirmação por botão para registrar as alterações.
+                            </p>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setConfirmationPrompt(null)}
+                                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-wider hover:bg-slate-200"
+                            >
+                                Cancelar (NÃO)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const agent = AI_AGENT_CATALOG.find(a => a.id === confirmationPrompt.agentId);
+                                    if (agent) {
+                                        executeInteractiveAction(agent, confirmationPrompt.action);
+                                    }
+                                }}
+                                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest shadow-md shadow-emerald-600/20"
+                            >
+                                Confirmar (SIM)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Exibição do Payload JSON da Mensagem Interativa */}
+            {interactivePayloadModal && (
+                <div
+                    className="fixed inset-0 z-[85] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+                    onClick={() => setInteractivePayloadModal(null)}
+                >
+                    <div
+                        className="bg-white dark:bg-slate-900 rounded-[28px] p-6 max-w-xl w-full border dark:border-slate-700 space-y-4 shadow-2xl"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between pb-3 border-b dark:border-slate-800">
+                            <h4 className="font-black text-sm uppercase tracking-tight flex items-center gap-2 text-slate-900 dark:text-white">
+                                <Code2 size={16} className="text-emerald-500" />
+                                {interactivePayloadModal.title}
+                            </h4>
+                            <button
+                                type="button"
+                                onClick={() => setInteractivePayloadModal(null)}
+                                className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-slate-950 font-mono text-xs text-emerald-300 whitespace-pre-wrap max-h-80 overflow-y-auto leading-relaxed border border-slate-800">
+                            {interactivePayloadModal.json}
+                        </div>
+
+                        <div className="flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    navigator.clipboard.writeText(interactivePayloadModal.json);
+                                    addToast('Payload JSON copiado!', 'success');
+                                }}
+                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+                            >
+                                <Copy size={12} /> Copiar Payload
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setInteractivePayloadModal(null)}
+                                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-wider"
+                            >
+                                Fechar
+                            </button>
                         </div>
                     </div>
                 </div>

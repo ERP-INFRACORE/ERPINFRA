@@ -822,6 +822,228 @@ export const validateWebhookUrl = (rawUrl: string): WebhookValidationResult => {
 };
 
 // ---------------------------------------------------------------------------
+// Sessão do WhatsApp e Diagnóstico de Conexão
+// ---------------------------------------------------------------------------
+
+export type WhatsAppSessionStatus = 'disconnected' | 'connecting' | 'qrcode' | 'connected';
+
+export interface GatewayPingResult {
+    timestamp: string;
+    latencyMs: number;
+    status: 'success' | 'warning' | 'error';
+    provider: string;
+    endpoint: string;
+    message: string;
+}
+
+export const getConnectionQuality = (latencyMs: number): { label: string; color: string; badgeClass: string } => {
+    if (latencyMs <= 180) {
+        return { label: 'Excelente', color: 'emerald', badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' };
+    }
+    if (latencyMs <= 380) {
+        return { label: 'Boa', color: 'sky', badgeClass: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' };
+    }
+    return { label: 'Instável', color: 'amber', badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' };
+};
+
+// ---------------------------------------------------------------------------
+// Mensagens Interativas do WhatsApp (Botões & Listas por Permissões do Usuário)
+// ---------------------------------------------------------------------------
+
+export interface WhatsAppInteractiveActionButton {
+    id: string;
+    title: string;
+    permission: string;
+    isWriteAction: boolean;
+    description?: string;
+    promptQuery: string;
+}
+
+export interface WhatsAppInteractivePayload {
+    type: 'button' | 'list';
+    headerText: string;
+    bodyText: string;
+    footerText: string;
+    buttonListText?: string;
+    buttons?: Array<{ id: string; title: string; isWriteAction: boolean; promptQuery: string }>;
+    sections?: Array<{
+        title: string;
+        rows: Array<{ id: string; title: string; description: string; isWriteAction: boolean; promptQuery: string }>;
+    }>;
+}
+
+/** Mapeamento de ações interativas amigáveis para cada capacidade dos agentes */
+export const getInteractiveActionForCapability = (
+    agentId: string,
+    capLabel: string,
+    permission: string,
+    capDesc: string
+): WhatsAppInteractiveActionButton => {
+    const isWrite = permission.includes('.create') ||
+        permission.includes('.approve') ||
+        permission.includes('.edit') ||
+        permission.includes('.adjust') ||
+        permission.includes('.delete') ||
+        capLabel.toLowerCase().includes('aprovar') ||
+        capLabel.toLowerCase().includes('cadastrar') ||
+        capLabel.toLowerCase().includes('registrar') ||
+        capLabel.toLowerCase().includes('solicitar');
+
+    // Título curto de até 20 caracteres para botões do WhatsApp
+    let shortTitle = capLabel;
+    if (capLabel.toLowerCase().includes('orçamento') && capLabel.toLowerCase().includes('consultar')) shortTitle = '📊 Orçamentos';
+    else if (capLabel.toLowerCase().includes('pré-venda') || capLabel.toLowerCase().includes('cadastrar')) shortTitle = '📝 Novo Orçamento';
+    else if (capLabel.toLowerCase().includes('crédito') || capLabel.toLowerCase().includes('clientes')) shortTitle = '👤 Limite Crédito';
+    else if (capLabel.toLowerCase().includes('desconto')) shortTitle = '⚡ Aprovar Desc.';
+    else if (capLabel.toLowerCase().includes('saldo') || capLabel.toLowerCase().includes('caixa')) shortTitle = '💰 Saldo Caixa';
+    else if (capLabel.toLowerCase().includes('despesa') || capLabel.toLowerCase().includes('comprovante')) shortTitle = '🧾 Lançar Despesa';
+    else if (capLabel.toLowerCase().includes('pagar')) shortTitle = '📅 Contas a Pagar';
+    else if (capLabel.toLowerCase().includes('estoque') && capLabel.toLowerCase().includes('posição')) shortTitle = '📦 Posição Estoque';
+    else if (capLabel.toLowerCase().includes('mínimo') || capLabel.toLowerCase().includes('crítico')) shortTitle = '⚠️ Estoque Crítico';
+    else if (capLabel.toLowerCase().includes('entrada') || capLabel.toLowerCase().includes('lote')) shortTitle = '📥 Registrar Entrada';
+    else if (capLabel.toLowerCase().includes('compra') || capLabel.toLowerCase().includes('cotação')) shortTitle = '🛒 Mapa Cotações';
+    else if (capLabel.toLowerCase().includes('produção') || capLabel.toLowerCase().includes('batelada')) shortTitle = '⚡ Ordens Produção';
+    else if (capLabel.toLowerCase().includes('ensaio') || capLabel.toLowerCase().includes('qualidade')) shortTitle = '🧪 Ver Laudos';
+    else if (capLabel.toLowerCase().includes('frota') || capLabel.toLowerCase().includes('veículo')) shortTitle = '🚛 Posição Frota';
+    else if (shortTitle.length > 20) shortTitle = shortTitle.slice(0, 19) + '…';
+
+    const promptQuery = isWrite
+        ? `Solicitar execução: ${capLabel}`
+        : `Consultar dados no ERP: ${capLabel}`;
+
+    const id = `act_${agentId}_${permission.replace(/[^a-z0-9]/gi, '_')}`;
+
+    return {
+        id,
+        title: shortTitle,
+        description: capDesc,
+        permission,
+        isWriteAction: isWrite,
+        promptQuery
+    };
+};
+
+/** Gera o payload interativo personalizado conforme as permissões do usuário */
+export const generateUserWhatsAppInteractiveMenu = (
+    agentDef: AIAgentDefinition,
+    userRole: AppRole | undefined,
+    isSuperAdmin: boolean,
+    userName: string = 'Colaborador',
+    companyName: string = 'InfraCore ERP'
+): {
+    payload: WhatsAppInteractivePayload;
+    totalAvailable: number;
+    authorizedCount: number;
+    isList: boolean;
+} => {
+    const allActions = agentDef.capabilities.map(cap =>
+        getInteractiveActionForCapability(agentDef.id, cap.label, cap.permission, cap.description)
+    );
+
+    const authorizedActions = allActions.filter(act =>
+        isSuperAdmin || roleHasPermission(userRole, act.permission)
+    );
+
+    const totalAvailable = allActions.length;
+    const authorizedCount = authorizedActions.length;
+    const isList = authorizedCount >= 4;
+
+    const headerText = `${companyName} • ${agentDef.name}`;
+    const bodyText = authorizedCount > 0
+        ? `👋 Olá, ${userName}! Sou o ${agentDef.name}. Selecione uma ação autorizada abaixo:`
+        : `⚠️ Olá, ${userName}. Seu perfil (${userRole?.name || 'Sem perfil'}) não possui permissões liberadas para o ${agentDef.name}.`;
+
+    const footerText = 'InfraCore Gateway Oficial • WhatsApp';
+
+    if (authorizedCount === 0) {
+        return {
+            payload: {
+                type: 'button',
+                headerText,
+                bodyText,
+                footerText,
+                buttons: [
+                    {
+                        id: `help_${agentDef.id}`,
+                        title: '❓ Solicitar Acesso',
+                        isWriteAction: false,
+                        promptQuery: `Solicitar acesso às funções do ${agentDef.name} para a administração.`
+                    }
+                ]
+            },
+            totalAvailable,
+            authorizedCount,
+            isList: false
+        };
+    }
+
+    if (!isList) {
+        // Até 3 ações: Formato Botões Rápidos (Quick Reply Buttons)
+        return {
+            payload: {
+                type: 'button',
+                headerText,
+                bodyText,
+                footerText,
+                buttons: authorizedActions.slice(0, 3).map(act => ({
+                    id: act.id,
+                    title: act.title,
+                    isWriteAction: act.isWriteAction,
+                    promptQuery: act.promptQuery
+                }))
+            },
+            totalAvailable,
+            authorizedCount,
+            isList: false
+        };
+    }
+
+    // 4 ou mais ações: Formato Lista Interativa (Interactive List Menu)
+    const readActions = authorizedActions.filter(a => !a.isWriteAction);
+    const writeActions = authorizedActions.filter(a => a.isWriteAction);
+
+    const sections = [];
+    if (readActions.length > 0) {
+        sections.push({
+            title: 'Consultas e Relatórios',
+            rows: readActions.map(act => ({
+                id: act.id,
+                title: act.title,
+                description: act.description || 'Consulta em tempo real no ERP',
+                isWriteAction: false,
+                promptQuery: act.promptQuery
+            }))
+        });
+    }
+    if (writeActions.length > 0) {
+        sections.push({
+            title: 'Aprovações e Operações',
+            rows: writeActions.map(act => ({
+                id: act.id,
+                title: act.title,
+                description: act.description || 'Requer confirmação antes da baixa',
+                isWriteAction: true,
+                promptQuery: act.promptQuery
+            }))
+        });
+    }
+
+    return {
+        payload: {
+            type: 'list',
+            headerText,
+            bodyText,
+            footerText,
+            buttonListText: '☰ Ver Opções Autorizadas',
+            sections
+        },
+        totalAvailable,
+        authorizedCount,
+        isList: true
+    };
+};
+
+// ---------------------------------------------------------------------------
 // Modelos de Mensagens para Testes de Envio
 // ---------------------------------------------------------------------------
 

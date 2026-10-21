@@ -72,6 +72,18 @@ const Fleet = () => {
     const [isTireLayoutOpen, setIsTireLayoutOpen] = useState(false);
     const [layoutVehicle, setLayoutVehicle] = useState<FleetVehicle | null>(null);
 
+    // Route Manager & Validations
+    const [isRouteModalOpen, setIsRouteModalOpen] = useState(false);
+    const [routeForm, setRouteForm] = useState({
+        vehicleId: '',
+        currentKm: 0,
+        newKm: 0,
+        destination: '',
+        driver: '',
+        date: new Date().toISOString().split('T')[0],
+        notes: ''
+    });
+
     // Helper para cálculo preciso de consumo de combustível e custos por veículo
     const getVehicleFuelMetrics = (vehicle: FleetVehicle) => {
         const logs = vehicle.fuelLogs || [];
@@ -441,6 +453,11 @@ const Fleet = () => {
         } as FleetVehicle;
 
         if (editingVehicleId) {
+            const currentVehicle = fleet.find(v => v.id === editingVehicleId);
+            if (currentVehicle && Number(vehicleForm.km) < currentVehicle.km) {
+                addToast(`O novo KM (${Number(vehicleForm.km).toLocaleString()} km) não pode ser menor que o KM atual do veículo (${currentVehicle.km.toLocaleString()} km)!`, 'error');
+                return;
+            }
             updateVehicle(vehicleData);
         } else {
             addVehicle(vehicleData);
@@ -465,12 +482,39 @@ const Fleet = () => {
         });
     };
 
+    const handleVehicleStatusChange = (vehicle: FleetVehicle, newStatus: FleetVehicle['status']) => {
+        if (vehicle.status === 'Manutenção' && newStatus === 'Em Rota') {
+            addToast(`Não é possível iniciar rota: o veículo ${vehicle.plate} está com status 'Manutenção'!`, 'error');
+            return;
+        }
+        updateVehicleStatus(vehicle.id, newStatus);
+        addToast(`Status do veículo ${vehicle.plate} atualizado para ${newStatus}.`, 'info');
+    };
+
     const handleSaveFuel = (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedVehicleId) return;
 
         const vehicle = fleet.find(v => v.id === selectedVehicleId);
-        const fuelKm = Number(newFuel.km) || (vehicle?.km || 0);
+        if (!vehicle) {
+            addToast("Veículo não encontrado.", 'error');
+            return;
+        }
+
+        // Validação 1: Veículo em Manutenção não pode abastecer
+        if (vehicle.status === 'Manutenção') {
+            addToast(`Não é possível registrar abastecimento: o veículo ${vehicle.plate} está com status 'Manutenção'!`, 'error');
+            return;
+        }
+
+        const fuelKm = Number(newFuel.km);
+
+        // Validação 2: KM não pode ser menor que o KM atual do veículo
+        if (newFuel.km !== undefined && fuelKm < vehicle.km) {
+            addToast(`O KM informado (${fuelKm.toLocaleString()} km) não pode ser menor que o KM atual do veículo (${vehicle.km.toLocaleString()} km)!`, 'error');
+            return;
+        }
+
         const liters = Number(newFuel.liters) || 0;
         const cost = Number(newFuel.cost) || 0;
         const pricePerLiter = liters > 0 ? Number((cost / liters).toFixed(2)) : 0;
@@ -481,7 +525,7 @@ const Fleet = () => {
             date: newFuel.date || new Date().toISOString().split('T')[0],
             liters,
             cost,
-            km: fuelKm,
+            km: fuelKm || vehicle.km,
             fuelType: newFuel.fuelType || 'Diesel',
             attachments: newFuel.attachments,
             ledgerCode: newFuel.ledgerCode,
@@ -507,6 +551,53 @@ const Fleet = () => {
             attachments: []
         });
         addToast("Abastecimento registrado com sucesso e odômetro atualizado!", 'success');
+    };
+
+    const handleSaveRoute = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!routeForm.vehicleId) {
+            addToast("Selecione um veículo para registrar a rota.", 'warning');
+            return;
+        }
+
+        const vehicle = fleet.find(v => v.id === routeForm.vehicleId);
+        if (!vehicle) {
+            addToast("Veículo não encontrado.", 'error');
+            return;
+        }
+
+        // Validação 1: Veículo em Manutenção não pode iniciar/registrar rota
+        if (vehicle.status === 'Manutenção') {
+            addToast(`Não é possível registrar rota: o veículo ${vehicle.plate} está com status 'Manutenção'!`, 'error');
+            return;
+        }
+
+        const finalKm = Number(routeForm.newKm);
+
+        // Validação 2: Novo KM não pode ser menor que o KM atual do veículo
+        if (finalKm < vehicle.km) {
+            addToast(`O novo KM (${finalKm.toLocaleString()} km) não pode ser menor que o KM atual do veículo (${vehicle.km.toLocaleString()} km)!`, 'error');
+            return;
+        }
+
+        // Atualiza odômetro e status do veículo para 'Em Rota'
+        updateVehicle({
+            ...vehicle,
+            km: finalKm,
+            status: 'Em Rota'
+        });
+
+        setIsRouteModalOpen(false);
+        setRouteForm({
+            vehicleId: '',
+            currentKm: 0,
+            newKm: 0,
+            destination: '',
+            driver: '',
+            date: new Date().toISOString().split('T')[0],
+            notes: ''
+        });
+        addToast(`Rota para '${routeForm.destination || 'destino informado'}' registrada com sucesso! Veículo ${vehicle.plate} com odômetro atualizado para ${finalKm.toLocaleString()} km.`, 'success');
     };
 
     const handleSaveTire = (e: React.FormEvent) => {
@@ -805,6 +896,24 @@ const Fleet = () => {
                                 />
                             </div>
                             <button
+                                onClick={() => {
+                                    setRouteForm({
+                                        vehicleId: '',
+                                        currentKm: 0,
+                                        newKm: 0,
+                                        destination: '',
+                                        driver: '',
+                                        date: new Date().toISOString().split('T')[0],
+                                        notes: ''
+                                    });
+                                    setIsRouteModalOpen(true);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-xs uppercase shadow-sm transition-all"
+                                title="Registrar Rota"
+                            >
+                                <MapPin size={14} /> Nova Rota
+                            </button>
+                            <button
                                 onClick={() => exportToCSV(filteredVehicles, 'Frota_Veiculos')}
                                 className="p-2.5 bg-white dark:bg-gray-700 rounded-xl shadow-sm border dark:border-gray-600 text-slate-400 hover:text-emerald-500 transition-colors"
                                 title="Exportar Excel"
@@ -898,13 +1007,15 @@ const Fleet = () => {
                                     <div className="mb-2">
                                         <select
                                             className={`w-full py-0.5 px-2 text-[8px] font-black uppercase rounded-lg border cursor-pointer outline-none transition-all ${v.status === 'Operacional' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                                                v.status === 'Em Rota' ? 'bg-blue-50 border-blue-200 text-blue-700' :
                                                 v.status === 'Manutenção' ? 'bg-amber-50 border-amber-200 text-amber-700' :
                                                     'bg-slate-50 border-slate-200 text-slate-500'
                                                 }`}
                                             value={v.status}
-                                            onChange={(e) => updateVehicleStatus(v.id, e.target.value as any)}
+                                            onChange={(e) => handleVehicleStatusChange(v, e.target.value as any)}
                                         >
                                             <option value="Operacional">🟢 Operacional</option>
+                                            <option value="Em Rota">🔵 Em Rota</option>
                                             <option value="Manutenção">🟡 Manutenção</option>
                                             <option value="Parado">⚫ Parado</option>
                                         </select>
@@ -1039,22 +1150,55 @@ const Fleet = () => {
                                         </div>
                                     </div>
                                     {/* Action Buttons - Compact */}
-                                    <div className="flex gap-1 mt-2">
+                                    <div className="grid grid-cols-4 gap-1 mt-2">
                                         <button
                                             onClick={() => { setSelectedVehicleId(v.id); setIsMaintModalOpen(true); }}
-                                            className="flex-1 py-1 bg-slate-50 dark:bg-slate-700 hover:bg-teal-600 hover:text-white rounded-lg text-[8px] font-black uppercase transition-all flex items-center justify-center gap-1"
+                                            className="py-1 bg-slate-50 dark:bg-slate-700 hover:bg-teal-600 hover:text-white rounded-lg text-[8px] font-black uppercase transition-all flex items-center justify-center gap-0.5"
+                                            title="Registrar Manutenção"
                                         >
                                             <Wrench size={10} /> Manut.
                                         </button>
                                         <button
-                                            onClick={() => { setSelectedVehicleId(v.id); setIsFuelModalOpen(true); }}
-                                            className="flex-1 py-1 bg-slate-50 dark:bg-slate-700 hover:bg-emerald-600 hover:text-white rounded-lg text-[8px] font-black uppercase transition-all flex items-center justify-center gap-1"
+                                            onClick={() => {
+                                                if (v.status === 'Manutenção') {
+                                                    addToast(`Não é possível abastecer: o veículo ${v.plate} está em Manutenção!`, 'error');
+                                                    return;
+                                                }
+                                                setSelectedVehicleId(v.id);
+                                                setNewFuel(prev => ({ ...prev, km: v.km }));
+                                                setIsFuelModalOpen(true);
+                                            }}
+                                            className="py-1 bg-slate-50 dark:bg-slate-700 hover:bg-emerald-600 hover:text-white rounded-lg text-[8px] font-black uppercase transition-all flex items-center justify-center gap-0.5"
+                                            title="Registrar Abastecimento"
                                         >
                                             <Droplets size={10} /> Abast.
                                         </button>
                                         <button
+                                            onClick={() => {
+                                                if (v.status === 'Manutenção') {
+                                                    addToast(`Não é possível iniciar rota: o veículo ${v.plate} está em Manutenção!`, 'error');
+                                                    return;
+                                                }
+                                                setSelectedVehicleId(v.id);
+                                                setRouteForm({
+                                                    vehicleId: v.id,
+                                                    currentKm: v.km,
+                                                    newKm: v.km,
+                                                    destination: '',
+                                                    driver: v.driverId || '',
+                                                    date: new Date().toISOString().split('T')[0],
+                                                    notes: ''
+                                                });
+                                                setIsRouteModalOpen(true);
+                                            }}
+                                            className="py-1 bg-slate-50 dark:bg-slate-700 hover:bg-blue-600 hover:text-white rounded-lg text-[8px] font-black uppercase transition-all flex items-center justify-center gap-0.5"
+                                            title="Registrar Rota / Despacho"
+                                        >
+                                            <MapPin size={10} /> Rota
+                                        </button>
+                                        <button
                                             onClick={() => { setSelectedVehicleId(v.id); setLayoutVehicle(v); setIsTireLayoutOpen(true); }}
-                                            className="flex-1 py-1 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-600 hover:text-white rounded-lg text-[8px] font-black uppercase transition-all flex items-center justify-center gap-1"
+                                            className="py-1 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-600 hover:text-white rounded-lg text-[8px] font-black uppercase transition-all flex items-center justify-center gap-0.5"
                                             title="Mapa de Pneus Detalhado"
                                         >
                                             <Disc size={10} /> Pneus
@@ -1520,6 +1664,159 @@ const Fleet = () => {
                 )
             }
 
+            {/* Route Registration Modal */}
+            {isRouteModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg border dark:border-slate-700 animate-in zoom-in duration-200">
+                        <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                                <div className="p-2 bg-blue-100 dark:bg-blue-900/40 text-blue-600 rounded-xl">
+                                    <MapPin size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Registrar Rota / Viagem</h3>
+                                    <p className="text-xs text-slate-400 font-medium">Despacho operacional e atualização de odômetro</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsRouteModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+                        </div>
+                        <form onSubmit={handleSaveRoute} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Veículo</label>
+                                <select
+                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-3 font-bold text-sm outline-none"
+                                    value={routeForm.vehicleId}
+                                    onChange={e => {
+                                        const vId = e.target.value;
+                                        const v = fleet.find(veh => veh.id === vId);
+                                        setRouteForm(prev => ({
+                                            ...prev,
+                                            vehicleId: vId,
+                                            currentKm: v?.km || 0,
+                                            newKm: v?.km || 0,
+                                            driver: v?.driverId || prev.driver
+                                        }));
+                                    }}
+                                    required
+                                >
+                                    <option value="">Selecione o veículo...</option>
+                                    {fleet.map(v => (
+                                        <option key={v.id} value={v.id}>
+                                            {v.plate} — {v.name} ({v.km.toLocaleString()} km) [{v.status}]
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {(() => {
+                                const selectedRouteVeh = fleet.find(v => v.id === routeForm.vehicleId);
+                                if (!selectedRouteVeh) return null;
+                                return (
+                                    <>
+                                        {selectedRouteVeh.status === 'Manutenção' && (
+                                            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200 font-bold">
+                                                <AlertTriangle size={16} className="text-amber-600 flex-shrink-0" />
+                                                <span>Bloqueio: O veículo <strong>{selectedRouteVeh.plate}</strong> está com status 'Manutenção' e não pode iniciar rotas.</span>
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Odômetro Atual (KM)</label>
+                                                <input
+                                                    type="text"
+                                                    readOnly
+                                                    className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-3 font-mono font-bold text-sm text-slate-500 cursor-not-allowed"
+                                                    value={`${selectedRouteVeh.km.toLocaleString()} KM`}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Novo Odômetro (KM)</label>
+                                                <input
+                                                    type="number"
+                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-3 font-mono font-bold text-sm outline-none focus:border-blue-500"
+                                                    value={routeForm.newKm || ''}
+                                                    onChange={e => setRouteForm({ ...routeForm, newKm: Number(e.target.value) })}
+                                                    required
+                                                />
+                                                {Number(routeForm.newKm) > 0 && Number(routeForm.newKm) < selectedRouteVeh.km && (
+                                                    <p className="text-[10px] font-bold text-rose-600 mt-1">
+                                                        ⚠️ Novo KM (${Number(routeForm.newKm).toLocaleString()}) não pode ser menor que o atual (${selectedRouteVeh.km.toLocaleString()}).
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Destino / Rota</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Ex: Canteiro Obra Sul, Cliente Y"
+                                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-3 font-bold text-sm outline-none"
+                                        value={routeForm.destination}
+                                        onChange={e => setRouteForm({ ...routeForm, destination: e.target.value })}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Motorista / Responsável</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Nome do motorista"
+                                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-3 font-bold text-sm outline-none"
+                                        value={routeForm.driver}
+                                        onChange={e => setRouteForm({ ...routeForm, driver: e.target.value })}
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Data da Viagem</label>
+                                <input
+                                    type="date"
+                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-3 font-bold text-sm outline-none"
+                                    value={routeForm.date}
+                                    onChange={e => setRouteForm({ ...routeForm, date: e.target.value })}
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Observações (Opcional)</label>
+                                <textarea
+                                    rows={2}
+                                    placeholder="Instruções de entrega, nota fiscal ou observações da viagem..."
+                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2 px-3 font-medium text-xs outline-none"
+                                    value={routeForm.notes}
+                                    onChange={e => setRouteForm({ ...routeForm, notes: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="pt-2">
+                                <button
+                                    type="submit"
+                                    disabled={(() => {
+                                        const v = fleet.find(veh => veh.id === routeForm.vehicleId);
+                                        if (!v) return true;
+                                        if (v.status === 'Manutenção') return true;
+                                        if (Number(routeForm.newKm) < v.km) return true;
+                                        return false;
+                                    })()}
+                                    className="w-full py-4 bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-500 text-white font-black rounded-2xl shadow-lg uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2"
+                                >
+                                    <MapPin size={16} /> Confirmar Despacho de Rota
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {/* Maintenance Modal */}
             {
                 isMaintModalOpen && (
@@ -1720,9 +2017,24 @@ const Fleet = () => {
                                         required
                                     >
                                         <option value="">Selecione o veículo...</option>
-                                        {fleet.map(v => <option key={v.id} value={v.id}>{v.plate} - {v.name} (Atual: {v.km.toLocaleString()} KM)</option>)}
+                                        {fleet.map(v => <option key={v.id} value={v.id}>{v.plate} - {v.name} (Atual: {v.km.toLocaleString()} KM) [{v.status}]</option>)}
                                     </select>
                                 </div>
+
+                                {(() => {
+                                    const fuelSelectedVeh = fleet.find(v => v.id === selectedVehicleId);
+                                    if (!fuelSelectedVeh) return null;
+                                    return (
+                                        <>
+                                            {fuelSelectedVeh.status === 'Manutenção' && (
+                                                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200 font-bold">
+                                                    <AlertTriangle size={16} className="text-amber-600 flex-shrink-0" />
+                                                    <span>Atenção: O veículo <strong>{fuelSelectedVeh.plate}</strong> está em <strong>Manutenção</strong>. O registro de abastecimento está bloqueado.</span>
+                                                </div>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Combustível</label>
@@ -1750,6 +2062,17 @@ const Fleet = () => {
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">KM no Abastecimento</label>
                                         <input type="number" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm" placeholder="0" value={newFuel.km || ''} onChange={e => setNewFuel({ ...newFuel, km: Number(e.target.value) })} required />
+                                        {(() => {
+                                            const v = fleet.find(veh => veh.id === selectedVehicleId);
+                                            if (v && Number(newFuel.km) > 0 && Number(newFuel.km) < v.km) {
+                                                return (
+                                                    <p className="text-[10px] font-bold text-rose-600 mt-1">
+                                                        ⚠️ KM informado ({Number(newFuel.km).toLocaleString()} km) menor que o atual ({v.km.toLocaleString()} km).
+                                                    </p>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
                                     </div>
                                 </div>
 

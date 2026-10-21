@@ -140,6 +140,25 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
         return mapped;
     }
 
+    // Specific mapping for budgets (PostgreSQL schema compatibility)
+    if (table === 'budgets') {
+        const mapped: Record<string, any> = {
+            client_id: cleaned.clientId && isValidUUID(cleaned.clientId) ? cleaned.clientId : (cleaned.client_id && isValidUUID(cleaned.client_id) ? cleaned.client_id : null),
+            client_name: cleaned.clientName || cleaned.client_name || 'Cliente Avulso',
+            date: toIsoDate(cleaned.date) || new Date().toISOString().split('T')[0],
+            subtotal: Number(cleaned.subtotal || 0),
+            discount: Number(cleaned.discount || 0),
+            total: Number(cleaned.total || 0),
+            status: cleaned.status || 'Aberto',
+            expiry_date: toIsoDate(cleaned.expiryDate || cleaned.expiry_date) || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+            items: Array.isArray(cleaned.items) ? cleaned.items : [],
+        };
+        if (isCreate) {
+            mapped.id = cleaned.id;
+        }
+        return mapped;
+    }
+
     // Specific table cleanups: strip relations / columns that don't exist in Supabase tables
     if (table === 'fleet') {
         delete cleaned.maintenanceHistory;
@@ -220,6 +239,21 @@ const transformFetchedData = <T>(table: string, data: any[] | null): T[] => {
             installments: row.installments || 1,
             weightTicket: row.weight_ticket || row.weightTicket || '',
             measuredWeight: row.measured_weight ?? row.measuredWeight,
+        })) as T[];
+    }
+
+    if (table === 'budgets') {
+        return data.map(row => ({
+            ...row,
+            clientId: row.client_id || row.clientId || '',
+            clientName: row.client_name || row.clientName || '',
+            date: toLocaleDate(row.date),
+            expiryDate: toLocaleDate(row.expiry_date || row.expiryDate),
+            subtotal: Number(row.subtotal || 0),
+            discount: Number(row.discount || 0),
+            total: Number(row.total || 0),
+            status: row.status || 'Aberto',
+            items: Array.isArray(row.items) ? row.items : [],
         })) as T[];
     }
 

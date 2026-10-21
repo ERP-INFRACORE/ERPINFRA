@@ -47,7 +47,9 @@ import {
    Check,
    Layers,
    RefreshCw,
-   Inbox
+   Inbox,
+   Lock,
+   Info
 } from 'lucide-react';
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, CartesianGrid } from 'recharts';
 import { useApp } from '../context/AppContext';
@@ -192,10 +194,13 @@ const Purchases = () => {
       addFuelLog,
       employees,
       currentUser,
+      hasPermission,
       addMaintenanceRecord,
    } = useApp();
 
    const { addToast } = useToast();
+
+   const isAdmin = currentUser?.roleId === 'admin' || currentUser?.username === 'admin' || hasPermission('all') || hasPermission('inventory.admin');
 
    const [activeTab, setActiveTab] = useState<'dashboard' | 'quotations' | 'orders' | 'approval' | 'new-order' | 'suppliers' | 'inventory'>('dashboard');
    const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
@@ -576,6 +581,11 @@ const Purchases = () => {
 
    const handleSaveStock = (e: React.FormEvent) => {
       e.preventDefault();
+      if (!isAdmin) {
+         addToast("Apenas administradores podem cadastrar itens ou realizar ajustes avulsos de estoque.", 'error');
+         setIsStockModalOpen(false);
+         return;
+      }
       const item = {
          ...stockForm,
          id: editingItem?.id || `ITM-${Date.now()}`,
@@ -2103,18 +2113,36 @@ const Purchases = () => {
                         </button>
                      ))}
 
-                     <button
-                        onClick={() => {
-                           setEditingItem(null);
-                           setStockForm({ name: '', category: 'Insumos', quantity: 0, minStock: 0, unit: 'kg', price: 0 });
-                           setIsStockModalOpen(true);
-                        }}
-                        className="px-3 py-1.5 bg-cyan-600 text-white rounded-lg text-xs font-bold uppercase ml-2 flex items-center gap-1"
-                     >
-                        <Plus size={14} /> Novo Item
-                     </button>
+                     {isAdmin && (
+                        <button
+                           onClick={() => {
+                              setEditingItem(null);
+                              setStockForm({ name: '', category: 'Insumos', quantity: 0, minStock: 0, unit: 'kg', price: 0 });
+                              setIsStockModalOpen(true);
+                           }}
+                           className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold uppercase ml-2 flex items-center gap-1 transition-colors shadow-sm"
+                        >
+                           <Plus size={14} /> Novo Item
+                        </button>
+                     )}
+
+                     {!isAdmin && (
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-500 bg-slate-100 dark:bg-gray-700/60 dark:text-gray-400 border border-slate-200 dark:border-gray-600 ml-2 whitespace-nowrap" title="Entradas de estoque ocorrem exclusivamente através do recebimento de Ordens de Compra.">
+                           <Lock size={12} className="text-amber-500" />
+                           <span>Entrada via compras</span>
+                        </div>
+                     )}
                   </div>
                </div>
+
+               {!isAdmin && (
+                  <div className="flex items-center gap-3 p-3.5 bg-blue-50/70 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 rounded-xl text-xs text-blue-800 dark:text-blue-300">
+                     <Info size={16} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                     <span>
+                        <strong>Política de Suprimentos:</strong> A entrada física e contábil de estoque é realizada <strong>exclusivamente através do recebimento de Ordens de Compra</strong>. Cadastro avulso e ajustes manuais de saldo são restritos a administradores.
+                     </span>
+                  </div>
+               )}
 
                {/* Inventory List */}
                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 overflow-hidden">
@@ -2190,7 +2218,7 @@ const Purchases = () => {
                                        >
                                           <ShoppingBag size={18} />
                                        </button>
-                                       {currentUser?.roleId === 'admin' && (
+                                       {isAdmin && (
                                           <>
                                              <button
                                                 onClick={() => { setEditingItem(item); setStockForm(item); setIsStockModalOpen(true); }}
@@ -2620,7 +2648,7 @@ const Purchases = () => {
          )}
 
          {/* STOCK ITEM MODAL */}
-         {isStockModalOpen && (
+         {isStockModalOpen && isAdmin && (
             <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden my-6">
                   <div className="p-5 border-b dark:border-gray-700 bg-slate-50 dark:bg-gray-800/50 flex justify-between items-center">

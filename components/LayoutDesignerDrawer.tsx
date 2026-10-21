@@ -61,7 +61,7 @@ export const DEFAULT_PREFS: LayoutPreferences = {
   containerWidth: '1600',
   accent: 'cyan',
   theme: 'light',
-  showCustomizerBar: true,
+  showCustomizerBar: false,
   sidebarCollapsed: false,
   borderRadius: 'rounded',
   fontFamily: 'roboto',

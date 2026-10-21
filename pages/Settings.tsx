@@ -3785,7 +3785,7 @@ const Settings = () => {
 
             {/* Top Navigation Bar */}
             <div className="shrink-0 pb-6">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                     <div>
                         <h1 className="text-3xl font-black text-slate-900 dark:text-white flex items-center gap-3 tracking-tighter uppercase italic">
                             <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-600/20 rotate-3">
@@ -3797,6 +3797,19 @@ const Settings = () => {
                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                             Sistema Operacional v2.5.0
                         </p>
+                    </div>
+
+                    {/* Botão de Layout & Design Studio realocado do cabeçalho */}
+                    <div className="flex items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={() => window.dispatchEvent(new CustomEvent('infracore:open-layout-designer'))}
+                            className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2.5 shadow-md shadow-cyan-600/20 transition-all hover:scale-105 active:scale-95"
+                            title="Abrir Studio de Designer & Layout (Cores, Estilos, Temas e Ergonomia)"
+                        >
+                            <Palette size={18} />
+                            <span>Personalizar Layout & Cores</span>
+                        </button>
                     </div>
                 </div>
 
@@ -4326,317 +4339,459 @@ const Settings = () => {
                         </div>
                     )}
 
-                    {/* SECURITY SETTINGS */}
-                    {activeTab === 'security' && (
-                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 h-full flex flex-col">
-                            <div className="flex items-center gap-2 mb-8 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl w-fit">
-                                <button
-                                    onClick={() => setSubTab('users')}
-                                    className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${subTab === 'users' ? 'bg-white dark:bg-slate-800 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700'}`}
-                                >
-                                    Gerenciar Usuários ({users.length})
-                                </button>
-                                <button
-                                    onClick={() => setSubTab('roles')}
-                                    className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${subTab === 'roles' ? 'bg-white dark:bg-slate-800 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700'}`}
-                                >
-                                    Perfis & Permissões ({roles.length})
-                                </button>
-                            </div>
+                    {/* SECURITY SETTINGS & RBAC GOVERNANCE */}
+                    {activeTab === 'security' && (() => {
+                        const canManageUsers = hasPermission('users.manage') || isSuperAdmin;
+                        const canManageRoles = hasPermission('roles.manage') || isSuperAdmin;
+                        const activeSecuritySubTab: 'users' | 'roles' | 'none' =
+                            subTab === 'roles' && canManageRoles
+                                ? 'roles'
+                                : canManageUsers
+                                    ? 'users'
+                                    : canManageRoles
+                                        ? 'roles'
+                                        : 'none';
 
-                            {subTab === 'users' ? (
-                                <div className="space-y-6">
-                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-indigo-50 dark:bg-indigo-900/20 p-6 rounded-[24px] border border-indigo-100 dark:border-indigo-900/30">
-                                        <div className="flex items-center gap-4">
-                                            <div className="p-3 bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-500/30">
-                                                <Users size={24} />
+                        const activeAdminsCount = users.filter(u => u.status === 'Ativo' && isUserAdmin(u, roles)).length;
+
+                        return (
+                            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 h-full flex flex-col space-y-6">
+                                {/* PAINEL EXECUTIVO DE GOVERNANÇA & CONFORMIDADE RBAC */}
+                                <div className="p-6 sm:p-8 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-[28px] text-white border border-indigo-900/40 shadow-xl">
+                                    <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-5 border-b border-white/10">
+                                        <div className="flex items-center gap-3.5">
+                                            <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-2xl border border-indigo-500/30 shadow-inner">
+                                                <ShieldCheck size={28} />
                                             </div>
                                             <div>
-                                                <h3 className="font-black text-slate-900 dark:text-white text-lg">Diretório de Usuários (RBAC)</h3>
-                                                <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">
-                                                    Controle de identidades, logins normalizados, políticas de senhas fortes e permissões.
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="text-base font-black uppercase tracking-tight">
+                                                        Governança de Identidades & Matriz RBAC
+                                                    </h3>
+                                                    <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                                        Conformidade Ativa
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-slate-400 mt-0.5">
+                                                    Segregação de funções, quórum de administradores e política estrita de credenciais.
                                                 </p>
                                             </div>
                                         </div>
+                                        <div className="flex items-center gap-3 bg-white/5 px-4 py-2.5 rounded-2xl border border-white/10">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                                            <div className="text-right">
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Operador Logado</p>
+                                                <p className="text-xs font-black text-white flex items-center justify-end gap-1.5">
+                                                    {currentUser?.name || 'Administrador'}
+                                                    {isSuperAdmin ? (
+                                                        <span className="text-[9px] font-mono font-bold text-purple-300 bg-purple-900/60 px-1.5 py-0.5 rounded border border-purple-500/30">
+                                                            🛡️ Super Admin
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[9px] font-mono font-bold text-indigo-300 bg-indigo-900/60 px-1.5 py-0.5 rounded border border-indigo-500/30">
+                                                            Gestor RBAC
+                                                        </span>
+                                                    )}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Métricas e Pilares de Governança */}
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-5">
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Diretório de Usuários</span>
+                                            <p className="text-lg font-black text-white">
+                                                {users.filter(u => u.status === 'Ativo').length} <span className="text-xs font-normal text-slate-400">ativos / {users.filter(u => u.status === 'Inativo').length} inativos</span>
+                                            </p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Quórum Administrativo</span>
+                                            <p className="text-lg font-black text-purple-300 flex items-center gap-1.5">
+                                                {activeAdminsCount} <span className="text-xs font-normal text-slate-400">admin(s) ativo(s)</span>
+                                            </p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Perfis de Acesso (Roles)</span>
+                                            <p className="text-lg font-black text-indigo-300">
+                                                {roles.length} <span className="text-xs font-normal text-slate-400">níveis definidos</span>
+                                            </p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Política de Senhas</span>
+                                            <p className="text-xs font-bold text-emerald-400 flex items-center gap-1 mt-1">
+                                                <CheckCircle2 size={14} /> Mín. 8 chars (A-Z, a-z, 0-9, #)
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Navegação de SubTabs */}
+                                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl w-fit">
+                                    {canManageUsers && (
                                         <button
-                                            onClick={() => {
-                                                const defaultRole = roles.find(r => !isSuperAdminRole(r)) || roles[0];
-                                                setEditingUser({
-                                                    id: '',
-                                                    name: '',
-                                                    username: '',
-                                                    email: '',
-                                                    roleId: defaultRole ? defaultRole.id : '',
-                                                    status: 'Ativo',
-                                                    registeredAt: '',
-                                                    employeeId: ''
-                                                });
-                                                setShowPassword(false);
-                                                setIsUserModalOpen(true);
-                                            }}
-                                            className="px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center gap-2 shadow-xl shrink-0"
+                                            onClick={() => setSubTab('users')}
+                                            className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${activeSecuritySubTab === 'users' ? 'bg-white dark:bg-slate-800 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700'}`}
                                         >
-                                            <UserPlus size={16} /> Novo Usuário
+                                            Gerenciar Usuários ({users.length})
                                         </button>
-                                    </div>
+                                    )}
+                                    {canManageRoles && (
+                                        <button
+                                            onClick={() => setSubTab('roles')}
+                                            className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${activeSecuritySubTab === 'roles' ? 'bg-white dark:bg-slate-800 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            Perfis & Permissões ({roles.length})
+                                        </button>
+                                    )}
+                                </div>
 
-                                    {/* Toolbar de Busca e Filtros */}
-                                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
-                                        <div className="relative w-full sm:w-80">
-                                            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                                            <input
-                                                type="text"
-                                                placeholder="Buscar por nome, login, e-mail..."
-                                                value={userSearchQuery}
-                                                onChange={e => setUserSearchQuery(e.target.value)}
-                                                className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
-                                            />
+                                {/* Visualização de Usuários */}
+                                {activeSecuritySubTab === 'users' && (
+                                    <div className="space-y-6">
+                                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-indigo-50 dark:bg-indigo-900/20 p-6 rounded-[24px] border border-indigo-100 dark:border-indigo-900/30">
+                                            <div className="flex items-center gap-4">
+                                                <div className="p-3 bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-500/30">
+                                                    <Users size={24} />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-black text-slate-900 dark:text-white text-lg">Diretório de Usuários (RBAC)</h3>
+                                                    <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">
+                                                        Controle de identidades, logins normalizados, políticas de senhas fortes e permissões.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {canManageUsers && (
+                                                <button
+                                                    onClick={() => {
+                                                        const defaultRole = roles.find(r => !isSuperAdminRole(r)) || roles[0];
+                                                        setEditingUser({
+                                                            id: '',
+                                                            name: '',
+                                                            username: '',
+                                                            email: '',
+                                                            roleId: defaultRole ? defaultRole.id : '',
+                                                            status: 'Ativo',
+                                                            registeredAt: '',
+                                                            employeeId: ''
+                                                        });
+                                                        setShowPassword(false);
+                                                        setIsUserModalOpen(true);
+                                                    }}
+                                                    className="px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center gap-2 shadow-xl shrink-0"
+                                                >
+                                                    <UserPlus size={16} /> Novo Usuário
+                                                </button>
+                                            )}
                                         </div>
-                                        <div className="flex items-center gap-2 w-full sm:w-auto">
-                                            <select
-                                                value={userStatusFilter}
-                                                onChange={e => setUserStatusFilter(e.target.value as any)}
-                                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold py-2 px-3 outline-none"
-                                            >
-                                                <option value="all">Todos os Status</option>
-                                                <option value="Ativo">Apenas Ativos</option>
-                                                <option value="Inativo">Apenas Inativos</option>
-                                            </select>
-                                            <select
-                                                value={userRoleFilter}
-                                                onChange={e => setUserRoleFilter(e.target.value)}
-                                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold py-2 px-3 outline-none"
-                                            >
-                                                <option value="all">Todos os Cargos</option>
-                                                {roles.map(r => (
-                                                    <option key={r.id} value={r.id}>{r.name}</option>
-                                                ))}
-                                            </select>
+
+                                        {/* Toolbar de Busca e Filtros */}
+                                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+                                            <div className="relative w-full sm:w-80">
+                                                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Buscar por nome, login, e-mail..."
+                                                    value={userSearchQuery}
+                                                    onChange={e => setUserSearchQuery(e.target.value)}
+                                                    className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                                />
+                                            </div>
+                                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                                <select
+                                                    value={userStatusFilter}
+                                                    onChange={e => setUserStatusFilter(e.target.value as any)}
+                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold py-2 px-3 outline-none"
+                                                >
+                                                    <option value="all">Todos os Status</option>
+                                                    <option value="Ativo">Apenas Ativos</option>
+                                                    <option value="Inativo">Apenas Inativos</option>
+                                                </select>
+                                                <select
+                                                    value={userRoleFilter}
+                                                    onChange={e => setUserRoleFilter(e.target.value)}
+                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold py-2 px-3 outline-none"
+                                                >
+                                                    <option value="all">Todos os Cargos</option>
+                                                    {roles.map(r => (
+                                                        <option key={r.id} value={r.id}>{r.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    {/* Grid de Usuários */}
-                                    {(() => {
-                                        const filteredUsers = users.filter(user => {
-                                            const q = userSearchQuery.trim().toLowerCase();
-                                            const userRole = findUserRole(user, roles);
-                                            const roleName = userRole?.name || roles.find(r => r.id === user.roleId)?.name || '';
-                                            const matchesSearch = !q || (
-                                                user.name.toLowerCase().includes(q) ||
-                                                user.username.toLowerCase().includes(q) ||
-                                                user.email.toLowerCase().includes(q) ||
-                                                roleName.toLowerCase().includes(q)
-                                            );
-                                            const matchesStatus = userStatusFilter === 'all' || user.status === userStatusFilter;
-                                            const matchesRole = userRoleFilter === 'all' || user.roleId === userRoleFilter || (userRole && userRole.id === userRoleFilter);
-                                            return matchesSearch && matchesStatus && matchesRole;
-                                        });
+                                        {/* Grid de Usuários */}
+                                        {(() => {
+                                            const filteredUsers = users.filter(user => {
+                                                const q = userSearchQuery.trim().toLowerCase();
+                                                const userRole = findUserRole(user, roles);
+                                                const roleName = userRole?.name || roles.find(r => r.id === user.roleId)?.name || '';
+                                                const matchesSearch = !q || (
+                                                    user.name.toLowerCase().includes(q) ||
+                                                    user.username.toLowerCase().includes(q) ||
+                                                    user.email.toLowerCase().includes(q) ||
+                                                    roleName.toLowerCase().includes(q)
+                                                );
+                                                const matchesStatus = userStatusFilter === 'all' || user.status === userStatusFilter;
+                                                const matchesRole = userRoleFilter === 'all' || user.roleId === userRoleFilter || (userRole && userRole.id === userRoleFilter);
+                                                return matchesSearch && matchesStatus && matchesRole;
+                                            });
 
-                                        if (filteredUsers.length === 0) {
+                                            if (filteredUsers.length === 0) {
+                                                return (
+                                                    <div className="p-12 text-center bg-slate-50 dark:bg-slate-900/30 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
+                                                        <Users size={36} className="mx-auto mb-3 text-slate-300 dark:text-slate-600" />
+                                                        <p className="text-sm font-bold text-slate-500">Nenhum usuário encontrado com os filtros selecionados.</p>
+                                                        <button
+                                                            onClick={() => { setUserSearchQuery(''); setUserStatusFilter('all'); setUserRoleFilter('all'); }}
+                                                            className="mt-3 px-4 py-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl"
+                                                        >
+                                                            Limpar Filtros
+                                                        </button>
+                                                    </div>
+                                                );
+                                            }
+
                                             return (
-                                                <div className="p-12 text-center bg-slate-50 dark:bg-slate-900/30 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
-                                                    <Users size={36} className="mx-auto mb-3 text-slate-300 dark:text-slate-600" />
-                                                    <p className="text-sm font-bold text-slate-500">Nenhum usuário encontrado com os filtros selecionados.</p>
-                                                    <button
-                                                        onClick={() => { setUserSearchQuery(''); setUserStatusFilter('all'); setUserRoleFilter('all'); }}
-                                                        className="mt-3 px-4 py-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl"
-                                                    >
-                                                        Limpar Filtros
-                                                    </button>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                                    {filteredUsers.map(user => {
+                                                        const userRole = findUserRole(user, roles);
+                                                        const roleName = userRole?.name || roles.find(r => r.id === user.roleId)?.name || 'Sem Cargo';
+                                                        const isAdmin = isUserAdmin(user, roles);
+                                                        const isSelf = user.id === currentUser?.id;
+                                                        const isRoot = user.username.toLowerCase() === 'admin';
+                                                        const linkedEmp = employees.find(e => e.id === user.employeeId);
+                                                        const canEditTarget = isSuperAdmin || !isAdmin;
+                                                        const canDeleteTarget = canManageUsers && !isSelf && !isRoot && (isSuperAdmin || !isAdmin);
+
+                                                        return (
+                                                            <div key={user.id} className="group relative bg-white dark:bg-slate-800 p-6 rounded-[24px] border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all hover:shadow-lg flex flex-col justify-between">
+                                                                <div>
+                                                                    <div className="flex justify-between items-start mb-4">
+                                                                        <div className="relative">
+                                                                            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-2xl flex items-center justify-center text-slate-600 dark:text-slate-200 font-extrabold text-lg">
+                                                                                {user.name.charAt(0)}
+                                                                            </div>
+                                                                            {isAdmin && (
+                                                                                <span title="Administrador" className="absolute -top-1 -right-1 w-5 h-5 bg-purple-600 text-white rounded-full flex items-center justify-center shadow-md">
+                                                                                    <ShieldCheck size={12} />
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="flex flex-col items-end gap-1">
+                                                                            <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wide ${user.status === 'Ativo' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400'}`}>
+                                                                                {user.status}
+                                                                            </span>
+                                                                            {isSelf && (
+                                                                                <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300">
+                                                                                    Você
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                    <h4 className="font-bold text-slate-900 dark:text-white truncate" title={user.name}>{user.name}</h4>
+                                                                    <p className="text-[10px] font-bold text-indigo-500 mb-1 font-mono">@{user.username}</p>
+                                                                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate mb-4" title={user.email}>{user.email}</p>
+
+                                                                    <div className="flex items-center gap-2 mb-2">
+                                                                        <Shield size={12} className={isAdmin ? 'text-purple-500' : 'text-indigo-500'} />
+                                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider truncate" title={roleName}>
+                                                                            {roleName}
+                                                                        </span>
+                                                                    </div>
+
+                                                                    {linkedEmp && (
+                                                                        <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mb-4">
+                                                                            RH: <span className="font-medium text-slate-600 dark:text-slate-300">{linkedEmp.name}</span>
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+
+                                                                <div className="flex gap-2 justify-end mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/60">
+                                                                    {canEditTarget ? (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                const matchedRole = findUserRole(user, roles);
+                                                                                setEditingUser({
+                                                                                    ...user,
+                                                                                    roleId: matchedRole ? matchedRole.id : user.roleId
+                                                                                });
+                                                                                setShowPassword(false);
+                                                                                setIsUserModalOpen(true);
+                                                                            }}
+                                                                            className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 dark:bg-slate-900 rounded-lg transition-colors"
+                                                                            title="Editar Usuário"
+                                                                        >
+                                                                            <Edit2 size={16} />
+                                                                        </button>
+                                                                    ) : (
+                                                                        <span
+                                                                            title="Apenas administradores podem editar outro administrador"
+                                                                            className="p-2 text-slate-300 dark:text-slate-600 bg-slate-50 dark:bg-slate-900 rounded-lg cursor-not-allowed"
+                                                                        >
+                                                                            <Lock size={16} />
+                                                                        </span>
+                                                                    )}
+
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleDeleteUser(user)}
+                                                                        disabled={!canDeleteTarget}
+                                                                        className={`p-2 rounded-lg transition-colors ${
+                                                                            !canDeleteTarget
+                                                                                ? 'text-slate-300 dark:text-slate-600 bg-slate-50 dark:bg-slate-900 cursor-not-allowed opacity-50'
+                                                                                : 'text-slate-400 hover:text-rose-600 bg-slate-50 dark:bg-slate-900'
+                                                                        }`}
+                                                                        title={
+                                                                            isSelf
+                                                                                ? 'Você não pode excluir seu próprio usuário logado'
+                                                                                : isRoot
+                                                                                    ? 'Conta raiz @admin protegida contra exclusão'
+                                                                                    : isAdmin && !isSuperAdmin
+                                                                                        ? 'Apenas administradores podem excluir outro administrador'
+                                                                                        : 'Excluir Usuário'
+                                                                        }
+                                                                    >
+                                                                        <Trash2 size={16} />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             );
-                                        }
+                                        })()}
+                                    </div>
+                                )}
 
-                                        return (
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                                                {filteredUsers.map(user => {
-                                                    const userRole = findUserRole(user, roles);
-                                                    const roleName = userRole?.name || roles.find(r => r.id === user.roleId)?.name || 'Sem Cargo';
-                                                    const isAdmin = isUserAdmin(user, roles);
-                                                    const isSelf = user.id === currentUser?.id;
-                                                    const linkedEmp = employees.find(e => e.id === user.employeeId);
+                                {/* Visualização de Perfis (Roles) */}
+                                {activeSecuritySubTab === 'roles' && (
+                                    <div className="space-y-6">
+                                        <div className="flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/20 p-6 rounded-[24px] border border-indigo-100 dark:border-indigo-900/30">
+                                            <div className="flex items-center gap-4">
+                                                <div className="p-3 bg-purple-500 text-white rounded-xl shadow-lg shadow-purple-500/30">
+                                                    <ShieldCheck size={24} />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-black text-slate-900 dark:text-white text-lg">Perfis de Acesso (RBAC Roles)</h3>
+                                                    <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">
+                                                        Controle granular de permissões por cargo, suportando UUIDs e perfis legados.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {canManageRoles && (
+                                                <button
+                                                    onClick={() => {
+                                                        setEditingRole({ id: '', name: '', description: '', permissions: [] });
+                                                        setRoleSearchQuery('');
+                                                        setIsRoleModalOpen(true);
+                                                    }}
+                                                    className="px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center gap-2 shadow-xl shrink-0"
+                                                >
+                                                    <Plus size={16} /> Novo Perfil
+                                                </button>
+                                            )}
+                                        </div>
 
-                                                    return (
-                                                        <div key={user.id} className="group relative bg-white dark:bg-slate-800 p-6 rounded-[24px] border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all hover:shadow-lg flex flex-col justify-between">
-                                                            <div>
-                                                                <div className="flex justify-between items-start mb-4">
-                                                                    <div className="relative">
-                                                                        <div className="w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-2xl flex items-center justify-center text-slate-600 dark:text-slate-200 font-extrabold text-lg">
-                                                                            {user.name.charAt(0)}
-                                                                        </div>
-                                                                        {isAdmin && (
-                                                                            <span title="Administrador" className="absolute -top-1 -right-1 w-5 h-5 bg-purple-600 text-white rounded-full flex items-center justify-center shadow-md">
-                                                                                <ShieldCheck size={12} />
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="flex flex-col items-end gap-1">
-                                                                        <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wide ${user.status === 'Ativo' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400'}`}>
-                                                                            {user.status}
+                                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                            {roles.map(role => {
+                                                const isSuper = isSuperAdminRole(role);
+                                                const userCount = users.filter(u => u.roleId === role.id || (isSuper && isUserAdmin(u, roles))).length;
+                                                const canEditRole = isSuperAdmin || !isSuper;
+
+                                                return (
+                                                    <div key={role.id} className="bg-white dark:bg-slate-800 p-8 rounded-[32px] border border-slate-200 dark:border-slate-700 flex flex-col hover:border-purple-300 transition-all shadow-sm justify-between">
+                                                        <div>
+                                                            <div className="flex items-center justify-between mb-4">
+                                                                <div className="flex items-center gap-2">
+                                                                    <Shield size={32} className={isSuper ? 'text-purple-600' : 'text-purple-500'} />
+                                                                    {isSuper && (
+                                                                        <span className="text-[9px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
+                                                                            Administrador
                                                                         </span>
-                                                                        {isSelf && (
-                                                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300">
-                                                                                Você
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
+                                                                    )}
                                                                 </div>
-                                                                <h4 className="font-bold text-slate-900 dark:text-white truncate" title={user.name}>{user.name}</h4>
-                                                                <p className="text-[10px] font-bold text-indigo-500 mb-1 font-mono">@{user.username}</p>
-                                                                <p className="text-xs text-slate-500 dark:text-slate-400 truncate mb-4" title={user.email}>{user.email}</p>
-
-                                                                <div className="flex items-center gap-2 mb-2">
-                                                                    <Shield size={12} className={isAdmin ? 'text-purple-500' : 'text-indigo-500'} />
-                                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider truncate" title={roleName}>
-                                                                        {roleName}
-                                                                    </span>
-                                                                </div>
-
-                                                                {linkedEmp && (
-                                                                    <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mb-4">
-                                                                        RH: <span className="font-medium text-slate-600 dark:text-slate-300">{linkedEmp.name}</span>
-                                                                    </p>
-                                                                )}
+                                                                <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-full font-black text-slate-500 dark:text-slate-300 uppercase">
+                                                                    {role.permissions.includes('all') ? 'Acesso Total' : `${role.permissions.length} Permissões`}
+                                                                </span>
                                                             </div>
+                                                            <h4 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-2">{role.name}</h4>
+                                                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">{role.description}</p>
+                                                            <div className="mb-6 flex items-center gap-2">
+                                                                <span className="text-xs font-bold text-slate-400">
+                                                                    {userCount === 0 ? 'Nenhum usuário vinculado' : `${userCount} usuário(s) associado(s)`}
+                                                                </span>
+                                                            </div>
+                                                        </div>
 
-                                                            <div className="flex gap-2 justify-end mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/60">
+                                                        <div className="flex items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-700/60">
+                                                            {canEditRole ? (
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => {
-                                                                        const matchedRole = findUserRole(user, roles);
-                                                                        setEditingUser({
-                                                                            ...user,
-                                                                            roleId: matchedRole ? matchedRole.id : user.roleId
-                                                                        });
-                                                                        setShowPassword(false);
-                                                                        setIsUserModalOpen(true);
+                                                                        setEditingRole(role);
+                                                                        setRoleSearchQuery('');
+                                                                        setIsRoleModalOpen(true);
                                                                     }}
-                                                                    className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 dark:bg-slate-900 rounded-lg transition-colors"
-                                                                    title="Editar Usuário"
+                                                                    className="flex-1 py-3 bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/20 dark:hover:text-purple-300 transition-all"
                                                                 >
-                                                                    <Edit2 size={16} />
+                                                                    Editar Acessos
                                                                 </button>
+                                                            ) : (
+                                                                <span
+                                                                    title="Apenas administradores podem editar o perfil de Administrador"
+                                                                    className="flex-1 py-3 bg-slate-50 dark:bg-slate-700/30 text-slate-400 dark:text-slate-500 rounded-xl text-xs font-black uppercase tracking-widest text-center cursor-not-allowed flex items-center justify-center gap-1.5"
+                                                                >
+                                                                    <Lock size={14} /> Administrador
+                                                                </span>
+                                                            )}
+
+                                                            {isSuper ? (
+                                                                <span
+                                                                    title="Perfil de Administrador protegido pelo sistema contra exclusão"
+                                                                    className="p-3 bg-slate-50 dark:bg-slate-700/30 text-slate-300 dark:text-slate-600 rounded-xl cursor-not-allowed"
+                                                                >
+                                                                    <Lock size={16} />
+                                                                </span>
+                                                            ) : userCount > 0 ? (
+                                                                <span
+                                                                    title={`Não é possível excluir: há ${userCount} usuário(s) vinculado(s)`}
+                                                                    className="p-3 bg-slate-50 dark:bg-slate-700/30 text-slate-300 dark:text-slate-600 rounded-xl cursor-not-allowed"
+                                                                >
+                                                                    <Trash2 size={16} />
+                                                                </span>
+                                                            ) : (
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() => handleDeleteUser(user)}
-                                                                    disabled={isSelf || user.username.toLowerCase() === 'admin'}
-                                                                    className={`p-2 rounded-lg transition-colors ${
-                                                                        isSelf || user.username.toLowerCase() === 'admin'
-                                                                            ? 'text-slate-300 dark:text-slate-600 bg-slate-50 dark:bg-slate-900 cursor-not-allowed opacity-50'
-                                                                            : 'text-slate-400 hover:text-rose-600 bg-slate-50 dark:bg-slate-900'
-                                                                    }`}
-                                                                    title={
-                                                                        isSelf
-                                                                            ? 'Você não pode excluir seu próprio usuário logado'
-                                                                            : user.username.toLowerCase() === 'admin'
-                                                                            ? 'Usuário raiz protegido pelo sistema'
-                                                                            : 'Excluir Usuário'
-                                                                    }
+                                                                    onClick={() => handleDeleteRole(role)}
+                                                                    className="p-3 bg-slate-50 dark:bg-slate-700/50 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-all"
+                                                                    title="Excluir Perfil"
                                                                 >
                                                                     <Trash2 size={16} />
                                                                 </button>
-                                                            </div>
+                                                            )}
                                                         </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        );
-                                    })()}
-                                </div>
-                            ) : (
-                                <div className="space-y-6">
-                                    <div className="flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/20 p-6 rounded-[24px] border border-indigo-100 dark:border-indigo-900/30">
-                                        <div className="flex items-center gap-4">
-                                            <div className="p-3 bg-purple-500 text-white rounded-xl shadow-lg shadow-purple-500/30">
-                                                <ShieldCheck size={24} />
-                                            </div>
-                                            <div>
-                                                <h3 className="font-black text-slate-900 dark:text-white text-lg">Perfis de Acesso (RBAC Roles)</h3>
-                                                <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">
-                                                    Controle granular de permissões por cargo, suportando UUIDs e perfis legados.
-                                                </p>
-                                            </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
-                                        <button
-                                            onClick={() => {
-                                                setEditingRole({ id: '', name: '', description: '', permissions: [] });
-                                                setRoleSearchQuery('');
-                                                setIsRoleModalOpen(true);
-                                            }}
-                                            className="px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center gap-2 shadow-xl shrink-0"
-                                        >
-                                            <Plus size={16} /> Novo Perfil
-                                        </button>
                                     </div>
+                                )}
 
-                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                        {roles.map(role => {
-                                            const isSuper = isSuperAdminRole(role);
-                                            const userCount = users.filter(u => u.roleId === role.id || (isSuper && isUserAdmin(u, roles))).length;
-
-                                            return (
-                                                <div key={role.id} className="bg-white dark:bg-slate-800 p-8 rounded-[32px] border border-slate-200 dark:border-slate-700 flex flex-col hover:border-purple-300 transition-all shadow-sm justify-between">
-                                                    <div>
-                                                        <div className="flex items-center justify-between mb-4">
-                                                            <div className="flex items-center gap-2">
-                                                                <Shield size={32} className={isSuper ? 'text-purple-600' : 'text-purple-500'} />
-                                                                {isSuper && (
-                                                                    <span className="text-[9px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
-                                                                        Administrador
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-full font-black text-slate-500 dark:text-slate-300 uppercase">
-                                                                {role.permissions.includes('all') ? 'Acesso Total' : `${role.permissions.length} Permissões`}
-                                                            </span>
-                                                        </div>
-                                                        <h4 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-2">{role.name}</h4>
-                                                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">{role.description}</p>
-                                                        <div className="mb-6 flex items-center gap-2">
-                                                            <span className="text-xs font-bold text-slate-400">
-                                                                {userCount === 0 ? 'Nenhum usuário vinculado' : `${userCount} usuário(s) associado(s)`}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-700/60">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setEditingRole(role);
-                                                                setRoleSearchQuery('');
-                                                                setIsRoleModalOpen(true);
-                                                            }}
-                                                            className="flex-1 py-3 bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/20 dark:hover:text-purple-300 transition-all"
-                                                        >
-                                                            Editar Acessos
-                                                        </button>
-                                                        {isSuper ? (
-                                                            <span
-                                                                title="Perfil de Administrador protegido pelo sistema contra exclusão"
-                                                                className="p-3 bg-slate-50 dark:bg-slate-700/30 text-slate-300 dark:text-slate-600 rounded-xl cursor-not-allowed"
-                                                            >
-                                                                <Lock size={16} />
-                                                            </span>
-                                                        ) : (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleDeleteRole(role)}
-                                                                className="p-3 bg-slate-50 dark:bg-slate-700/50 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-all"
-                                                                title="Excluir Perfil"
-                                                            >
-                                                                <Trash2 size={16} />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
+                                {/* Acesso Negado aos SubTabs */}
+                                {activeSecuritySubTab === 'none' && (
+                                    <div className="p-12 text-center bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-rose-200 dark:border-rose-900/40">
+                                        <ShieldAlert size={40} className="mx-auto mb-3 text-rose-500" />
+                                        <h4 className="text-base font-black text-slate-900 dark:text-white">Acesso Restrito</h4>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
+                                            Seu usuário não possui permissões atribuídas para gerenciar identidades (users.manage) ou perfis de acesso (roles.manage).
+                                        </p>
                                     </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
+                                )}
+                            </div>
+                        );
+                    })()}
 
                     {/* SYSTEM PARAMETERS */}
                     {activeTab === 'system' && (
@@ -4949,6 +5104,34 @@ const Settings = () => {
 
                             {(systemCategory === 'all' || systemCategory === 'appearance') && (
                             <>
+                            {/* Layout & Design Studio Relocated Card */}
+                            <section className="bg-gradient-to-br from-indigo-50/80 via-cyan-50/40 to-slate-50 dark:from-slate-900/60 dark:via-indigo-950/20 dark:to-slate-800/40 p-6 sm:p-8 rounded-[32px] border border-indigo-100 dark:border-indigo-900/30 shadow-xs mb-8">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3.5">
+                                        <div className="p-3 bg-gradient-to-tr from-cyan-600 to-indigo-600 rounded-2xl text-white shadow-md shadow-indigo-500/20">
+                                            <Palette size={22} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                                                Studio de Designer & Layout
+                                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-black">ESTILO</span>
+                                            </h3>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                                                Personalize a paleta de cores corporativas, temas (Claro, Escuro, OLED), tipografia, cantos arredondados e densidade visual do ERP em tempo real.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => window.dispatchEvent(new CustomEvent('infracore:open-layout-designer'))}
+                                        className="px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 transition-all hover:scale-105 active:scale-95 shrink-0"
+                                    >
+                                        <Palette size={16} />
+                                        <span>Abrir Studio Completo</span>
+                                    </button>
+                                </div>
+                            </section>
+
                             {/* Notification Preferences */}
                             <section className="bg-gradient-to-br from-rose-50 to-pink-50 dark:from-rose-950/20 dark:to-pink-950/20 p-8 rounded-[32px] border border-rose-100 dark:border-rose-900/30">
                                 <div className="flex items-center gap-3 mb-6">
@@ -6211,29 +6394,41 @@ const Settings = () => {
                                 </div>
 
                                 {/* Login / Username */}
-                                <div className="space-y-1.5">
-                                    <div className="flex justify-between items-center ml-1">
-                                        <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                                            Nome de Usuário (Login) <span className="text-rose-500">*</span>
-                                        </label>
-                                        {editingUser.username && (
-                                            <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-md">
-                                                @{normalizeUsername(editingUser.username) || 'usuario'}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <input
-                                        type="text"
-                                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-2xl py-3 px-4 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500/30 dark:text-white"
-                                        value={editingUser.username}
-                                        onChange={e => setEditingUser({ ...editingUser, username: e.target.value })}
-                                        placeholder="Ex: roberto.souza"
-                                        required
-                                    />
-                                    <p className="text-[10px] text-slate-400 dark:text-slate-500 ml-1">
-                                        O identificador é normalizado automaticamente para padrão seguro (minúsculas, sem acentos).
-                                    </p>
-                                </div>
+                                {(() => {
+                                    const isEditingRoot = Boolean(editingUser.id && users.find(u => u.id === editingUser.id)?.username.toLowerCase() === 'admin');
+                                    return (
+                                        <div className="space-y-1.5">
+                                            <div className="flex justify-between items-center ml-1">
+                                                <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                                    Nome de Usuário (Login) <span className="text-rose-500">*</span>
+                                                </label>
+                                                {editingUser.username && (
+                                                    <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-md">
+                                                        @{normalizeUsername(editingUser.username) || 'usuario'}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <input
+                                                type="text"
+                                                readOnly={isEditingRoot}
+                                                className={`w-full ${isEditingRoot ? 'bg-slate-100 dark:bg-slate-900/80 cursor-not-allowed opacity-80' : 'bg-slate-50 dark:bg-slate-900'} border border-slate-200 dark:border-slate-700/60 rounded-2xl py-3 px-4 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500/30 dark:text-white`}
+                                                value={editingUser.username}
+                                                onChange={e => !isEditingRoot && setEditingUser({ ...editingUser, username: e.target.value })}
+                                                placeholder="Ex: roberto.souza"
+                                                required
+                                            />
+                                            {isEditingRoot ? (
+                                                <p className="text-[10px] text-amber-500 font-bold ml-1 flex items-center gap-1">
+                                                    <Lock size={12} /> A conta raiz "@admin" é protegida pelo sistema e seu identificador não pode ser renomeado.
+                                                </p>
+                                            ) : (
+                                                <p className="text-[10px] text-slate-400 dark:text-slate-500 ml-1">
+                                                    O identificador é normalizado automaticamente para padrão seguro (minúsculas, sem acentos).
+                                                </p>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
 
                                 {/* E-mail Corporativo */}
                                 <div className="space-y-1.5">
@@ -6253,7 +6448,10 @@ const Settings = () => {
                                 {/* Senha de Acesso com Checklist de Força */}
                                 {(() => {
                                     const pwdStrength = getPasswordStrength(editingUser.password || '');
-                                    const hasPwd = Boolean(editingUser.password && editingUser.password.length > 0);
+                                    const rawPwd = editingUser.password || '';
+                                    const hasPwd = Boolean(rawPwd && rawPwd.length > 0);
+                                    const cleanLogin = normalizeUsername(editingUser.username);
+                                    const notContainsLogin = !cleanLogin || !rawPwd.toLowerCase().includes(cleanLogin.toLowerCase());
                                     const passedCount = Object.values(pwdStrength).filter(Boolean).length;
                                     const strengthLabel = passedCount <= 1 ? 'Muito Fraca' : passedCount <= 2 ? 'Fraca' : passedCount <= 3 ? 'Média' : passedCount <= 4 ? 'Boa' : 'Forte & Segura';
                                     const strengthColor = passedCount <= 2 ? 'bg-rose-500' : passedCount <= 3 ? 'bg-amber-500' : passedCount <= 4 ? 'bg-blue-500' : 'bg-emerald-500';
@@ -6294,7 +6492,7 @@ const Settings = () => {
                                                 <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200/70 dark:border-slate-800 space-y-2.5">
                                                     <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider">
                                                         <span className="text-slate-400">Política de Segurança:</span>
-                                                        <span className={passedCount === 5 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : passedCount >= 3 ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-rose-600 dark:text-rose-400 font-bold'}>
+                                                        <span className={passedCount === 5 && notContainsLogin ? 'text-emerald-600 dark:text-emerald-400 font-bold' : passedCount >= 3 ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-rose-600 dark:text-rose-400 font-bold'}>
                                                             {strengthLabel} ({passedCount}/5)
                                                         </span>
                                                     </div>
@@ -6327,6 +6525,12 @@ const Settings = () => {
                                                             {pwdStrength.hasSymbol ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
                                                             <span>1 caractere especial (!@#$%^&*...)</span>
                                                         </div>
+                                                        {cleanLogin && hasPwd && (
+                                                            <div className={`flex items-center gap-1.5 col-span-2 pt-1 border-t border-slate-200/50 dark:border-slate-800 ${notContainsLogin ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-rose-500 font-bold'}`}>
+                                                                {notContainsLogin ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
+                                                                <span>Não contém o nome de usuário (login)</span>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             )}
@@ -6335,69 +6539,84 @@ const Settings = () => {
                                 })()}
 
                                 {/* Role e Status */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div className="space-y-1.5">
-                                        <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
-                                            Cargo / Perfil de Acesso <span className="text-rose-500">*</span>
-                                        </label>
-                                        <select
-                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-2xl py-3 px-4 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500/30 dark:text-white"
-                                            value={editingUser.roleId}
-                                            onChange={e => setEditingUser({ ...editingUser, roleId: e.target.value })}
-                                            required
-                                        >
-                                            {roles.map(r => {
-                                                const isRoleAdmin = isSuperAdminRole(r);
-                                                const disabled = isRoleAdmin && !isSuperAdmin;
-                                                return (
-                                                    <option key={r.id} value={r.id} disabled={disabled}>
-                                                        {r.name} {isRoleAdmin ? '(Super Admin)' : ''} {disabled ? '🔒 Requer Admin' : ''}
-                                                    </option>
-                                                );
-                                            })}
-                                        </select>
-                                        {(() => {
-                                            const curRole = roles.find(r => r.id === editingUser.roleId) || findUserRole(editingUser, roles);
-                                            if (curRole && isSuperAdminRole(curRole)) {
-                                                return (
-                                                    <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 ml-1 flex items-center gap-1">
-                                                        <ShieldAlert size={12} /> Privilégios totais de Administrador.
-                                                    </p>
-                                                );
-                                            }
-                                            return null;
-                                        })()}
-                                    </div>
+                                {(() => {
+                                    const isSelf = editingUser.id === currentUser?.id;
+                                    const isEditingRoot = Boolean(editingUser.id && users.find(u => u.id === editingUser.id)?.username.toLowerCase() === 'admin');
+                                    const isRoleDisabled = isEditingRoot || (isSelf && !isSuperAdmin);
 
-                                    <div className="space-y-1.5">
-                                        <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
-                                            Status da Conta <span className="text-rose-500">*</span>
-                                        </label>
-                                        {(() => {
-                                            const isSelf = editingUser.id === currentUser?.id;
-                                            return (
-                                                <>
-                                                    <select
-                                                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-2xl py-3 px-4 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500/30 dark:text-white"
-                                                        value={editingUser.status}
-                                                        onChange={e => setEditingUser({ ...editingUser, status: e.target.value as any })}
-                                                        required
-                                                    >
-                                                        <option value="Ativo">Ativo</option>
-                                                        <option value="Inativo" disabled={isSelf}>
-                                                            Inativo {isSelf ? '(Sua conta)' : ''}
-                                                        </option>
-                                                    </select>
-                                                    {isSelf && (
-                                                        <p className="text-[10px] text-amber-500 ml-1">
-                                                            Você não pode inativar a própria conta conectada.
-                                                        </p>
-                                                    )}
-                                                </>
-                                            );
-                                        })()}
-                                    </div>
-                                </div>
+                                    return (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <div className="space-y-1.5">
+                                                <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
+                                                    Cargo / Perfil de Acesso <span className="text-rose-500">*</span>
+                                                </label>
+                                                <select
+                                                    disabled={isRoleDisabled}
+                                                    className={`w-full ${isRoleDisabled ? 'bg-slate-100 dark:bg-slate-900/80 cursor-not-allowed opacity-80' : 'bg-slate-50 dark:bg-slate-900'} border border-slate-200 dark:border-slate-700/60 rounded-2xl py-3 px-4 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500/30 dark:text-white`}
+                                                    value={editingUser.roleId}
+                                                    onChange={e => setEditingUser({ ...editingUser, roleId: e.target.value })}
+                                                    required
+                                                >
+                                                    {roles.map(r => {
+                                                        const isRoleAdmin = isSuperAdminRole(r);
+                                                        const disabled = (isRoleAdmin && !isSuperAdmin) || (isEditingRoot && !isRoleAdmin);
+                                                        return (
+                                                            <option key={r.id} value={r.id} disabled={disabled}>
+                                                                {r.name} {isRoleAdmin ? '(Super Admin)' : ''} {disabled ? '🔒 Requer Admin' : ''}
+                                                            </option>
+                                                        );
+                                                    })}
+                                                </select>
+                                                {isEditingRoot ? (
+                                                    <p className="text-[10px] text-amber-500 font-bold ml-1 flex items-center gap-1">
+                                                        <Lock size={12} /> Conta raiz vinculada obrigatoriamente a Administrador.
+                                                    </p>
+                                                ) : isSelf && !isSuperAdmin ? (
+                                                    <p className="text-[10px] text-amber-500 font-bold ml-1 flex items-center gap-1">
+                                                        <Lock size={12} /> Bloqueio de Governança: Você não pode alterar o próprio perfil.
+                                                    </p>
+                                                ) : (() => {
+                                                    const curRole = roles.find(r => r.id === editingUser.roleId) || findUserRole(editingUser, roles);
+                                                    if (curRole && isSuperAdminRole(curRole)) {
+                                                        return (
+                                                            <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 ml-1 flex items-center gap-1">
+                                                                <ShieldAlert size={12} /> Privilégios totais de Administrador.
+                                                            </p>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
+                                                    Status da Conta <span className="text-rose-500">*</span>
+                                                </label>
+                                                <select
+                                                    disabled={isSelf || isEditingRoot}
+                                                    className={`w-full ${isSelf || isEditingRoot ? 'bg-slate-100 dark:bg-slate-900/80 cursor-not-allowed opacity-80' : 'bg-slate-50 dark:bg-slate-900'} border border-slate-200 dark:border-slate-700/60 rounded-2xl py-3 px-4 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500/30 dark:text-white`}
+                                                    value={editingUser.status}
+                                                    onChange={e => setEditingUser({ ...editingUser, status: e.target.value as any })}
+                                                    required
+                                                >
+                                                    <option value="Ativo">Ativo</option>
+                                                    <option value="Inativo" disabled={isSelf || isEditingRoot}>
+                                                        Inativo {isSelf ? '(Sua conta)' : isEditingRoot ? '(@admin protegido)' : ''}
+                                                    </option>
+                                                </select>
+                                                {isEditingRoot ? (
+                                                    <p className="text-[10px] text-amber-500 font-bold ml-1 flex items-center gap-1">
+                                                        <Lock size={12} /> A conta raiz "@admin" não pode ser inativada.
+                                                    </p>
+                                                ) : isSelf ? (
+                                                    <p className="text-[10px] text-amber-500 ml-1">
+                                                        Você não pode inativar a própria conta conectada.
+                                                    </p>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
 
                                 {/* Vincular Colaborador (RH) */}
                                 <div className="space-y-1.5">

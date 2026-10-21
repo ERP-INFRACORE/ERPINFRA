@@ -219,6 +219,13 @@ const Layout = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Ouvinte global para abrir o Studio de Designer & Layout a partir da aba Configurações
+  useEffect(() => {
+    const handleOpenDesigner = () => setIsDesignerOpen(true);
+    window.addEventListener('infracore:open-layout-designer', handleOpenDesigner);
+    return () => window.removeEventListener('infracore:open-layout-designer', handleOpenDesigner);
+  }, []);
+
   const updatePref = <K extends keyof LayoutPreferences>(key: K, value: LayoutPreferences[K]) => {
     setPrefs(prev => ({ ...prev, [key]: value }));
     if (key === 'theme' && settings) {
@@ -245,7 +252,7 @@ const Layout = () => {
   const resetToOriginalLayout = () => {
     setPrefs({
       ...DEFAULT_PREFS,
-      showCustomizerBar: true
+      showCustomizerBar: false
     });
   };
 
@@ -259,16 +266,16 @@ const Layout = () => {
   }, [currentUser, roles]);
 
   const navItems = [
-    { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={18} />, group: 'Operação' },
-    { name: 'Cadastros', path: '/clients', icon: <Users size={18} />, permission: 'clients.view', group: 'Comercial' },
-    { name: 'Faturamento', path: '/sales', icon: <ShoppingCart size={18} />, permission: 'sales.view', group: 'Comercial' },
-    { name: 'Custos e Despesas', path: '/purchases', icon: <ShoppingBag size={18} />, permission: 'purchases.view', group: 'Suprimentos' },
-    { name: 'Produção', path: '/production', icon: <Construction size={18} />, permission: 'production.view', group: 'Operação' },
-    { name: 'Financeiro', path: '/finance', icon: <DollarSign size={18} />, permission: 'finance.dashboard', group: 'Gestão' },
-    { name: 'RH', path: '/hr', icon: <Briefcase size={18} />, permission: 'hr.view', group: 'Gestão' },
-    { name: 'Frota', path: '/fleet', icon: <Truck size={18} />, permission: 'fleet.view', group: 'Suprimentos' },
-    { name: 'Relatórios', path: '/reports', icon: <FileText size={18} />, permission: 'reports.view_basic', group: 'Governança' },
-    { name: 'Configurações', path: '/settings', icon: <Settings size={18} />, permission: 'settings.view', group: 'Governança' },
+    { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={16} />, group: 'Operação' },
+    { name: 'Cadastros', path: '/clients', icon: <Users size={16} />, permission: 'clients.view', group: 'Comercial' },
+    { name: 'Faturamento', path: '/sales', icon: <ShoppingCart size={16} />, permission: 'sales.view', group: 'Comercial' },
+    { name: 'Custos e Despesas', path: '/purchases', icon: <ShoppingBag size={16} />, permission: 'purchases.view', group: 'Suprimentos' },
+    { name: 'Produção', path: '/production', icon: <Construction size={16} />, permission: 'production.view', group: 'Operação' },
+    { name: 'Financeiro', path: '/finance', icon: <DollarSign size={16} />, permission: 'finance.dashboard', group: 'Gestão' },
+    { name: 'RH', path: '/hr', icon: <Briefcase size={16} />, permission: 'hr.view', group: 'Gestão' },
+    { name: 'Frota', path: '/fleet', icon: <Truck size={16} />, permission: 'fleet.view', group: 'Suprimentos' },
+    { name: 'Relatórios', path: '/reports', icon: <FileText size={16} />, permission: 'reports.view_basic', group: 'Governança' },
+    { name: 'Configurações', path: '/settings', icon: <Settings size={16} />, permission: 'settings.view', group: 'Governança' },
   ].filter(item => !item.permission || hasPermission(item.permission));
 
   // Real-time system notifications (respecting settings.notifications preferences)
@@ -668,7 +675,7 @@ const Layout = () => {
           prefs.navMode === 'dual-deck' ? 'h-auto py-2' : 'h-16'
         } shadow-soft`}
       >
-        <div className={`${containerClass} mx-auto h-full`}>
+        <div className="w-full max-w-[1920px] px-3 sm:px-4 lg:px-6 mx-auto h-full">
           <div className="flex items-center justify-between h-full gap-2 lg:gap-4">
             {/* Mobile Hamburger Button + Logo Area */}
             <div className="flex items-center gap-2.5 shrink-0">
@@ -695,31 +702,33 @@ const Layout = () => {
               </div>
             </div>
 
-            {/* Horizontal Navigation - Modules as Tabs (Preserved Original Structure) */}
+            {/* Horizontal Navigation - Modules as Tabs (All Tabs Visible) */}
             {prefs.navMode !== 'sidebar' && (
-              <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 overflow-x-auto no-scrollbar min-w-0 flex-1 justify-start ml-2 xl:ml-4">
+              <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 2xl:gap-1.5 flex-nowrap flex-1 justify-start ml-2 xl:ml-3 min-w-0">
                 {navItems.map(item => (
                   <NavLink
                     key={item.path}
                     to={item.path}
                     className={({ isActive }) =>
-                      `px-2.5 xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-medium transition-all duration-200 ease-in-out flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                      `px-2 xl:px-2.5 2xl:px-3 py-1.5 rounded-lg text-xs xl:text-[13px] 2xl:text-sm font-medium transition-all duration-150 ease-in-out flex items-center gap-1 xl:gap-1.5 whitespace-nowrap shrink-0 ${
                         isActive
                           ? activeNavClass
                           : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-700/50'
                       }`
                     }
                   >
-                    {item.icon}
+                    <span className="shrink-0">{item.icon}</span>
                     <span>{item.name}</span>
                   </NavLink>
                 ))}
                 <button
+                  type="button"
                   onClick={handleLogout}
-                  className="px-2.5 xl:px-3 py-2 rounded-full text-xs xl:text-sm font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:text-slate-400 dark:hover:text-rose-400 dark:hover:bg-rose-900/20 transition-all duration-200 ease-in-out flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                  className="px-2 xl:px-2.5 py-1.5 rounded-lg text-xs xl:text-[13px] 2xl:text-sm font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:text-slate-400 dark:hover:text-rose-400 dark:hover:bg-rose-900/20 transition-all duration-150 ease-in-out flex items-center gap-1 whitespace-nowrap shrink-0 ml-1"
+                  title="Sair do Sistema"
                 >
-                  <LogOut size={17} />
-                  <span>Sair</span>
+                  <LogOut size={16} className="shrink-0 text-slate-400" />
+                  <span className="hidden xl:inline">Sair</span>
                 </button>
               </nav>
             )}
@@ -744,54 +753,8 @@ const Layout = () => {
               </div>
             )}
 
-            {/* Right Actions: Search (Ctrl+K), Customizer Toggle, Notifications Bell & User Profile */}
+            {/* Right Actions: Notifications Bell & User Profile */}
             <div className="flex items-center gap-2 shrink-0 ml-auto">
-              {/* Quick Search Button (Ctrl+K) */}
-              <button
-                type="button"
-                onClick={() => setIsSearchOpen(true)}
-                className="p-2 rounded-xl bg-slate-100 dark:bg-slate-700/70 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5 text-xs font-bold"
-                title="Busca Rápida Global (Ctrl+K)"
-              >
-                <Search size={16} />
-                <span className="hidden 2xl:inline text-[11px] text-slate-400">Ctrl+K</span>
-              </button>
-
-              {/* Botão de Designer & Layout Aprimorado */}
-              <button
-                type="button"
-                onClick={() => setIsDesignerOpen(prev => !prev)}
-                className={`p-2 px-2.5 rounded-xl border transition-all flex items-center gap-2 text-xs font-bold shadow-xs ${
-                  isDesignerOpen
-                    ? `${accentBadgeClass} border-transparent ring-2 ring-cyan-500/40 shadow-sm`
-                    : 'bg-slate-100 dark:bg-slate-700/70 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 hover:border-slate-300'
-                }`}
-                title="Abrir Studio de Designer & Layout (Cores, Estilos, Temas e Ergonomia) [Alt+L]"
-              >
-                <div className="relative flex items-center justify-center">
-                  <Palette
-                    size={16}
-                    className={isDesignerOpen ? 'text-white animate-pulse' : 'text-cyan-600 dark:text-cyan-400'}
-                  />
-                  <span
-                    className="absolute -top-1 -right-1 w-2 h-2 rounded-full ring-1 ring-white dark:ring-slate-900 shadow-xs"
-                    style={{ backgroundColor: accentData.colorHex }}
-                  />
-                </div>
-                <div className="hidden xl:flex items-center gap-1.5">
-                  <span className="text-[11px] font-black uppercase tracking-wider">Layout</span>
-                  <span
-                    className={`text-[9px] px-1.5 py-0.2 rounded-full font-black uppercase tracking-wider ${
-                      isDesignerOpen
-                        ? 'bg-white/20 text-white'
-                        : 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300'
-                    }`}
-                  >
-                    Design
-                  </span>
-                </div>
-              </button>
-
               {/* Notification Bell Button (Opens Full Unclipped Notification Window) */}
               <button
                 type="button"
@@ -811,8 +774,8 @@ const Layout = () => {
                 )}
               </button>
 
-              {/* User Profile (Preserved Original Structure) */}
-              <div className="hidden xl:flex flex-col items-end mr-1 pl-2">
+              {/* User Profile */}
+              <div className="hidden 2xl:flex flex-col items-end mr-1 pl-2">
                 <span className="text-sm font-bold text-slate-800 dark:text-white leading-none">
                   {currentUser?.name || 'Visitante'}
                 </span>
@@ -821,11 +784,11 @@ const Layout = () => {
                 </span>
               </div>
               <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-700">
-                <div className="w-9 h-9 xl:w-10 xl:h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 overflow-hidden shadow-inner ring-2 ring-white dark:ring-slate-800">
+                <div className="w-8 h-8 xl:w-9 xl:h-9 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 overflow-hidden shadow-inner ring-2 ring-white dark:ring-slate-800">
                   {currentUser?.avatar ? (
                     <img src={currentUser.avatar} alt="Avatar" className="w-full h-full object-cover" />
                   ) : (
-                    <UserIcon size={20} />
+                    <UserIcon size={18} />
                   )}
                 </div>
               </div>

@@ -317,13 +317,50 @@ const Sales = () => {
     });
   }, [sales, historySearchTerm, historyDate, historyStatusFilter, historyPaymentFilter]);
 
-  // Filtered Budgets with comprehensive search and status consistency
+  // Helper to extract or generate purely numeric sequential ID for budgets
+  const getBudgetNumericId = (b?: Budget | null): number => {
+    if (!b) return 0;
+    if ((b as any).budgetNumber && Number((b as any).budgetNumber) > 0) {
+      return Number((b as any).budgetNumber);
+    }
+    const cleanId = String(b.id || '').trim();
+    if (/^\d+$/.test(cleanId)) {
+      return parseInt(cleanId, 10);
+    }
+    const digitsOnly = cleanId.replace(/\D/g, '');
+    if (digitsOnly && digitsOnly.length <= 8 && parseInt(digitsOnly, 10) > 0) {
+      return parseInt(digitsOnly, 10);
+    }
+    return 0;
+  };
+
+  const getBudgetDisplayId = (b?: Budget | null): string => {
+    if (!b) return '';
+    const num = getBudgetNumericId(b);
+    if (num > 0) return String(num);
+    if (Array.isArray(budgets)) {
+      const sorted = [...budgets].sort((x, y) => (x.date || '').localeCompare(y.date || ''));
+      const idx = sorted.findIndex(item => item.id === b.id);
+      if (idx >= 0) return String(idx + 1);
+    }
+    return '1';
+  };
+
+  const getNextBudgetNumber = (): string => {
+    if (!Array.isArray(budgets) || budgets.length === 0) return '1';
+    const numbers = budgets.map(b => getBudgetNumericId(b)).filter(n => n > 0);
+    if (numbers.length === 0) return '1';
+    const maxNumber = Math.max(...numbers);
+    return String(maxNumber + 1);
+  };
+
+  // Filtered Budgets with comprehensive search, status consistency and ascending numeric ordering
   const filteredBudgets = useMemo(() => {
     if (!Array.isArray(budgets)) return [];
     const formattedFilterDate = budgetDateFilter ? budgetDateFilter.split('-').reverse().join('/') : '';
     const term = budgetSearchTerm.toLowerCase().trim();
 
-    return budgets.filter(b => {
+    const filtered = budgets.filter(b => {
       if (!b) return false;
 
       // Status filter
@@ -337,18 +374,27 @@ const Sales = () => {
         if (!bDate.includes(formattedFilterDate)) return false;
       }
 
-      // Search term (ID, Client, Items, Payment)
+      // Search term (Numeric ID, Client, Items, Payment)
       if (!term) return true;
 
+      const numId = getBudgetDisplayId(b);
       const clientName = (b.clientName || '').toLowerCase();
       const budgetId = String(b.id || '').toLowerCase();
       const payment = (b.paymentMethod || '').toLowerCase();
       const itemsMatch = Array.isArray(b.items) && b.items.some(i => (i.name || '').toLowerCase().includes(term));
 
-      return clientName.includes(term) ||
+      return numId.includes(term) ||
+        clientName.includes(term) ||
         budgetId.includes(term) ||
         payment.includes(term) ||
         itemsMatch;
+    });
+
+    // Ordenar em ordem crescente por numeração de identificação
+    return filtered.sort((a, b) => {
+      const numA = Number(getBudgetDisplayId(a)) || 0;
+      const numB = Number(getBudgetDisplayId(b)) || 0;
+      return numA - numB;
     });
   }, [budgets, budgetSearchTerm, budgetStatusFilter, budgetDateFilter]);
 
@@ -833,8 +879,13 @@ const Sales = () => {
         }
       }
 
+      const isEditing = Boolean(editingBudgetId);
+      const nextNumStr = getNextBudgetNumber();
+      const budgetIdToUse = isEditing ? editingBudgetId! : nextNumStr;
+      const budgetNumToUse = Number(budgetIdToUse.replace(/\D/g, '')) || Number(nextNumStr);
+
       const newBudget: Budget = {
-        id: editingBudgetId || `B-${Date.now()}`,
+        id: budgetIdToUse,
         clientId: selectedClient,
         clientName: client?.name || 'Cliente Avulso',
         date: new Date().toLocaleDateString('pt-BR'),
@@ -849,7 +900,8 @@ const Sales = () => {
         netWeight: calculatedNetWeight,
         weightNotes: weightNotes || weighingCalculations?.explanation,
         paymentMethod: paymentMethod,
-        installments: installments
+        installments: installments,
+        budgetNumber: budgetNumToUse
       } as any;
 
       if (editingBudgetId) {
@@ -869,12 +921,13 @@ const Sales = () => {
 
   // Converter Orçamento para Venda com validação
   const handleConvertBudgetToSale = (budget: Budget) => {
+    const displayNum = getBudgetDisplayId(budget);
     if (budget.status === 'Convertido') {
-      addToast(`O orçamento #${budget.id} já foi convertido anteriormente.`, 'warning');
+      addToast(`O orçamento #${displayNum} já foi convertido anteriormente.`, 'warning');
       return;
     }
 
-    addToast(`Deseja converter o orçamento #${budget.id} em uma venda definitiva?`, 'info', 10000, {
+    addToast(`Deseja converter o orçamento #${displayNum} em uma venda definitiva?`, 'info', 10000, {
       label: 'CONFIRMAR',
       onClick: () => {
         try {
@@ -906,7 +959,7 @@ const Sales = () => {
             id: `S-${Date.now()}`,
             date: new Date().toLocaleDateString('pt-BR'),
             dueDate: conversionDueDate,
-            description: `Conversão de Orçamento #${budget.id}`,
+            description: `Conversão de Orçamento #${displayNum}`,
             category: 'Vendas',
             accountId: targetAcc.id,
             account: targetAcc.name,
@@ -1057,7 +1110,7 @@ const Sales = () => {
     }
     try {
       const dataToExport = filteredBudgets.map(b => ({
-        ID: b.id,
+        ID: getBudgetDisplayId(b),
         Data: b.date,
         Cliente: b.clientName,
         Subtotal: b.subtotal,
@@ -1107,7 +1160,7 @@ const Sales = () => {
         </div>
         <div class="doc-info" style="text-align: right;">
           <h2 style="font-size: 18px; color: #f97316; margin-bottom: 5px;">ORÇAMENTO DE VENDA</h2>
-          <p style="font-size: 14px; margin: 2px 0;">Nº: <strong>${budget.id.split('-')[1] || budget.id}</strong></p>
+          <p style="font-size: 14px; margin: 2px 0;">Nº: <strong>${getBudgetDisplayId(budget)}</strong></p>
           <p style="font-size: 12px; margin: 2px 0;">Emissão: ${budget.date}</p>
         </div>
       </div>
@@ -1191,7 +1244,7 @@ const Sales = () => {
         </div>
       </div>
     `;
-    printDocument(`Orcamento_${budget.id}_${budget.clientName.replace(/\s+/g, '_')}`, html);
+    printDocument(`Orcamento_${getBudgetDisplayId(budget)}_${budget.clientName.replace(/\s+/g, '_')}`, html);
   };
 
   // Impressão do Recibo da Venda
@@ -1666,7 +1719,7 @@ const Sales = () => {
               <div>
                 <h3 className="text-xl font-bold text-orange-900 dark:text-orange-400 flex items-center gap-2">
                   <Save className="text-orange-600" />
-                  Orçamento #{selectedBudget.id}
+                  Orçamento #{getBudgetDisplayId(selectedBudget)}
                 </h3>
                 <p className="text-xs text-orange-700/60 mt-1 uppercase font-bold tracking-wider">Válido até: {selectedBudget.expiryDate}</p>
               </div>
@@ -2664,7 +2717,7 @@ const Sales = () => {
                   filteredBudgets.map(b => (
                     <tr key={b.id} className="group hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-all">
                       <td className="px-6 py-5">
-                        <p className="font-mono text-[10px] text-slate-400">#{b.id.split('-')[1]?.slice(-6) || b.id}</p>
+                        <p className="font-mono text-xs font-bold text-slate-700 dark:text-slate-200">#{getBudgetDisplayId(b)}</p>
                         <p className="font-bold text-slate-600 dark:text-slate-300">{b.date}</p>
                       </td>
                       <td className="px-6 py-5 font-black text-slate-900 dark:text-white">{b.clientName}</td>
@@ -2680,7 +2733,6 @@ const Sales = () => {
                         <div className="flex items-center justify-end gap-1.5 opacity-20 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => setSelectedBudget(b)} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all" title="Ver Detalhes"><Eye size={18} /></button>
                           <button onClick={() => handlePrintBudget(b)} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all" title="Imprimir Orçamento"><Printer size={18} /></button>
-                          <button onClick={() => setShowNFE({ type: 'budget', data: b })} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all" title="Gerar NF-e (DANFE)"><FileSearch size={18} /></button>
                           {b.status !== 'Convertido' && (
                             <button
                               onClick={() => handleConvertBudgetToSale(b)}

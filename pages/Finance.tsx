@@ -40,7 +40,13 @@ import {
    FileText,
    Undo2,
    Clock,
-   Info
+   Info,
+   Copy,
+   Check,
+   Star,
+   Building2,
+   QrCode,
+   Wallet
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, AreaChart, Area, Legend } from 'recharts';
@@ -67,6 +73,49 @@ const parseDateString = (dateStr?: string): Date => {
    }
    const parsed = new Date(dateStr);
    return isNaN(parsed.getTime()) ? new Date() : parsed;
+};
+
+// Brazilian Bank Institutions (FEBRABAN codes, branding & color schemes)
+const BRAZILIAN_BANKS = [
+   { code: '341', name: 'Itaú Unibanco S.A.', shortName: 'Itaú', color: 'bg-orange-600', badgeColor: 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-900/50' },
+   { code: '237', name: 'Banco Bradesco S.A.', shortName: 'Bradesco', color: 'bg-red-600', badgeColor: 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-900/50' },
+   { code: '001', name: 'Banco do Brasil S.A.', shortName: 'Banco do Brasil', color: 'bg-yellow-500', badgeColor: 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-900/50' },
+   { code: '104', name: 'Caixa Econômica Federal', shortName: 'Caixa', color: 'bg-blue-600', badgeColor: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-900/50' },
+   { code: '033', name: 'Banco Santander (Brasil) S.A.', shortName: 'Santander', color: 'bg-red-700', badgeColor: 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-900/50' },
+   { code: '260', name: 'Nu Pagamentos S.A. (Nubank)', shortName: 'Nubank', color: 'bg-purple-700', badgeColor: 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-900/50' },
+   { code: '077', name: 'Banco Inter S.A.', shortName: 'Banco Inter', color: 'bg-orange-500', badgeColor: 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-900/50' },
+   { code: '756', name: 'Banco Cooperativo Sicoob S.A.', shortName: 'Sicoob', color: 'bg-teal-700', badgeColor: 'bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-900/50' },
+   { code: '748', name: 'Banco Cooperativo Sicredi S.A.', shortName: 'Sicredi', color: 'bg-emerald-700', badgeColor: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/50' },
+   { code: '422', name: 'Banco Safra S.A.', shortName: 'Safra', color: 'bg-amber-800', badgeColor: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900/50' },
+   { code: '336', name: 'Banco C6 S.A. (C6 Bank)', shortName: 'C6 Bank', color: 'bg-slate-900', badgeColor: 'bg-slate-500/10 text-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700' },
+   { code: '212', name: 'Banco Original S.A.', shortName: 'Original', color: 'bg-green-600', badgeColor: 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-200 dark:border-green-900/50' },
+   { code: '041', name: 'Banco do Estado do RS (Banrisul)', shortName: 'Banrisul', color: 'bg-sky-700', badgeColor: 'bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-900/50' },
+   { code: '000', name: 'Caixa Interno / Gaveta / Tesouraria', shortName: 'Caixa Físico', color: 'bg-emerald-600', badgeColor: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/50' },
+   { code: '999', name: 'Outro Banco ou Instituição', shortName: 'Outro Banco', color: 'bg-cyan-600', badgeColor: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-200 dark:border-cyan-900/50' },
+];
+
+const ACCOUNT_COLORS = [
+   { color: 'bg-orange-600', label: 'Laranja (Itaú / Inter)' },
+   { color: 'bg-red-600', label: 'Vermelho (Bradesco / Santander)' },
+   { color: 'bg-blue-600', label: 'Azul (Caixa / Banrisul)' },
+   { color: 'bg-yellow-500', label: 'Amarelo (Banco do Brasil)' },
+   { color: 'bg-purple-700', label: 'Roxo (Nubank)' },
+   { color: 'bg-teal-700', label: 'Teal (Sicoob)' },
+   { color: 'bg-emerald-600', label: 'Esmeralda (Sicredi / Caixa)' },
+   { color: 'bg-cyan-600', label: 'Ciano (InfraCore)' },
+   { color: 'bg-slate-900', label: 'Grafite Escuro (C6 Bank)' },
+   { color: 'bg-amber-800', label: 'Dourado / Bronze (Safra)' },
+];
+
+const getPixKeyPlaceholder = (type: string) => {
+   switch (type) {
+      case 'CNPJ': return '00.000.000/0001-00';
+      case 'CPF': return '000.000.000-00';
+      case 'E-mail': return 'financeiro@empresa.com.br';
+      case 'Telefone': return '(11) 99999-9999';
+      case 'Chave Aleatória': return '123e4567-e89b-12d3-a456-426614174000';
+      default: return 'Informe a chave PIX da conta';
+   }
 };
 
 const Finance = () => {
@@ -118,10 +167,178 @@ const Finance = () => {
       account: 'Bradesco PJ'
    });
 
-   // Account Form State
+   // Default active bank account helper
+   const defaultAccount = useMemo(() => {
+      return accounts.find(a => a.isDefault) || accounts[0] || null;
+   }, [accounts]);
+
+   // Account Form State & Enhancements
    const [accountForm, setAccountForm] = useState<any>({
-      id: '', name: '', type: 'Conta Corrente', balance: 0, color: 'bg-blue-600', code: ''
+      id: '',
+      name: 'Itaú Unibanco',
+      bankCode: '341',
+      bankName: 'Itaú Unibanco S.A.',
+      type: 'Conta Corrente',
+      balance: 0,
+      initialBalanceDate: new Date().toLocaleDateString('pt-BR'),
+      agency: '',
+      agencyDigit: '',
+      accountNumber: '',
+      accountDigit: '',
+      pixKeyType: 'CNPJ',
+      pixKey: '',
+      creditLimit: 0,
+      color: 'bg-orange-600',
+      isDefault: false,
+      notes: ''
    });
+   const [copiedPixId, setCopiedPixId] = useState<string | null>(null);
+   const [accountSearchTerm, setAccountSearchTerm] = useState('');
+
+   const handleCopyPix = (accId: string, pixKey: string) => {
+      if (!pixKey) return;
+      navigator.clipboard.writeText(pixKey);
+      setCopiedPixId(accId);
+      addToast(`Chave PIX copiada: ${pixKey}`, 'success');
+      setTimeout(() => setCopiedPixId(null), 2500);
+   };
+
+   const handleSetDefaultAccount = (targetAcc: any) => {
+      accounts.forEach(a => {
+         const isTarget = a.id === targetAcc.id;
+         if (Boolean(a.isDefault) !== isTarget) {
+            addAccount({ ...a, isDefault: isTarget });
+            if (isSupabaseConfigured()) {
+               updateItem('financial_accounts', a.id, { isDefault: isTarget }).catch(() => {});
+            }
+         }
+      });
+      addToast(`Conta "${targetAcc.name}" definida como Conta Padrão do ERP.`, 'success');
+      addAuditLog({
+         userId: currentUser?.id || 'system',
+         userName: currentUser?.name || 'Administrador',
+         action: 'Alteração de Conta Padrão',
+         module: 'Financeiro',
+         details: `A conta ${targetAcc.name} foi definida como conta padrão do ERP para baixas e faturamento.`,
+         severity: 'info'
+      });
+   };
+
+   const openNewAccountModal = () => {
+      setAccountForm({
+         id: '',
+         name: 'Itaú Unibanco',
+         bankCode: '341',
+         bankName: 'Itaú Unibanco S.A.',
+         type: 'Conta Corrente',
+         balance: 0,
+         initialBalanceDate: new Date().toLocaleDateString('pt-BR'),
+         agency: '',
+         agencyDigit: '',
+         accountNumber: '',
+         accountDigit: '',
+         pixKeyType: 'CNPJ',
+         pixKey: '',
+         creditLimit: 0,
+         color: 'bg-orange-600',
+         isDefault: accounts.length === 0,
+         notes: ''
+      });
+      setIsAccountModalOpen(true);
+   };
+
+   const openEditAccountModal = (acc: any) => {
+      setAccountForm({
+         id: acc.id,
+         name: acc.name || '',
+         bankCode: acc.bankCode || acc.code || '',
+         bankName: acc.bankName || '',
+         type: acc.type || 'Conta Corrente',
+         balance: acc.initialBalance !== undefined ? acc.initialBalance : (acc.balance || 0),
+         initialBalanceDate: acc.initialBalanceDate || '',
+         agency: acc.agency || '',
+         agencyDigit: acc.agencyDigit || '',
+         accountNumber: acc.accountNumber || '',
+         accountDigit: acc.accountDigit || '',
+         pixKeyType: acc.pixKeyType || 'CNPJ',
+         pixKey: acc.pixKey || '',
+         creditLimit: acc.creditLimit || 0,
+         color: acc.color || 'bg-blue-600',
+         isDefault: Boolean(acc.isDefault),
+         notes: acc.notes || ''
+      });
+      setIsAccountModalOpen(true);
+   };
+
+   const handleSaveAccount = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!accountForm.name?.trim()) {
+         addToast("Informe o nome de identificação da conta.", 'warning');
+         return;
+      }
+
+      const isEditing = Boolean(accountForm.id);
+      const accountId = isEditing
+         ? accountForm.id
+         : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `acc-${Date.now()}`);
+
+      const initialBal = Number(accountForm.balance || 0);
+      const creditLim = Number(accountForm.creditLimit || 0);
+      const isDefaultAcc = Boolean(accountForm.isDefault) || accounts.length === 0;
+
+      const accountPayload: any = {
+         ...accountForm,
+         id: accountId,
+         name: accountForm.name.trim(),
+         bankCode: accountForm.bankCode || '',
+         bankName: accountForm.bankName || accountForm.name.trim(),
+         type: accountForm.type || 'Conta Corrente',
+         balance: initialBal,
+         initialBalance: initialBal,
+         creditLimit: creditLim,
+         initialBalanceDate: accountForm.initialBalanceDate || new Date().toLocaleDateString('pt-BR'),
+         agency: accountForm.agency || '',
+         agencyDigit: accountForm.agencyDigit || '',
+         accountNumber: accountForm.accountNumber || '',
+         accountDigit: accountForm.accountDigit || '',
+         pixKeyType: accountForm.pixKeyType || 'Nenhuma',
+         pixKey: accountForm.pixKey?.trim() || '',
+         color: accountForm.color || 'bg-blue-600',
+         isDefault: isDefaultAcc,
+         notes: accountForm.notes?.trim() || ''
+      };
+
+      // Se marcada como padrão, desmarca as demais contas
+      if (isDefaultAcc) {
+         accounts.forEach(a => {
+            if (a.id !== accountId && a.isDefault) {
+               addAccount({ ...a, isDefault: false });
+               if (isSupabaseConfigured()) {
+                  updateItem('financial_accounts', a.id, { isDefault: false }).catch(() => {});
+               }
+            }
+         });
+      }
+
+      addAccount(accountPayload);
+      if (isSupabaseConfigured() && isEditing) {
+         updateItem('financial_accounts', accountId, accountPayload).catch(err => {
+            console.warn("Erro ao sincronizar atualização de conta bancária:", err);
+         });
+      }
+
+      addAuditLog({
+         userId: currentUser?.id || 'system',
+         userName: currentUser?.name || 'Administrador',
+         action: isEditing ? 'Atualização de Conta Bancária' : 'Criação de Conta Bancária',
+         module: 'Financeiro',
+         details: `Conta ${accountPayload.name} (${accountPayload.type}) ${isEditing ? 'atualizada' : 'cadastrada'} com saldo inicial de ${formatMoney(initialBal)}.${isDefaultAcc ? ' (Definida como padrão)' : ''}`,
+         severity: 'info'
+      });
+
+      addToast(isEditing ? "Conta bancária atualizada com sucesso!" : "Conta bancária cadastrada com sucesso!", 'success');
+      setIsAccountModalOpen(false);
+   };
 
    // Filters
    const [searchTerm, setSearchTerm] = useState('');
@@ -330,7 +547,8 @@ const Finance = () => {
       const saleDate = sale.date || new Date().toLocaleDateString('pt-BR');
       const baseDate = parseDateString(saleDate);
 
-      const targetAccount = accounts.find(a => a.id === sale.accountId) || accounts[0] || { id: 'acc-1', name: 'Caixa Geral' };
+      const defaultAcc = accounts.find(a => a.isDefault) || accounts[0] || { id: 'acc-1', name: 'Caixa Geral' };
+      const targetAccount = accounts.find(a => a.id === sale.accountId) || defaultAcc;
       const defaultAccountId = sale.accountId || targetAccount.id;
       const defaultAccountName = sale.account || targetAccount.name;
 
@@ -829,8 +1047,9 @@ const Finance = () => {
          eligibleTxs = txs.filter(t => !isAlreadySettled(t));
       }
 
-      // Default account: first account or matching account
-      const firstAccId = eligibleTxs[0]?.accountId || accounts[0]?.id || '';
+      // Conta Padrão: prioriza a conta do título se definida ou a Conta Padrão do ERP
+      const defAcc = accounts.find(a => a.isDefault) || accounts[0];
+      const firstAccId = eligibleTxs[0]?.accountId || defAcc?.id || '';
 
       setSettlementTargetTxs(eligibleTxs);
       setSettlementForm({
@@ -1520,7 +1739,8 @@ const Finance = () => {
                         date: new Date().toLocaleDateString('pt-BR'),
                         dueDate: new Date().toLocaleDateString('pt-BR'),
                         status: 'Pendente',
-                        account: accounts[0]?.name || 'Bradesco PJ',
+                        account: accounts.find(a => a.isDefault)?.name || accounts[0]?.name || 'Caixa Geral',
+                        accountId: accounts.find(a => a.isDefault)?.id || accounts[0]?.id,
                         paymentMethod: 'Boleto',
                         costCenter: 'Administrativo'
                      });
@@ -2569,75 +2789,318 @@ const Finance = () => {
          {/* ========================================================================= */}
          {activeTab === 'accounts' && (
             <div className="space-y-6 animate-in fade-in duration-300">
-               <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700">
-                  <div>
-                     <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <Landmark className="text-cyan-600" /> Contas Bancárias & Caixa
-                     </h3>
-                     <p className="text-xs text-slate-500 mt-1">Gerencie as contas bancárias, chaves PIX e saldos operacionais.</p>
+               {/* Resumo Consolidado de Contas */}
+               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 flex items-center gap-4">
+                     <div className="w-12 h-12 rounded-xl bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 flex items-center justify-center shrink-0">
+                        <Landmark size={24} />
+                     </div>
+                     <div>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Saldo Consolidado</p>
+                        <p className={`text-xl font-black font-mono ${accounts.reduce((s, a) => s + (Number(a.balance) || 0), 0) < 0 ? 'text-red-600' : 'text-slate-900 dark:text-white'}`}>
+                           {formatMoney(accounts.reduce((s, a) => s + (Number(a.balance) || 0), 0))}
+                        </p>
+                        <p className="text-[11px] text-slate-400 font-medium mt-0.5">Disponível em caixas & bancos</p>
+                     </div>
                   </div>
-                  <button
-                     onClick={() => {
-                        setAccountForm({ id: '', name: '', type: 'Conta Corrente', balance: 0, color: 'bg-blue-600', code: '' });
-                        setIsAccountModalOpen(true);
-                     }}
-                     className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors flex items-center gap-2"
-                  >
-                     <Plus size={14} /> Nova Conta Bancária
-                  </button>
+
+                  <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 flex items-center gap-4">
+                     <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center shrink-0">
+                        <Wallet size={24} />
+                     </div>
+                     <div>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total com Limites</p>
+                        <p className="text-xl font-black font-mono text-slate-900 dark:text-white">
+                           {formatMoney(accounts.reduce((s, a) => s + (Number(a.balance) || 0) + (Number(a.creditLimit) || 0), 0))}
+                        </p>
+                        <p className="text-[11px] text-slate-400 font-medium mt-0.5">Saldo + Cheque Especial</p>
+                     </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 flex items-center gap-4">
+                     <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-500 flex items-center justify-center shrink-0">
+                        <Star size={24} className="fill-amber-400 text-amber-500" />
+                     </div>
+                     <div>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Conta Padrão ERP</p>
+                        <p className="text-sm font-black text-slate-900 dark:text-white truncate max-w-[160px]">
+                           {accounts.find(a => a.isDefault)?.name || accounts[0]?.name || 'Nenhuma definida'}
+                        </p>
+                        <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                           {accounts.find(a => a.isDefault)?.type || 'Sugerida para baixas'}
+                        </p>
+                     </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 flex items-center gap-4">
+                     <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center shrink-0">
+                        <Building2 size={24} />
+                     </div>
+                     <div>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Contas Ativas</p>
+                        <p className="text-xl font-black font-mono text-slate-900 dark:text-white">
+                           {accounts.length} {accounts.length === 1 ? 'Conta' : 'Contas'}
+                        </p>
+                        <p className="text-[11px] text-slate-400 font-medium mt-0.5">Bancos, caixas & fintechs</p>
+                     </div>
+                  </div>
                </div>
 
+               {/* Barra de Ações & Busca */}
+               <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700">
+                  <div className="relative flex-1 max-w-md">
+                     <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                     <input
+                        type="text"
+                        placeholder="Buscar por banco, agência, conta, nome ou chave PIX..."
+                        value={accountSearchTerm}
+                        onChange={e => setAccountSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-cyan-500 transition-all"
+                     />
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                     <button
+                        onClick={openNewAccountModal}
+                        className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-cyan-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                     >
+                        <Plus size={16} /> Nova Conta Bancária
+                     </button>
+                  </div>
+               </div>
+
+               {/* Grid de Cards de Contas Bancárias */}
                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {accounts.map(acc => (
-                     <div key={acc.id} className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 relative overflow-hidden group">
-                        <div className={`absolute top-0 right-0 w-24 h-24 rounded-full ${acc.color} opacity-10 blur-2xl -mr-10 -mt-10`}></div>
-                        <div className="relative">
-                           <div className="flex justify-between items-start mb-6">
-                              <div className={`w-12 h-12 rounded-xl ${acc.color} text-white flex items-center justify-center shadow-lg shadow-cyan-900/10`}>
-                                 <Landmark size={24} />
-                              </div>
-                              <div className="flex gap-1">
-                                 {hasPermission('finance.delete') && (
+                  {accounts
+                     .filter(acc => {
+                        if (!accountSearchTerm) return true;
+                        const term = accountSearchTerm.toLowerCase();
+                        return (
+                           acc.name?.toLowerCase().includes(term) ||
+                           acc.bankName?.toLowerCase().includes(term) ||
+                           acc.bankCode?.toLowerCase().includes(term) ||
+                           acc.agency?.toLowerCase().includes(term) ||
+                           acc.accountNumber?.toLowerCase().includes(term) ||
+                           acc.pixKey?.toLowerCase().includes(term) ||
+                           acc.type?.toLowerCase().includes(term)
+                        );
+                     })
+                     .map(acc => {
+                        const isDefault = Boolean(acc.isDefault);
+                        const creditLimitNum = Number(acc.creditLimit || 0);
+                        const totalAvailable = Number(acc.balance || 0) + creditLimitNum;
+
+                        return (
+                           <div
+                              key={acc.id}
+                              className={`bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-sm border transition-all duration-200 relative overflow-hidden group hover:shadow-md ${
+                                 isDefault ? 'border-amber-400/60 dark:border-amber-500/40 ring-1 ring-amber-400/30' : 'border-slate-100 dark:border-gray-700'
+                              }`}
+                           >
+                              {/* Glowing background halo */}
+                              <div className={`absolute top-0 right-0 w-32 h-32 rounded-full ${acc.color || 'bg-blue-600'} opacity-10 blur-3xl -mr-12 -mt-12 group-hover:opacity-20 transition-opacity`}></div>
+
+                              <div className="relative flex flex-col h-full justify-between gap-5">
+                                 {/* Top row: Bank icon, badges & action buttons */}
+                                 <div className="flex justify-between items-start gap-3">
+                                    <div className="flex items-center gap-3">
+                                       <div className={`w-12 h-12 rounded-2xl ${acc.color || 'bg-blue-600'} text-white flex items-center justify-center shadow-md shadow-slate-900/10 shrink-0`}>
+                                          <Landmark size={22} />
+                                       </div>
+                                       <div>
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                             {acc.bankCode && acc.bankCode !== '999' && (
+                                                <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-mono">
+                                                   COMPE {acc.bankCode}
+                                                </span>
+                                             )}
+                                             {isDefault && (
+                                                <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+                                                   <Star size={10} className="fill-amber-500" /> PADRÃO ERP
+                                                </span>
+                                             )}
+                                          </div>
+                                          <h4 className="text-lg font-black text-slate-900 dark:text-white mt-1 leading-tight">{acc.name}</h4>
+                                          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{acc.type || 'Conta Corrente'}</p>
+                                       </div>
+                                    </div>
+
+                                    {/* Action buttons */}
+                                    <div className="flex items-center gap-1 shrink-0">
+                                       {!isDefault && (
+                                          <button
+                                             onClick={() => handleSetDefaultAccount(acc)}
+                                             className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-xl transition-colors cursor-pointer"
+                                             title="Definir como Conta Padrão do ERP"
+                                          >
+                                             <Star size={16} />
+                                          </button>
+                                       )}
+                                       <button
+                                          onClick={() => openEditAccountModal(acc)}
+                                          className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 dark:hover:bg-cyan-950/30 rounded-xl transition-colors cursor-pointer"
+                                          title="Editar Conta Bancária"
+                                       >
+                                          <Edit2 size={16} />
+                                       </button>
+                                       {hasPermission('finance.delete') && (
+                                          <button
+                                             onClick={() => {
+                                                addToast(`Excluir conta "${acc.name}"?`, 'warning', 5000, {
+                                                   label: 'EXCLUIR',
+                                                   onClick: () => deleteAccount(acc.id)
+                                                });
+                                             }}
+                                             className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-colors cursor-pointer"
+                                             title="Excluir Conta"
+                                          >
+                                             <Trash2 size={16} />
+                                          </button>
+                                       )}
+                                    </div>
+                                 </div>
+
+                                 {/* Middle row: Agency, Account Number & Bank Name */}
+                                 <div className="bg-slate-50 dark:bg-gray-700/40 p-3.5 rounded-2xl border border-slate-100 dark:border-gray-600/50 space-y-2">
+                                    <div className="flex justify-between items-center text-xs">
+                                       <span className="text-slate-400 font-bold uppercase text-[10px]">Agência</span>
+                                       <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                                          {acc.agency ? `${acc.agency}${acc.agencyDigit ? '-' + acc.agencyDigit : ''}` : 'Não informada'}
+                                       </span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-xs border-t border-slate-100 dark:border-gray-600/30 pt-1.5">
+                                       <span className="text-slate-400 font-bold uppercase text-[10px]">Nº Conta</span>
+                                       <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                                          {acc.accountNumber ? `${acc.accountNumber}${acc.accountDigit ? '-' + acc.accountDigit : ''}` : 'Não informada'}
+                                       </span>
+                                    </div>
+
+                                    {/* PIX Key integration pill */}
+                                    {acc.pixKey ? (
+                                       <div className="flex items-center justify-between border-t border-slate-100 dark:border-gray-600/30 pt-2 gap-2">
+                                          <div className="flex items-center gap-1.5 overflow-hidden">
+                                             <QrCode size={14} className="text-cyan-600 shrink-0" />
+                                             <span className="text-[10px] font-bold text-slate-500 uppercase shrink-0">PIX ({acc.pixKeyType || 'Chave'}):</span>
+                                             <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300 truncate" title={acc.pixKey}>
+                                                {acc.pixKey}
+                                             </span>
+                                          </div>
+                                          <button
+                                             onClick={() => handleCopyPix(acc.id, acc.pixKey)}
+                                             className="px-2.5 py-1 bg-white dark:bg-gray-800 hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-lg border border-slate-200 dark:border-gray-600 transition-colors flex items-center gap-1 shrink-0 cursor-pointer shadow-xs"
+                                             title="Copiar chave PIX"
+                                          >
+                                             {copiedPixId === acc.id ? (
+                                                <>
+                                                   <Check size={12} className="text-emerald-500" />
+                                                   <span className="text-emerald-600">Copiado!</span>
+                                                </>
+                                             ) : (
+                                                <>
+                                                   <Copy size={12} className="text-slate-400" />
+                                                   <span>Copiar</span>
+                                                </>
+                                             )}
+                                          </button>
+                                       </div>
+                                    ) : (
+                                       <div className="flex items-center justify-between border-t border-slate-100 dark:border-gray-600/30 pt-1.5">
+                                          <span className="text-[10px] text-slate-400 font-medium">Sem chave PIX cadastrada</span>
+                                          <button
+                                             onClick={() => openEditAccountModal(acc)}
+                                             className="text-[10px] font-bold text-cyan-600 hover:text-cyan-500 cursor-pointer"
+                                          >
+                                             + Cadastrar PIX
+                                          </button>
+                                       </div>
+                                    )}
+                                 </div>
+
+                                 {/* Bottom: Balances & Limits */}
+                                 <div>
+                                    <div className="flex justify-between items-baseline mb-1">
+                                       <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Saldo Atual</span>
+                                       {creditLimitNum > 0 && (
+                                          <span className="text-[10px] text-slate-400 font-medium">
+                                             Limite: <strong className="text-slate-700 dark:text-slate-300 font-mono">{formatMoney(creditLimitNum)}</strong>
+                                          </span>
+                                       )}
+                                    </div>
+                                    <div className="flex items-baseline justify-between">
+                                       <p className={`text-2xl font-black font-mono ${acc.balance < 0 ? 'text-red-600' : 'text-slate-900 dark:text-white'}`}>
+                                          {formatMoney(acc.balance)}
+                                       </p>
+                                       {creditLimitNum > 0 && (
+                                          <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono" title="Saldo Atual + Limite Especial">
+                                             Disp: {formatMoney(totalAvailable)}
+                                          </p>
+                                       )}
+                                    </div>
+
+                                    {acc.initialBalanceDate && (
+                                       <p className="text-[10px] text-slate-400 font-medium mt-1">
+                                          Saldo de abertura: {formatMoney(acc.initialBalance || 0)} em {acc.initialBalanceDate}
+                                       </p>
+                                    )}
+                                 </div>
+
+                                 {/* Footer Actions */}
+                                 <div className="flex items-center gap-2 border-t border-slate-100 dark:border-gray-700 pt-3">
                                     <button
                                        onClick={() => {
-                                          addToast(`Excluir conta "${acc.name}"?`, 'warning', 5000, {
-                                             label: 'EXCLUIR',
-                                             onClick: () => deleteAccount(acc.id)
-                                          });
+                                          setSearchTerm(acc.name);
+                                          setActiveTab('ledger');
                                        }}
-                                       className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                       className="flex-1 py-2 px-3 bg-slate-50 dark:bg-gray-700/60 hover:bg-slate-100 dark:hover:bg-gray-700 text-cyan-600 dark:text-cyan-400 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                                     >
-                                       <Trash2 size={16} />
+                                       Ver Extrato <ChevronRight size={14} />
                                     </button>
-                                 )}
+                                    <button
+                                       onClick={() => {
+                                          setSelectedTransaction(null);
+                                          setFormData({
+                                             type: 'Despesa',
+                                             date: new Date().toLocaleDateString('pt-BR'),
+                                             dueDate: new Date().toLocaleDateString('pt-BR'),
+                                             status: 'Pendente',
+                                             account: acc.name,
+                                             accountId: acc.id,
+                                             paymentMethod: acc.pixKey ? 'PIX' : 'Transferência',
+                                             costCenter: 'Administrativo'
+                                          });
+                                          setIsModalOpen(true);
+                                       }}
+                                       className="py-2 px-3 bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                                       title="Lançar transação nesta conta"
+                                    >
+                                       <Plus size={14} /> Lançar
+                                    </button>
+                                 </div>
                               </div>
                            </div>
-                           <h4 className="text-xl font-black text-slate-900 dark:text-white mb-1">{acc.name}</h4>
-                           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{acc.type}</p>
-                           {acc.agency && (
-                              <p className="text-[11px] text-slate-500 font-mono mb-4">Agência: {acc.agency} | Conta: {acc.accountNumber || '-'}</p>
-                           )}
-                           <div className="flex items-end justify-between border-t border-slate-100 dark:border-gray-700 pt-4">
-                              <div>
-                                 <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Saldo Atual</p>
-                                 <p className={`text-lg font-black font-mono ${acc.balance < 0 ? 'text-red-600' : 'text-slate-800 dark:text-white'}`}>
-                                    {formatMoney(acc.balance)}
-                                 </p>
-                              </div>
-                              <button
-                                 onClick={() => {
-                                    setSearchTerm(acc.name);
-                                    setActiveTab('ledger');
-                                 }}
-                                 className="text-xs font-bold text-cyan-600 hover:text-cyan-700 flex items-center gap-1"
-                              >
-                                 Ver Extrato <ChevronRight size={14} />
-                              </button>
-                           </div>
-                        </div>
-                     </div>
-                  ))}
+                        );
+                     })}
                </div>
+
+               {accounts.length === 0 && (
+                  <div className="bg-white dark:bg-gray-800 p-12 rounded-3xl text-center border border-slate-100 dark:border-gray-700">
+                     <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-gray-700 text-slate-400 flex items-center justify-center mx-auto mb-4">
+                        <Landmark size={32} />
+                     </div>
+                     <h4 className="text-base font-bold text-slate-800 dark:text-white mb-1">
+                        Nenhuma conta bancária cadastrada
+                     </h4>
+                     <p className="text-xs text-slate-400 max-w-md mx-auto mb-5">
+                        Cadastre suas contas correntes, poupanças, caixas internos e chaves PIX para gerenciar saldos e liquidações.
+                     </p>
+                     <button
+                        onClick={openNewAccountModal}
+                        className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-cyan-600/20 transition-all inline-flex items-center gap-2 cursor-pointer"
+                     >
+                        <Plus size={16} /> Cadastrar Primeira Conta
+                     </button>
+                  </div>
+               )}
             </div>
          )}
 
@@ -3163,125 +3626,320 @@ const Finance = () => {
          )}
 
          {/* ========================================================================= */}
-         {/* BANK ACCOUNT MODAL */}
+         {/* BANK ACCOUNT MODAL (NOVA / EDITAR CONTA BANCÁRIA) */}
          {/* ========================================================================= */}
          {isAccountModalOpen && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-               <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-lg shadow-2xl border border-slate-100 dark:border-slate-700 p-6 animate-in fade-in zoom-in duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
-                  <div className="flex items-center justify-between pb-4 border-b dark:border-gray-700 mb-5">
-                     <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <Landmark className="text-cyan-600" /> Nova Conta Bancária / Caixa
-                     </h3>
-                     <button onClick={() => setIsAccountModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+            <div className="fixed inset-0 bg-black/65 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+               <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-xl shadow-2xl border border-slate-100 dark:border-slate-700 animate-in fade-in zoom-in duration-300 max-h-[92vh] flex flex-col overflow-hidden text-left">
+                  {/* Modal Header */}
+                  <div className="flex items-center justify-between p-6 border-b dark:border-gray-700 bg-slate-50/50 dark:bg-gray-700/50 shrink-0">
+                     <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-cyan-50 dark:bg-cyan-900/40 text-cyan-600 flex items-center justify-center">
+                           <Landmark size={20} />
+                        </div>
+                        <div>
+                           <h3 className="text-lg font-black text-gray-900 dark:text-white">
+                              {accountForm.id ? 'Editar Conta Bancária' : 'Nova Conta Bancária / Caixa'}
+                           </h3>
+                           <p className="text-xs text-slate-400 font-medium">
+                              Configure instituição FEBRABAN, agência/conta, chave PIX e limites operacionais.
+                           </p>
+                        </div>
+                     </div>
+                     <button
+                        onClick={() => setIsAccountModalOpen(false)}
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-2 rounded-lg cursor-pointer"
+                     >
                         <X size={20} />
                      </button>
                   </div>
 
-                  <form onSubmit={(e) => {
-                     e.preventDefault();
-                     addAccount({ ...accountForm, id: Date.now().toString(), balance: Number(accountForm.balance || 0) });
-                     addToast("Conta bancária criada com sucesso!", 'success');
-                     setIsAccountModalOpen(false);
-                  }} className="space-y-4">
+                  {/* Modal Body / Form */}
+                  <form onSubmit={handleSaveAccount} className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
+                     {/* 1. Seleção de Instituição Bancária Brasileira (FEBRABAN) */}
                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Instituição / Banco *</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                           Instituição Bancária (FEBRABAN)
+                        </label>
+                        <select
+                           className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 text-xs font-bold focus:ring-2 focus:ring-cyan-500"
+                           value={accountForm.bankCode || '999'}
+                           onChange={e => {
+                              const selectedCode = e.target.value;
+                              const selectedBank = BRAZILIAN_BANKS.find(b => b.code === selectedCode);
+                              if (selectedBank) {
+                                 const isCustom = selectedCode === '999';
+                                 const isCash = selectedCode === '000';
+                                 const isDefaultPresetName = !accountForm.name || BRAZILIAN_BANKS.some(b => b.shortName === accountForm.name || b.name === accountForm.name);
+                                 setAccountForm({
+                                    ...accountForm,
+                                    bankCode: isCustom ? '' : selectedBank.code,
+                                    bankName: isCustom ? '' : selectedBank.name,
+                                    name: isDefaultPresetName ? (isCustom ? '' : selectedBank.shortName) : accountForm.name,
+                                    color: selectedBank.color,
+                                    type: isCash ? 'Caixa Físico' : (accountForm.type === 'Caixa Físico' ? 'Conta Corrente' : accountForm.type)
+                                 });
+                              }
+                           }}
+                        >
+                           {BRAZILIAN_BANKS.map(bank => (
+                              <option key={bank.code} value={bank.code}>
+                                 {bank.code !== '999' && bank.code !== '000' ? `${bank.code} - ${bank.name}` : bank.name}
+                              </option>
+                           ))}
+                        </select>
+                     </div>
+
+                     {/* 2. Nome de Identificação no ERP */}
+                     <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                           Nome de Identificação da Conta no ERP *
+                        </label>
                         <input
                            required
                            type="text"
-                           className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-bold text-sm"
-                           placeholder="Ex: Banco Santander S.A."
+                           className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-bold text-sm focus:ring-2 focus:ring-cyan-500"
+                           placeholder="Ex: Itaú Unibanco - Matriz PJ"
                            value={accountForm.name}
                            onChange={e => setAccountForm({ ...accountForm, name: e.target.value })}
                         />
                      </div>
 
-                     <div className="grid grid-cols-2 gap-4">
+                     {/* 3. Tipo de Conta & Código COMPE */}
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Tipo de Conta</label>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                              Tipo de Conta
+                           </label>
                            <select
-                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 text-xs font-bold"
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 text-xs font-bold focus:ring-2 focus:ring-cyan-500"
                               value={accountForm.type || 'Conta Corrente'}
                               onChange={e => setAccountForm({ ...accountForm, type: e.target.value })}
                            >
                               <option value="Conta Corrente">Conta Corrente</option>
                               <option value="Conta Poupança">Conta Poupança</option>
-                              <option value="Conta Investimento">Conta Investimento</option>
-                              <option value="Caixa Físico">Caixa Físico (Dinheiro)</option>
+                              <option value="Conta Investimento">Conta Investimento / Aplicação</option>
+                              <option value="Caixa Físico">Caixa Físico (Dinheiro em Espécie)</option>
+                              <option value="Conta de Pagamento">Conta de Pagamento / Fintech</option>
                            </select>
                         </div>
-
                         <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Saldo Inicial (R$) *</label>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                              Código de Compensação (COMPE)
+                           </label>
+                           <input
+                              type="text"
+                              maxLength={4}
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-mono text-xs font-bold focus:ring-2 focus:ring-cyan-500"
+                              placeholder="Ex: 341"
+                              value={accountForm.bankCode || ''}
+                              onChange={e => setAccountForm({ ...accountForm, bankCode: e.target.value })}
+                           />
+                        </div>
+                     </div>
+
+                     {/* 4. Dados de Agência e Conta Corrente com Dígitos */}
+                     <div className="grid grid-cols-4 gap-3">
+                        <div className="col-span-3 sm:col-span-2">
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                              Agência
+                           </label>
+                           <input
+                              type="text"
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-semibold text-xs focus:ring-2 focus:ring-cyan-500"
+                              placeholder="Ex: 0001"
+                              value={accountForm.agency || ''}
+                              onChange={e => setAccountForm({ ...accountForm, agency: e.target.value })}
+                           />
+                        </div>
+                        <div className="col-span-1 sm:col-span-1">
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                              Dígito
+                           </label>
+                           <input
+                              type="text"
+                              maxLength={2}
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-3 py-2.5 font-semibold text-xs text-center focus:ring-2 focus:ring-cyan-500 uppercase"
+                              placeholder="X"
+                              value={accountForm.agencyDigit || ''}
+                              onChange={e => setAccountForm({ ...accountForm, agencyDigit: e.target.value })}
+                           />
+                        </div>
+                        <div className="col-span-3 sm:col-span-2">
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                              Nº da Conta
+                           </label>
+                           <input
+                              type="text"
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-semibold text-xs focus:ring-2 focus:ring-cyan-500"
+                              placeholder="Ex: 12345"
+                              value={accountForm.accountNumber || ''}
+                              onChange={e => setAccountForm({ ...accountForm, accountNumber: e.target.value })}
+                           />
+                        </div>
+                        <div className="col-span-1 sm:col-span-1">
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                              Dígito
+                           </label>
+                           <input
+                              type="text"
+                              maxLength={2}
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-3 py-2.5 font-semibold text-xs text-center focus:ring-2 focus:ring-cyan-500 uppercase"
+                              placeholder="0"
+                              value={accountForm.accountDigit || ''}
+                              onChange={e => setAccountForm({ ...accountForm, accountDigit: e.target.value })}
+                           />
+                        </div>
+                     </div>
+
+                     {/* 5. Seção Chave PIX */}
+                     <div className="bg-slate-50 dark:bg-gray-700/40 p-4 rounded-2xl border border-slate-100 dark:border-gray-600/50 space-y-3">
+                        <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-white">
+                           <QrCode size={16} className="text-cyan-600" />
+                           <span>Chave PIX da Conta</span>
+                           <span className="text-[10px] font-normal text-slate-400">(usada em cobranças e faturamentos)</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                           <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Tipo de Chave</label>
+                              <select
+                                 className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-cyan-500"
+                                 value={accountForm.pixKeyType || 'CNPJ'}
+                                 onChange={e => setAccountForm({ ...accountForm, pixKeyType: e.target.value })}
+                              >
+                                 <option value="CNPJ">CNPJ</option>
+                                 <option value="CPF">CPF</option>
+                                 <option value="E-mail">E-mail</option>
+                                 <option value="Telefone">Celular / Telefone</option>
+                                 <option value="Chave Aleatória">Chave Aleatória (EVP)</option>
+                                 <option value="Nenhuma">Nenhuma / Não possui</option>
+                              </select>
+                           </div>
+                           <div className="sm:col-span-2">
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Chave PIX</label>
+                              <input
+                                 type="text"
+                                 disabled={accountForm.pixKeyType === 'Nenhuma'}
+                                 className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2 font-mono text-xs font-semibold focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                                 placeholder={getPixKeyPlaceholder(accountForm.pixKeyType || 'CNPJ')}
+                                 value={accountForm.pixKey || ''}
+                                 onChange={e => setAccountForm({ ...accountForm, pixKey: e.target.value })}
+                              />
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* 6. Parâmetros Financeiros: Saldo Inicial, Data de Corte & Limite Especial */}
+                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                              Saldo Inicial (R$) *
+                           </label>
                            <input
                               required
                               type="number"
                               step="0.01"
-                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-bold text-sm"
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-bold text-sm focus:ring-2 focus:ring-cyan-500"
                               placeholder="0,00"
                               value={accountForm.balance}
                               onChange={e => setAccountForm({ ...accountForm, balance: e.target.value })}
                            />
                         </div>
-                     </div>
-
-                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Agência</label>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                              Data de Abertura / Corte
+                           </label>
                            <input
                               type="text"
-                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-semibold text-xs"
-                              placeholder="0001-X"
-                              value={accountForm.agency || ''}
-                              onChange={e => setAccountForm({ ...accountForm, agency: e.target.value })}
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-semibold text-xs focus:ring-2 focus:ring-cyan-500"
+                              placeholder="DD/MM/AAAA"
+                              value={accountForm.initialBalanceDate || ''}
+                              onChange={e => setAccountForm({ ...accountForm, initialBalanceDate: e.target.value })}
                            />
                         </div>
                         <div>
-                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Nº Conta</label>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                              Limite Especial (R$)
+                           </label>
                            <input
-                              type="text"
-                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-semibold text-xs"
-                              placeholder="12345-6"
-                              value={accountForm.accountNumber || ''}
-                              onChange={e => setAccountForm({ ...accountForm, accountNumber: e.target.value })}
+                              type="number"
+                              step="0.01"
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-bold text-sm focus:ring-2 focus:ring-cyan-500"
+                              placeholder="0,00"
+                              value={accountForm.creditLimit || ''}
+                              onChange={e => setAccountForm({ ...accountForm, creditLimit: e.target.value })}
                            />
                         </div>
                      </div>
 
+                     {/* 7. Conta Padrão do ERP */}
+                     <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-300 dark:border-amber-900/50 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                           <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                              <Star size={18} className={accountForm.isDefault ? 'fill-amber-500' : ''} />
+                           </div>
+                           <div>
+                              <p className="text-xs font-black text-slate-800 dark:text-white">Definir como Conta Padrão do ERP</p>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                 Pré-selecionada nas baixas de Contas a Receber, Contas a Pagar e novos lançamentos.
+                              </p>
+                           </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                           <input
+                              type="checkbox"
+                              checked={Boolean(accountForm.isDefault)}
+                              onChange={e => setAccountForm({ ...accountForm, isDefault: e.target.checked })}
+                              className="sr-only peer"
+                           />
+                           <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                        </label>
+                     </div>
+
+                     {/* 8. Cor do Card */}
                      <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Cor do Card</label>
                         <div className="flex gap-2 flex-wrap pt-1">
-                           {[
-                              { color: 'bg-blue-600', label: 'Azul' },
-                              { color: 'bg-emerald-600', label: 'Verde' },
-                              { color: 'bg-orange-600', label: 'Laranja' },
-                              { color: 'bg-purple-600', label: 'Roxo' },
-                              { color: 'bg-cyan-600', label: 'Ciano' },
-                              { color: 'bg-slate-900', label: 'Escuro' }
-                           ].map(({ color, label }) => (
+                           {ACCOUNT_COLORS.map(({ color, label }) => (
                               <button
                                  type="button"
                                  key={color}
                                  onClick={() => setAccountForm({ ...accountForm, color })}
-                                 className={`w-8 h-8 rounded-full ${color} transition-all ${accountForm.color === color ? 'ring-4 ring-offset-2 ring-cyan-500 scale-110' : 'opacity-70 hover:opacity-100'}`}
+                                 className={`w-8 h-8 rounded-full ${color} transition-all cursor-pointer ${
+                                    accountForm.color === color ? 'ring-4 ring-offset-2 ring-cyan-500 scale-110' : 'opacity-70 hover:opacity-100'
+                                 }`}
                                  title={label}
                               />
                            ))}
                         </div>
                      </div>
 
-                     <div className="flex gap-3 pt-4">
+                     {/* 9. Observações Internas */}
+                     <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Observações Internas (Opcional)</label>
+                        <input
+                           type="text"
+                           className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2 font-semibold text-xs focus:ring-2 focus:ring-cyan-500"
+                           placeholder="Ex: Gerente de conta: Marcos (11) 98765-4321, finalidade operacional, etc."
+                           value={accountForm.notes || ''}
+                           onChange={e => setAccountForm({ ...accountForm, notes: e.target.value })}
+                        />
+                     </div>
+
+                     {/* Action Buttons */}
+                     <div className="flex gap-3 pt-3 border-t border-slate-100 dark:border-gray-700">
                         <button
                            type="button"
                            onClick={() => setIsAccountModalOpen(false)}
-                           className="flex-1 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl text-xs hover:bg-slate-200 transition-all"
+                           className="flex-1 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl text-xs hover:bg-slate-200 transition-all cursor-pointer"
                         >
                            Cancelar
                         </button>
                         <button
                            type="submit"
-                           className="flex-[2] py-3 bg-cyan-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-cyan-600/20 hover:bg-cyan-500 transition-all"
+                           className="flex-[2] py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-cyan-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
                         >
-                           Criar Conta
+                           {accountForm.id ? 'Salvar Alterações' : 'Cadastrar Conta Bancária'}
                         </button>
                      </div>
                   </form>

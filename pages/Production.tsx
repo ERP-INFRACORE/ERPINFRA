@@ -26,7 +26,6 @@ import {
     Printer,
     Download,
     Search,
-    Calculator,
     Copy
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
@@ -34,6 +33,81 @@ import { ProductionOrder, InventoryItem, ProductionFormula, QualityTest, Product
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { exportToCSV, printDocument } from '../utils/exportUtils';
+
+export interface StockShortageItem {
+    productId: string;
+    ingredientName: string;
+    requiredQty: number;
+    availableQty: number;
+    shortageQty: number;
+    unit: string;
+}
+
+export interface StockShortageCheckResult {
+    hasShortage: boolean;
+    shortages: StockShortageItem[];
+    message: string;
+}
+
+let currentFormulasRef: ProductionFormula[] = [];
+let currentInventoryRef: InventoryItem[] = [];
+
+/**
+ * Função auxiliar que multiplica a quantidade planejada da O.P. pelos ingredientes
+ * da ProductionFormula e identifica qualquer insumo em inventory com saldo insuficiente.
+ */
+export const checkFormulaStockShortage = (
+    order: { formulaId?: string; quantity?: number } | ProductionOrder,
+    formulasList: ProductionFormula[] = currentFormulasRef,
+    inventoryList: InventoryItem[] = currentInventoryRef
+): StockShortageCheckResult => {
+    const formula = formulasList.find(f => f.id === order.formulaId);
+    const plannedQuantity = order.quantity || 0;
+
+    if (!formula || !formula.ingredients || formula.ingredients.length === 0) {
+        return {
+            hasShortage: false,
+            shortages: [],
+            message: 'Nenhum ingrediente configurado na fórmula.'
+        };
+    }
+
+    const shortages: StockShortageItem[] = [];
+
+    formula.ingredients.forEach(ing => {
+        const requiredQty = Number(((ing.qty || 0) * plannedQuantity).toFixed(3));
+
+        // Busca o item no estoque pelo ID do produto ou fallback por nome
+        const stockItem = inventoryList.find(i => i.id === ing.productId)
+            || inventoryList.find(i => ing.name && i.name.toLowerCase().trim() === ing.name.toLowerCase().trim());
+
+        const availableQty = stockItem ? stockItem.quantity : 0;
+        const unit = ing.unit || stockItem?.unit || 'un';
+        const ingredientName = ing.name || stockItem?.name || 'Insumo não identificado';
+
+        if (availableQty < requiredQty) {
+            shortages.push({
+                productId: ing.productId || stockItem?.id || '',
+                ingredientName,
+                requiredQty,
+                availableQty,
+                shortageQty: Number((requiredQty - availableQty).toFixed(3)),
+                unit
+            });
+        }
+    });
+
+    const hasShortage = shortages.length > 0;
+    const message = hasShortage
+        ? `Saldo insuficiente no estoque para: ${shortages.map(s => `${s.ingredientName} (Necessário: ${s.requiredQty} ${s.unit}, Disponível: ${s.availableQty} ${s.unit})`).join('; ')}`
+        : 'Estoque suficiente para todos os insumos da fórmula.';
+
+    return {
+        hasShortage,
+        shortages,
+        message
+    };
+};
 
 const Production = () => {
     const {
@@ -44,6 +118,10 @@ const Production = () => {
         addFormula, updateFormula, deleteFormula
     } = useApp();
     const { addToast } = useToast();
+
+    // Sincroniza referências para invocações sem argumentos explícitos de lista
+    currentFormulasRef = formulas;
+    currentInventoryRef = inventory;
     const [activeTab, setActiveTab] = useState<'monitor' | 'orders' | 'formulas' | 'lab'>('monitor');
 
     const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
@@ -52,7 +130,6 @@ const Production = () => {
     const [isTestModalOpen, setIsTestModalOpen] = useState(false);
     const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
     const [isFormulaModalOpen, setIsFormulaModalOpen] = useState(false);
-    const [isCalculatorModalOpen, setIsCalculatorModalOpen] = useState(false);
 
     const [editingUnit, setEditingUnit] = useState<ProductionUnit | null>(null);
     const [editingFormula, setEditingFormula] = useState<ProductionFormula | null>(null);
@@ -67,11 +144,6 @@ const Production = () => {
     // Filter & Search states for Formulas
     const [formulaSearch, setFormulaSearch] = useState('');
     const [formulaCategoryFilter, setFormulaCategoryFilter] = useState<string>('Todas');
-
-    // Batch Calculator State (Simulação de Dosagem / Traço)
-    const [calcFormulaId, setCalcFormulaId] = useState<string>('');
-    const [calcBatchVolume, setCalcBatchVolume] = useState<number>(8);
-    const [calcMoistureCorrection, setCalcMoistureCorrection] = useState<number>(3);
 
     // Forms State
     const [newOrder, setNewOrder] = useState<Partial<ProductionOrder>>({
@@ -134,9 +206,45 @@ const Production = () => {
         setIsOrderModalOpen(false);
     };
 
+    const handleStartOrder = (order: ProductionOrder) => {
+        const shortageCheck = checkFormulaStockShortage(order, formulas, inventory);
+        if (shortageCheck.hasShortage) {
+            const details = shortageCheck.shortages
+                .map(s => `• ${s.ingredientName}: precisa de ${s.requiredQty.toLocaleString('pt-BR')} ${s.unit} (disponível: ${s.availableQty.toLocaleString('pt-BR')} ${s.unit})`)
+                .join('\n');
+            addToast(
+                `Início de produção bloqueado! Saldo insuficiente no estoque:\n${details}`,
+                'error',
+                8000
+            );
+            return false;
+        }
+
+        startProduction(order.id);
+        addToast(`Produção iniciada para OP #${order.orderNumber}!`, 'success');
+        return true;
+    };
+
     const handleUpdateExistingOrder = (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingOrder) return;
+
+        const currentOrder = productionOrders.find(o => o.id === editingOrder.id);
+        if (editingOrder.status === 'Em Produção' && currentOrder?.status !== 'Em Produção' && !currentOrder?.rawMaterialsDeducted) {
+            const shortageCheck = checkFormulaStockShortage(editingOrder, formulas, inventory);
+            if (shortageCheck.hasShortage) {
+                const details = shortageCheck.shortages
+                    .map(s => `• ${s.ingredientName}: precisa de ${s.requiredQty.toLocaleString('pt-BR')} ${s.unit} (disponível: ${s.availableQty.toLocaleString('pt-BR')} ${s.unit})`)
+                    .join('\n');
+                addToast(
+                    `Início de produção bloqueado! Saldo insuficiente no estoque:\n${details}`,
+                    'error',
+                    8000
+                );
+                return;
+            }
+        }
+
         updateProductionOrder(editingOrder);
         addToast(`Ordem #${editingOrder.orderNumber} atualizada!`, 'success');
         setIsEditOrderModalOpen(false);
@@ -233,6 +341,20 @@ const Production = () => {
     };
 
     const handleResumeOrder = (order: ProductionOrder) => {
+        if (!order.rawMaterialsDeducted) {
+            const shortageCheck = checkFormulaStockShortage(order, formulas, inventory);
+            if (shortageCheck.hasShortage) {
+                const details = shortageCheck.shortages
+                    .map(s => `• ${s.ingredientName}: precisa de ${s.requiredQty.toLocaleString('pt-BR')} ${s.unit} (disponível: ${s.availableQty.toLocaleString('pt-BR')} ${s.unit})`)
+                    .join('\n');
+                addToast(
+                    `Retomada bloqueada! Saldo insuficiente no estoque:\n${details}`,
+                    'error',
+                    8000
+                );
+                return;
+            }
+        }
         updateProductionOrder({ ...order, status: 'Em Produção' });
         addToast(`O.P. #${order.orderNumber} retomada.`, 'info');
     };
@@ -420,17 +542,6 @@ const Production = () => {
                         <button onClick={() => setActiveTab('formulas')} className={`px-4 py-2 text-[10px] font-black rounded-xl transition-all ${activeTab === 'formulas' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}>TRAÇOS & DOSAGEM</button>
                         <button onClick={() => setActiveTab('lab')} className={`px-4 py-2 text-[10px] font-black rounded-xl transition-all ${activeTab === 'lab' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}>LABORATÓRIO</button>
                     </div>
-
-                    <button
-                        onClick={() => {
-                            if (formulas.length > 0) setCalcFormulaId(formulas[0].id);
-                            setIsCalculatorModalOpen(true);
-                        }}
-                        className="px-4 py-2.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 font-bold rounded-xl hover:bg-indigo-100 transition-all flex items-center gap-2 text-xs uppercase shadow-sm"
-                        title="Simular Dosagem e Batelada"
-                    >
-                        <Calculator size={16} /> Calculadora de Traço
-                    </button>
 
                     <button
                         onClick={() => {
@@ -634,17 +745,24 @@ const Production = () => {
                                             className="hover:bg-slate-50 dark:hover:bg-indigo-900/10 transition-colors"
                                         >
                                             <td className="px-6 py-4">
-                                                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase mb-1 ${
-                                                    o.status === 'Finalizado' ? 'bg-emerald-100 text-emerald-700' :
-                                                    o.status === 'Em Produção' ? 'bg-indigo-100 text-indigo-700 animate-pulse' :
-                                                    o.status === 'Qualidade' ? 'bg-amber-100 text-amber-700' :
-                                                    o.status === 'Pausado' ? 'bg-orange-100 text-orange-700' :
-                                                    o.status === 'Cancelado' ? 'bg-rose-100 text-rose-700' :
-                                                    'bg-slate-100 text-slate-600'
-                                                }`}>
-                                                    <Circle size={6} fill="currentColor" /> {o.status}
-                                                </span>
-                                                <p className="font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold">#{o.orderNumber}</p>
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                                                        o.status === 'Finalizado' ? 'bg-emerald-100 text-emerald-700' :
+                                                        o.status === 'Em Produção' ? 'bg-indigo-100 text-indigo-700 animate-pulse' :
+                                                        o.status === 'Qualidade' ? 'bg-amber-100 text-amber-700' :
+                                                        o.status === 'Pausado' ? 'bg-orange-100 text-orange-700' :
+                                                        o.status === 'Cancelado' ? 'bg-rose-100 text-rose-700' :
+                                                        'bg-slate-100 text-slate-600'
+                                                    }`}>
+                                                        <Circle size={6} fill="currentColor" /> {o.status}
+                                                    </span>
+                                                    {o.status === 'Planejado' && checkFormulaStockShortage(o, formulas, inventory).hasShortage && (
+                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                                                            Sem Estoque
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold mt-1">#{o.orderNumber}</p>
                                             </td>
 
                                             <td className="px-6 py-4">
@@ -683,15 +801,29 @@ const Production = () => {
 
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex justify-end items-center gap-1">
-                                                    {o.status === 'Planejado' && (
-                                                        <button
-                                                            onClick={() => { startProduction(o.id); addToast(`Produção iniciada para OP #${o.orderNumber}!`, 'success'); }}
-                                                            className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500"
-                                                            title="Iniciar Produção"
-                                                        >
-                                                            <Play size={14} />
-                                                        </button>
-                                                    )}
+                                                    {o.status === 'Planejado' && (() => {
+                                                        const shortage = checkFormulaStockShortage(o, formulas, inventory);
+                                                        if (shortage.hasShortage) {
+                                                            return (
+                                                                <button
+                                                                    onClick={() => handleStartOrder(o)}
+                                                                    className="p-1.5 bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-300 dark:border-rose-800 rounded-lg hover:bg-rose-200 transition-colors"
+                                                                    title={`Início Bloqueado: Insumos insuficientes (${shortage.shortages.map(s => s.ingredientName).join(', ')})`}
+                                                                >
+                                                                    <AlertTriangle size={14} />
+                                                                </button>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <button
+                                                                onClick={() => handleStartOrder(o)}
+                                                                className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors"
+                                                                title="Iniciar Produção"
+                                                            >
+                                                                <Play size={14} />
+                                                            </button>
+                                                        );
+                                                    })()}
 
                                                     {o.status === 'Em Produção' && (
                                                         <>
@@ -818,16 +950,6 @@ const Production = () => {
 
                             <button
                                 onClick={() => {
-                                    if (formulas.length > 0) setCalcFormulaId(formulas[0].id);
-                                    setIsCalculatorModalOpen(true);
-                                }}
-                                className="px-3 py-2 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 font-bold rounded-xl text-xs uppercase flex items-center gap-1.5"
-                            >
-                                <Calculator size={14} /> Simulador de Batelada
-                            </button>
-
-                            <button
-                                onClick={() => {
                                     setEditingFormula(null);
                                     setFormulaForm({ type: 'Composicao', ingredients: [{ productId: '', name: '', qty: 0, unit: 'kg' }], outputs: [{ productId: '', name: '', percentage: 0 }] });
                                     setIsFormulaModalOpen(true);
@@ -869,28 +991,21 @@ const Production = () => {
 
                                     <div className="pt-4 border-t dark:border-slate-700 flex gap-2">
                                         <button
-                                            onClick={() => { setCalcFormulaId(formula.id); setIsCalculatorModalOpen(true); }}
-                                            className="flex-1 py-2 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 rounded-lg text-xs font-bold hover:bg-indigo-100"
-                                        >
-                                            Dosagem
-                                        </button>
-                                        <button
                                             onClick={() => { setEditingFormula(formula); setFormulaForm(formula); setIsFormulaModalOpen(true); }}
-                                            className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg"
-                                            title="Editar"
+                                            className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
                                         >
-                                            <Edit2 size={14} />
+                                            <Edit2 size={13} /> Editar Traço
                                         </button>
                                         <button
                                             onClick={() => handleDuplicateFormula(formula)}
-                                            className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg"
+                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
                                             title="Clonar"
                                         >
                                             <Copy size={14} />
                                         </button>
                                         <button
                                             onClick={() => handlePrintFormulaSheet(formula)}
-                                            className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg"
+                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
                                             title="Ficha Técnica"
                                         >
                                             <Printer size={14} />
@@ -970,6 +1085,29 @@ const Production = () => {
                                     <input type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold" value={newOrder.batch} onChange={e => setNewOrder({ ...newOrder, batch: e.target.value.toUpperCase() })} required />
                                 </div>
                             </div>
+
+                            {/* Alerta prévio de estoque para a fórmula selecionada */}
+                            {newOrder.formulaId && (() => {
+                                const shortageCheck = checkFormulaStockShortage({ formulaId: newOrder.formulaId, quantity: newOrder.quantity }, formulas, inventory);
+                                if (shortageCheck.hasShortage) {
+                                    return (
+                                        <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-300">
+                                            <div className="flex items-center gap-1.5 font-bold mb-1">
+                                                <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+                                                <span>Atenção: Saldo insuficiente para iniciar imediatamente</span>
+                                            </div>
+                                            <div className="text-[10px] space-y-0.5 pl-5 opacity-90">
+                                                {shortageCheck.shortages.map((s, idx) => (
+                                                    <p key={idx}>
+                                                        • {s.ingredientName}: necessário {s.requiredQty.toLocaleString('pt-BR')} {s.unit} (disponível: {s.availableQty.toLocaleString('pt-BR')} {s.unit})
+                                                    </p>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })()}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Operador Responsável</label>
@@ -1092,125 +1230,6 @@ const Production = () => {
                                 <button type="submit" className="flex-[2] py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow">Salvar Alterações</button>
                             </div>
                         </form>
-                    </div>
-                </div>
-            )}
-
-            {/* STANDARDIZED MODAL: SIMULADOR DE BATELADA */}
-            {isCalculatorModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-xl border dark:border-slate-700 animate-in zoom-in duration-200 overflow-hidden my-8">
-                        <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center">
-                            <div>
-                                <h3 className="font-bold text-lg text-slate-900 dark:text-white uppercase">Cálculo de Dosagem de Batelada</h3>
-                                <p className="text-xs text-slate-500">Ajuste proporcional de insumos e compensação de umidade.</p>
-                            </div>
-                            <button onClick={() => setIsCalculatorModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="col-span-2">
-                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Traço</label>
-                                    <select
-                                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
-                                        value={calcFormulaId}
-                                        onChange={e => setCalcFormulaId(e.target.value)}
-                                    >
-                                        {formulas.map(f => (
-                                            <option key={f.id} value={f.id}>{f.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Volume (UN)</label>
-                                    <input
-                                        type="number"
-                                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
-                                        value={calcBatchVolume}
-                                        onChange={e => setCalcBatchVolume(Number(e.target.value))}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800">
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-[10px] font-bold uppercase text-slate-500">Umidade Agregados Finos</span>
-                                    <span className="text-xs font-bold text-indigo-600">{calcMoistureCorrection}%</span>
-                                </div>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="8"
-                                    step="0.5"
-                                    value={calcMoistureCorrection}
-                                    onChange={e => setCalcMoistureCorrection(Number(e.target.value))}
-                                    className="w-full accent-indigo-600"
-                                />
-                            </div>
-
-                            {(() => {
-                                const selectedF = formulas.find(f => f.id === calcFormulaId);
-                                if (!selectedF) return null;
-
-                                return (
-                                    <div className="space-y-3">
-                                        <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden text-xs">
-                                            <table className="w-full text-left">
-                                                <thead className="bg-slate-50 dark:bg-slate-900 text-[10px] font-bold text-slate-400 uppercase">
-                                                    <tr>
-                                                        <th className="p-2.5">Insumo</th>
-                                                        <th className="p-2.5 text-center">Dosagem</th>
-                                                        <th className="p-2.5 text-center">Total Batelada</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
-                                                    {selectedF.ingredients.map((ing, idx) => {
-                                                        const moistureFactor = ing.name.toLowerCase().includes('areia') ? (1 + (calcMoistureCorrection / 100)) : 1;
-                                                        const totalNeeded = ing.qty * calcBatchVolume * moistureFactor;
-
-                                                        return (
-                                                            <tr key={idx}>
-                                                                <td className="p-2.5 font-bold">{ing.name}</td>
-                                                                <td className="p-2.5 text-center text-slate-500">{ing.qty} {ing.unit}</td>
-                                                                <td className="p-2.5 text-center font-bold text-indigo-600">{totalNeeded.toFixed(2)} {ing.unit}</td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
-                                        </div>
-
-                                        <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex gap-3">
-                                            <button
-                                                type="button"
-                                                onClick={() => setIsCalculatorModalOpen(false)}
-                                                className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl text-xs uppercase"
-                                            >
-                                                Fechar
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setNewOrder({
-                                                        ...newOrder,
-                                                        formulaId: selectedF.id,
-                                                        quantity: calcBatchVolume,
-                                                        productName: selectedF.name,
-                                                        productId: selectedF.outputProductId
-                                                    });
-                                                    setIsCalculatorModalOpen(false);
-                                                    setIsOrderModalOpen(true);
-                                                    addToast("Parâmetros da batelada aplicados na nova O.P.!", 'info');
-                                                }}
-                                                className="flex-[2] py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow"
-                                            >
-                                                Emitir O.P. com este Volume
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-                        </div>
                     </div>
                 </div>
             )}

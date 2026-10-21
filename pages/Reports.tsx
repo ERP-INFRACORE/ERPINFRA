@@ -117,8 +117,8 @@ const Reports = () => {
         setExpandedNodes({});
     };
 
-    // Report Generator State
-    const [selectedModule, setSelectedModule] = useState<string | null>('sales');
+    // Report Generator State (null by default so no report is fixed/pinned initially)
+    const [selectedModule, setSelectedModule] = useState<string | null>(null);
     const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
     const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -289,14 +289,19 @@ const Reports = () => {
                 break;
 
             case 'quotes':
-                data = (budgets || []).map(b => ({
-                    'Nº': b.id?.slice(-6).toUpperCase(),
-                    Data: b.date,
-                    Cliente: b.clientName,
-                    Valor: b.total,
-                    Status: b.status,
-                    Convertido: b.status === 'Aprovado' || b.status === 'Convertido' ? 'Sim' : 'Não'
-                }));
+                data = (budgets || []).map(b => {
+                    const numId = (b as any).budgetNumber
+                        ? String((b as any).budgetNumber)
+                        : (b.id && /^\d+$/.test(b.id) ? b.id : (b.id?.replace(/\D/g, '') || b.id));
+                    return {
+                        'Nº': numId,
+                        Data: b.date,
+                        Cliente: b.clientName,
+                        Valor: b.total,
+                        Status: b.status,
+                        Convertido: b.status === 'Convertido' ? 'Sim' : 'Não'
+                    };
+                });
                 break;
 
             // =========================================================================
@@ -1735,6 +1740,13 @@ const Reports = () => {
                                     >
                                         <Printer size={16} /> Imprimir Relatório Oficial
                                     </button>
+                                    <button
+                                        onClick={() => setSelectedModule(null)}
+                                        className="mt-4 p-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"
+                                        title="Fechar visualização"
+                                    >
+                                        <X size={18} />
+                                    </button>
                                 </div>
                             </div>
 
@@ -1823,7 +1835,7 @@ const Reports = () => {
                                         return (
                                             <div
                                                 key={m.id}
-                                                onClick={() => setSelectedModule(m.id)}
+                                                onClick={() => setSelectedModule(prev => prev === m.id ? null : m.id)}
                                                 className={`bg-white dark:bg-slate-800 rounded-2xl border ${isSelected ? 'border-cyan-500 ring-2 ring-cyan-500/20 shadow-md' : 'border-slate-200 dark:border-slate-700 hover:border-cyan-300'} p-5 cursor-pointer transition-all group`}
                                             >
                                                 <div className="flex items-start gap-3 mb-3">
