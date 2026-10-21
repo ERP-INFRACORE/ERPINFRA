@@ -1,13 +1,13 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
-import { Construction, Lock, User, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Construction, Lock, User, ArrowRight, AlertCircle } from 'lucide-react';
 
 const Login = () => {
     const [username, setUsername] = useState('admin');
     const [password, setPassword] = useState('');
+    const [rememberMe, setRememberMe] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const { login } = useApp();
@@ -19,11 +19,10 @@ const Login = () => {
         setIsLoading(true);
         setError('');
 
-        // Simulate network delay for realism
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, 600));
 
         try {
-            const result = await login(username, password);
+            const result = await login(username, password, rememberMe);
             if (result.success) {
                 navigate('/');
             } else {
@@ -42,9 +41,19 @@ const Login = () => {
             label: 'SIM, RESETAR',
             onClick: () => {
                 localStorage.clear();
+                sessionStorage.clear();
                 window.location.reload();
             }
         });
+    };
+
+    const handleForgotPassword = (e: React.MouseEvent) => {
+        e.preventDefault();
+        addToast(
+            'Para redefinir sua senha, solicite ao Administrador em Configurações > Segurança & Acesso (ou use admin / 123 no primeiro acesso).',
+            'info',
+            6000
+        );
     };
 
     return (
@@ -93,7 +102,7 @@ const Login = () => {
                                     <AlertCircle size={16} />
                                     {error}
                                 </div>
-                                <button onClick={handleReset} className="w-full mt-2 py-2 bg-rose-100 dark:bg-rose-900/40 hover:bg-rose-200 dark:hover:bg-rose-900/60 rounded-lg text-rose-700 dark:text-rose-200 text-[10px] uppercase tracking-wider font-black transition-colors">
+                                <button type="button" onClick={handleReset} className="w-full mt-2 py-2 bg-rose-100 dark:bg-rose-900/40 hover:bg-rose-200 dark:hover:bg-rose-900/60 rounded-lg text-rose-700 dark:text-rose-200 text-[10px] uppercase tracking-wider font-black transition-colors">
                                     Resetar Dados Locais (Correção)
                                 </button>
                             </div>
@@ -134,10 +143,21 @@ const Login = () => {
 
                             <div className="flex items-center justify-between">
                                 <label className="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                                    <input
+                                        type="checkbox"
+                                        checked={rememberMe}
+                                        onChange={(e) => setRememberMe(e.target.checked)}
+                                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
                                     <span className="text-xs font-bold text-slate-500">Lembrar de mim</span>
                                 </label>
-                                <a href="#" className="text-xs font-bold text-indigo-500 hover:text-indigo-600">Esqueceu a senha?</a>
+                                <button
+                                    type="button"
+                                    onClick={handleForgotPassword}
+                                    className="text-xs font-bold text-indigo-500 hover:text-indigo-600"
+                                >
+                                    Esqueceu a senha?
+                                </button>
                             </div>
 
                             <button

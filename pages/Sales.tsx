@@ -61,7 +61,7 @@ const getPaymentMethodLabel = (method: string | undefined | null) => {
 };
 
 const Sales = () => {
-  const { sales, clients, addSale, inventory, budgets, addBudget, fleet, updateBudgetStatus, addTransaction, accounts, settings } = useApp();
+  const { sales, clients, addSale, inventory, budgets, addBudget, updateBudget, fleet, updateBudgetStatus, addTransaction, accounts, settings } = useApp();
   const { addToast } = useToast();
 
   // Robust data filtering with extreme safety checks
@@ -136,20 +136,33 @@ const Sales = () => {
   const [selectedBudget, setSelectedBudget] = useState<Budget | null>(null);
   const [showNFE, setShowNFE] = useState<{ type: 'sale' | 'budget', data: any } | null>(null);
 
-  // History Filters
+  // History & Budget Filters
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [historyDate, setHistoryDate] = useState('');
+  const [budgetSearchTerm, setBudgetSearchTerm] = useState('');
+  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
 
   const filteredHistory = useMemo(() => {
     if (!Array.isArray(sales)) return [];
+    const formattedFilterDate = historyDate ? historyDate.split('-').reverse().join('/') : '';
     return sales.filter(s => {
       if (!s || !s.clientName) return false;
       const matchesSearch = s.clientName.toLowerCase().includes(historySearchTerm.toLowerCase()) ||
         (s.id && s.id.includes(historySearchTerm));
-      const matchesDate = historyDate ? s.date === new Date(historyDate).toLocaleDateString('pt-BR') : true;
+      const matchesDate = formattedFilterDate ? s.date === formattedFilterDate : true;
       return matchesSearch && matchesDate;
     });
   }, [sales, historySearchTerm, historyDate]);
+
+  const filteredBudgets = useMemo(() => {
+    if (!Array.isArray(budgets)) return [];
+    if (!budgetSearchTerm.trim()) return budgets;
+    const q = budgetSearchTerm.toLowerCase();
+    return budgets.filter(b =>
+      (b.clientName || '').toLowerCase().includes(q) ||
+      (b.id || '').toLowerCase().includes(q)
+    );
+  }, [budgets, budgetSearchTerm]);
 
   // Cart State
   const [cart, setCart] = useState<SalesItem[]>([]);
@@ -368,6 +381,7 @@ const Sales = () => {
     setWeightTicket('');
     setWeightNotes('');
     setIsSubmitting(false);
+    setEditingBudgetId(null);
   };
 
   const handleFinalizeOrder = () => {
@@ -696,7 +710,7 @@ const Sales = () => {
     }
 
     const newBudget: Budget = {
-      id: `B-${Date.now()}`,
+      id: editingBudgetId || `B-${Date.now()}`,
       clientId: selectedClient,
       clientName: client?.name || 'Cliente Avulso',
       date: new Date().toLocaleDateString('pt-BR'),
@@ -714,8 +728,13 @@ const Sales = () => {
       paymentMethod: paymentMethod
     };
 
-    addBudget(newBudget);
-    addToast("Orçamento (Pré-Venda) salvo com sucesso!", 'success');
+    if (editingBudgetId) {
+      updateBudget(newBudget);
+      addToast("Orçamento atualizado com sucesso!", 'success');
+    } else {
+      addBudget(newBudget);
+      addToast("Orçamento (Pré-Venda) salvo com sucesso!", 'success');
+    }
     clearForm();
     setActiveTab('budgets');
   };
@@ -858,10 +877,10 @@ const Sales = () => {
                 {/* Top Section: Issuer & DANFE Info */}
                 <div className="grid grid-cols-12 gap-0 border-b-2 border-black -mx-4 -mt-4">
                   <div className="col-span-5 p-4 border-r-2 border-black">
-                    <h2 className="text-xl font-black uppercase tracking-tighter">INFRACORE ERP SISTEMAS LTDA</h2>
-                    <p className="text-[10px] font-bold">AV. INDUSTRIAL, 1234 - DISTRITO INDUSTRIAL</p>
-                    <p className="text-[10px] font-bold"> SÃO PAULO - SP | CEP: 01000-000</p>
-                    <p className="text-[10px] font-bold">TEL: (11) 4002-8922</p>
+                    <h2 className="text-xl font-black uppercase tracking-tighter">{settings?.companyName || settings?.tradeName || 'INFRACORE ERP SISTEMAS LTDA'}</h2>
+                    <p className="text-[10px] font-bold uppercase">{settings?.address || 'AV. INDUSTRIAL, 1234 - DISTRITO INDUSTRIAL'}</p>
+                    <p className="text-[10px] font-bold">CNPJ: {settings?.document || '00.000.000/0001-00'}</p>
+                    <p className="text-[10px] font-bold">TEL: {settings?.phone || '(11) 4002-8922'} | {settings?.email || ''}</p>
                   </div>
                   <div className="col-span-3 p-4 border-r-2 border-black text-center flex flex-col justify-center">
                     <h3 className="text-lg font-black leading-none">DANFE</h3>
@@ -1031,7 +1050,9 @@ const Sales = () => {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">Status:</span>
-                      <span className="font-bold text-green-600 px-2 py-0.5 bg-green-50 dark:bg-green-900/20 rounded-full text-xs">CONCILIADO</span>
+                      <span className={`font-bold px-2 py-0.5 rounded-full text-xs ${selectedSale.status === 'Pendente' ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/20' : 'text-green-600 bg-green-50 dark:bg-green-900/20'}`}>
+                        {(selectedSale.status || 'CONCILIADO').toUpperCase()}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1070,10 +1091,21 @@ const Sales = () => {
               </div>
 
               <div className="flex gap-4 pt-4">
-                <button className="flex-1 py-3 bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => handlePrintSale(selectedSale)}
+                  className="flex-1 py-3 bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
+                >
                   <Printer size={18} /> Imprimir Cupom
                 </button>
-                <button className="flex-1 py-3 bg-cyan-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-cyan-700 shadow-lg shadow-cyan-600/20 transition-all">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNFE({ type: 'sale', data: selectedSale });
+                    setSelectedSale(null);
+                  }}
+                  className="flex-1 py-3 bg-cyan-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-cyan-700 shadow-lg shadow-cyan-600/20 transition-all"
+                >
                   <FileDown size={18} /> Exportar NF-e
                 </button>
               </div>
@@ -1945,7 +1977,12 @@ const Sales = () => {
             <div className="flex gap-2">
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input className="pl-9 pr-4 py-2 bg-white dark:bg-gray-700 border-none rounded-xl text-xs font-bold shadow-sm" placeholder="Buscar por cliente..." />
+                <input
+                  value={budgetSearchTerm}
+                  onChange={e => setBudgetSearchTerm(e.target.value)}
+                  className="pl-9 pr-4 py-2 bg-white dark:bg-gray-700 border-none rounded-xl text-xs font-bold shadow-sm"
+                  placeholder="Buscar por cliente..."
+                />
               </div>
             </div>
           </div>
@@ -1962,7 +1999,7 @@ const Sales = () => {
                 </tr>
               </thead>
               <tbody className="divide-y dark:divide-gray-700">
-                {budgets.length === 0 ? (
+                {filteredBudgets.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-20 text-center">
                       <div className="flex flex-col items-center gap-4 opacity-30 grayscale">
@@ -1972,7 +2009,7 @@ const Sales = () => {
                     </td>
                   </tr>
                 ) : (
-                  budgets.map(b => (
+                  filteredBudgets.map(b => (
                     <tr key={b.id} className="group hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-all">
                       <td className="px-6 py-5">
                         <p className="font-mono text-[10px] text-slate-400">#{b.id.split('-')[1]?.slice(-6) || b.id}</p>
@@ -1995,6 +2032,7 @@ const Sales = () => {
                             <>
                               <button
                                 onClick={() => {
+                                  setEditingBudgetId(b.id);
                                   setCart(b.items);
                                   setSelectedClient(b.clientId);
                                   setDiscount(b.discount.toString());

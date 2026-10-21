@@ -112,6 +112,21 @@ const Dashboard = () => {
   const lowStockCount = inventory.filter(i => i.quantity <= i.minStock).length;
   const pendingPayrollCount = payroll.filter(p => p.status === 'Pendente').length;
 
+  // Dynamic Monthly Growth & Payables Ratio
+  const monthlyGrowthPct = useMemo(() => {
+    if (chartData.length < 2) return 0;
+    const curr = chartData[chartData.length - 1].Receita - chartData[chartData.length - 1].Despesa;
+    const prev = chartData[chartData.length - 2].Receita - chartData[chartData.length - 2].Despesa;
+    if (prev === 0) return curr > 0 ? 100 : 0;
+    return Number((((curr - prev) / Math.abs(prev)) * 100).toFixed(1));
+  }, [chartData]);
+
+  const payablesRatioPct = useMemo(() => {
+    const totalOut = financials.totalExpenses + financials.payables;
+    if (totalOut <= 0) return 0;
+    return Math.min(100, Math.round((financials.payables / totalOut) * 100));
+  }, [financials]);
+
   // Colors for Charts
   const COLORS = ['#0ea5e9', '#ef4444', '#eab308', '#8b5cf6', '#10b981'];
 
@@ -139,9 +154,9 @@ const Dashboard = () => {
               {new Date().toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'long' })}
             </span>
           </div>
-          <button className="p-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl text-slate-400 hover:text-indigo-500 transition-colors">
+          <NavLink to="/reports" title="Pesquisar nos Relatórios" className="p-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl text-slate-400 hover:text-indigo-500 transition-colors">
             <Search size={20} />
-          </button>
+          </NavLink>
         </div>
       </div>
 
@@ -201,8 +216,9 @@ const Dashboard = () => {
               {formatMoney(financials.balance)}
             </h3>
             <div className="mt-4 flex items-center gap-2 text-xs font-bold text-slate-400">
-              <span className="text-emerald-500 flex items-center gap-1">
-                <TrendingUp size={14} /> +2.4%
+              <span className={`${monthlyGrowthPct >= 0 ? 'text-emerald-500' : 'text-rose-500'} flex items-center gap-1`}>
+                {monthlyGrowthPct >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                {monthlyGrowthPct >= 0 ? `+${monthlyGrowthPct}%` : `${monthlyGrowthPct}%`}
               </span>
               vs mês anterior
             </div>
@@ -252,7 +268,7 @@ const Dashboard = () => {
               {formatMoney(financials.payables)}
             </h3>
             <div className="mt-4 w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-              <div className="h-full bg-rose-500 rounded-full" style={{ width: '45%' }}></div>
+              <div className="h-full bg-rose-500 rounded-full" style={{ width: `${payablesRatioPct}%` }}></div>
             </div>
           </div>
         </div>
@@ -425,7 +441,7 @@ const Dashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-8 relative z-10">
             {/* Low Stock Alert */}
             {lowStockCount > 0 ? (
-              <NavLink to="/clients" className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl hover:bg-white/20 transition-all border border-white/5">
+              <NavLink to="/purchases" className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl hover:bg-white/20 transition-all border border-white/5">
                 <div className="p-3 bg-orange-500/20 text-orange-400 rounded-xl">
                   <Package size={24} />
                 </div>

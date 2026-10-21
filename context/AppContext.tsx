@@ -83,7 +83,7 @@ const INITIAL_ROLES: AppRole[] = [
 
 const INITIAL_USERS: User[] = [
   { id: '1', name: 'Admin InfraCore', username: 'admin', password: '123', email: 'admin@infracore.com', roleId: 'admin', status: 'Ativo', registeredAt: '01/01/2023' },
-  { id: '2', name: 'Gerência Vendas', username: 'vendas', password: '123', email: 'vendas@infracore.com', roleId: 'manager', status: 'Ativo', registeredAt: '15/05/2023' },
+  { id: '2', name: 'Gerência Vendas', username: 'vendas', password: '123', email: 'vendas@infracore.com', roleId: 'manager_com', status: 'Ativo', registeredAt: '15/05/2023' },
 ];
 
 const INITIAL_SETTINGS: AppSettings = {
@@ -263,7 +263,7 @@ interface AppContextType {
   planOfAccounts: any[]; // Assuming 'any' for now based on INITIAL_PLAN_OF_ACCOUNTS structure
 
   currentUser: User | null;
-  login: (username: string, password?: string) => Promise<{ success: boolean; message?: string }>;
+  login: (username: string, password?: string, rememberMe?: boolean) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   hasPermission: (permissionId: string) => boolean;
 
@@ -303,6 +303,7 @@ interface AppContextType {
   importTransactions: (file: any) => void;
   addSale: (sale: Sale) => void;
   addBudget: (budget: Budget) => void;
+  updateBudget: (budget: Budget) => void;
   updateBudgetStatus: (id: string, status: Budget['status']) => void;
 
   addPurchaseOrder: (order: PurchaseOrder) => void;
@@ -572,12 +573,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Persistence Load
   // Auth State
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('infracore_current_user') || sessionStorage.getItem('infracore_current_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
-  // Initialize with first user as mock admin session if no user logged
+  const persistCurrentUser = (user: User | null, rememberMe: boolean = true) => {
+    setCurrentUser(user);
+    try {
+      if (!user) {
+        localStorage.removeItem('infracore_current_user');
+        sessionStorage.removeItem('infracore_current_user');
+      } else {
+        const safeUser = { ...user, password: '' };
+        if (rememberMe) {
+          localStorage.setItem('infracore_current_user', JSON.stringify(safeUser));
+        } else {
+          sessionStorage.setItem('infracore_current_user', JSON.stringify(safeUser));
+        }
+      }
+    } catch (e) {
+      console.error('Failed to persist session', e);
+    }
+  };
 
-
-  const login = async (username: string, password?: string): Promise<{ success: boolean; message?: string }> => {
+  const login = async (username: string, password?: string, rememberMe: boolean = true): Promise<{ success: boolean; message?: string }> => {
     // Debug info
     console.log('Attempting login with:', { username, passwordProvided: !!password });
 
@@ -585,16 +609,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let user = users.find(u => u.username === username);
 
     // 2. Emergency/Setup Access: Only allow mock admin if DB is empty OR if explicitly requested manually (not auto-login)
-    // This handles the "First Run" scenario where no users exist in Supabase yet.
     if (!user && users.length === 0 && username === 'admin' && password === '123') {
       console.log('🌱 First Access / Emergency Admin Login triggered');
 
       const mockAdmin = INITIAL_USERS.find(u => u.username === 'admin');
       if (mockAdmin) {
-        // Ensure roles exist for permissions context
         if (roles.length === 0) setRoles(INITIAL_ROLES);
 
-        setCurrentUser(mockAdmin);
+        persistCurrentUser(mockAdmin, rememberMe);
         return { success: true, message: 'Acesso de Configuração Inicial (Banco Vazio)' };
       }
     }
@@ -610,7 +632,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'Usuário inativo ou bloqueado.' };
     }
 
-    // Password Check (Simple comparsion for MVP)
+    // Password Check
     const passwordMatch = user.password === password;
 
     if (!passwordMatch) {
@@ -618,26 +640,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'Senha incorreta.' };
     }
 
-    setCurrentUser(user);
+    persistCurrentUser(user, rememberMe);
     console.log('Login successful for:', username);
     return { success: true };
   };
 
   const logout = () => {
-    setCurrentUser(null);
+    persistCurrentUser(null);
   };
 
   const hasPermission = useCallback((permissionId: string) => {
     if (!currentUser) return false;
 
-    // Find User Role
-    const userRole = roles.find(r => r.id === currentUser.roleId);
+    const userRole = roles.find(r => r.id === currentUser.roleId || (currentUser.roleId === 'manager' && r.id === 'manager_com'));
     if (!userRole) return false;
 
-    // Check for Admin Superuser
-    if (userRole.permissions.includes('all')) return true;
+    if (userRole.permissions.includes('all') || userRole.permissions.includes('*')) return true;
 
-    return userRole.permissions.includes(permissionId);
+    if (userRole.permissions.includes(permissionId)) return true;
+
+    // Alias mapping for backward compatibility across modules
+    const aliasMap: Record<string, string[]> = {
+      'sales.view': ['sales.view.sales'],
+      'sales.view.sales': ['sales.view'],
+      'sales.create': ['sales.create.sales'],
+      'sales.create.sales': ['sales.create'],
+      'clients.manage': ['clients.view', 'clients.create', 'clients.edit'],
+      'employees.view': ['hr.view'],
+      'employees.manage': ['hr.manage', 'hr.payroll'],
+      'hr.manage_employees': ['hr.manage'],
+      'inventory.manage': ['inventory.create', 'inventory.edit', 'inventory.adjust'],
+      'finance.view': ['finance.dashboard', 'finance.view_transactions'],
+      'finance.reconcile': ['finance.approve', 'finance.edit_transaction'],
+      'finance.transact': ['finance.add_revenue', 'finance.add_expense'],
+      'finance.delete': ['finance.manage_accounts', 'finance.edit_transaction'],
+      'finance.delete_transaction': ['finance.edit_transaction', 'finance.approve']
+    };
+
+    const aliases = aliasMap[permissionId];
+    if (aliases && aliases.some(a => userRole.permissions.includes(a))) {
+      return true;
+    }
+
+    return false;
   }, [currentUser, roles]);
 
 
@@ -646,7 +691,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     try {
       const [
-        cl, su, emp, inv, tr, fl, ti, us, ro, set, sa, po, pro, prf, pru, fac, pay, stm
+        cl, su, emp, inv, tr, fl, ti, us, ro, set, sa, po, pro, prf, pru, fac, pay, stm,
+        bud, tml, vac, adv, aud
       ] = await Promise.all([
         api.fetchData<Client>('clients'),
         api.fetchData<Supplier>('suppliers'),
@@ -667,8 +713,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         api.fetchData<ProductionUnit>('production_units'),
         api.fetchData<any>('financial_accounts'),
         api.fetchData<PayrollRecord>('payroll'),
-        api.fetchData<StockMovement>('stock_movements').catch(() => []), // Table might be missing, fail silently
-        Promise.resolve([]), // Return empty array to keep destructuring indices aligned
+        api.fetchData<StockMovement>('stock_movements').catch(() => []),
+        api.fetchData<Budget>('budgets').catch(() => []),
+        api.fetchData<TimeLog>('time_logs').catch(() => []),
+        api.fetchData<Vacation>('vacations').catch(() => []),
+        api.fetchData<SalaryAdvance>('salary_advances').catch(() => []),
+        api.fetchData<AuditLog>('audit_logs').catch(() => []),
       ]);
 
       if (cl.length > 0) setClients(cl);
@@ -691,6 +741,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (fac && fac.length > 0) setAccounts(fac);
       if (pay && pay.length > 0) setPayroll(pay);
       if (stm && stm.length > 0) setStockMovements(stm);
+      if (bud && bud.length > 0) setBudgets(bud);
+      if (tml && tml.length > 0) setTimeLogs(tml);
+      if (vac && vac.length > 0) setVacations(vac);
+      if (adv && adv.length > 0) setSalaryAdvances(adv);
+      if (aud && aud.length > 0) setAuditLogs(aud);
 
       // Auto-Seed: If no users/roles/clients in DB, inject defaults to populated DB
       if (us.length === 0 && ro.length === 0 && cl.length === 0) {
@@ -782,16 +837,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Ensure Plan of Accounts is up to date (Force update for new structure)
-  useEffect(() => {
-    setPlanOfAccounts(INITIAL_PLAN_OF_ACCOUNTS);
-  }, []);
-
   // Loading Logic
   useEffect(() => {
     const loadData = async () => {
-      // setLoading(true); // Assuming setLoading is handled elsewhere or not needed here
-
       // 1. Try Local Storage first
       try {
         const stored = localStorage.getItem(STORAGE_KEY);
@@ -819,9 +867,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (data.settings) setSettings(data.settings);
           if (data.auditLogs) setAuditLogs(data.auditLogs);
           if (data.stockMovements) setStockMovements(data.stockMovements);
-          // Force new Plan if old was detected or just override if user requests 'Update'
-          // For now, we are forcing it via the useEffect above, so we don't load it from storage here to ensure the new structure takes precedence
-          // setPlanOfAccounts(data.planOfAccounts || INITIAL_PLAN_OF_ACCOUNTS);
+          if (data.accounts) setAccounts(data.accounts);
+          if (data.planOfAccounts && data.planOfAccounts.length > 0) {
+            setPlanOfAccounts(data.planOfAccounts);
+          }
         }
       } catch (e) {
         console.error("Failed to load persistence", e);
@@ -855,7 +904,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       timestamp: new Date().toLocaleString('pt-BR'),
       ...logData
     };
-    setAuditLogs(prev => [newLog, ...prev]);
+    syncAdd('audit_logs', newLog, setAuditLogs);
   };
 
   // Clients
@@ -959,7 +1008,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Original implementations below replaced by above for specific entities.
   // We need to keep the others compatible.
 
-  const addPayroll = (record: PayrollRecord) => setPayroll(prev => [record, ...prev]); // TODO: Sync
+  const addPayroll = (record: PayrollRecord) => syncAdd('payroll', record, setPayroll);
   const payPayroll = (id: string) => {
     const p = payroll.find(r => r.id === id);
     if (!p || p.status === 'Pago') return;
@@ -970,20 +1019,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       paidAt: new Date().toLocaleDateString('pt-BR')
     };
 
-    // Transaction creation moved to HR.tsx to prevent duplicates and ensure correct Context
-    // setTransactions - REMOVED
-
-    setPayroll(prev => prev.map(item => item.id === id ? updated : item));
-
-    setPayroll(prev => prev.map(item => item.id === id ? updated : item));
+    syncUpdate('payroll', id, updated, setPayroll);
   };
 
   // Time Tracking
-  const addTimeLog = (log: TimeLog) => setTimeLogs(prev => [log, ...prev]);
+  const addTimeLog = (log: TimeLog) => syncAdd('time_logs', log, setTimeLogs);
 
   // Vacations
   const addVacation = (vacation: Vacation) => {
-    setVacations(prev => [vacation, ...prev]);
+    syncAdd('vacations', vacation, setVacations);
     // Atualizar dias disponíveis do funcionário
     if (vacation.status === 'Aprovado') {
       setEmployees(prev => prev.map(emp =>
@@ -998,6 +1042,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setVacations(prev => prev.map(vac => {
       if (vac.id === id) {
         const updated = { ...vac, status, approvedBy };
+        if (isSupabaseConfigured()) api.updateItem('vacations', id, { status, approvedBy });
 
         // Se aprovado, deduzir dias do funcionário
         if (status === 'Aprovado' && vac.status !== 'Aprovado') {
@@ -1033,33 +1078,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           : emp
       ));
     }
-    setVacations(prev => prev.filter(v => v.id !== id));
+    syncDelete('vacations', id, setVacations);
   };
 
   // Salary Advances
-  const addSalaryAdvance = (advance: SalaryAdvance) => setSalaryAdvances(prev => [advance, ...prev]);
+  const addSalaryAdvance = (advance: SalaryAdvance) => syncAdd('salary_advances', advance, setSalaryAdvances);
 
   const updateAdvanceStatus = (id: string, status: SalaryAdvance['status'], approvedBy?: string) => {
     setSalaryAdvances(prev => prev.map(adv =>
       adv.id === id ? { ...adv, status, approvedBy } : adv
     ));
+    if (isSupabaseConfigured()) api.updateItem('salary_advances', id, { status, approvedBy });
   };
 
   const paySalaryAdvance = (id: string) => {
     setSalaryAdvances(prev => prev.map(adv => {
       if (adv.id === id && adv.status === 'Aprovado') {
         const paidAt = new Date().toLocaleDateString('pt-BR');
-
-        // Transaction creation moved to HR.tsx
-        // setTransactions - REMOVED
-
+        if (isSupabaseConfigured()) api.updateItem('salary_advances', id, { status: 'Pago', paidAt });
         return { ...adv, status: 'Pago' as const, paidAt };
       }
       return adv;
     }));
   };
 
-  const deleteAdvance = (id: string) => setSalaryAdvances(prev => prev.filter(adv => adv.id !== id));
+  const deleteAdvance = (id: string) => syncDelete('salary_advances', id, setSalaryAdvances);
 
   // Transactions
   // Transactions
@@ -1106,7 +1149,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Guard: Prevent duplicate sales
     if (sales.some(s => s.id === sale.id)) return;
 
-    setSales(prev => [sale, ...prev]);
+    syncAdd('sales', sale, setSales);
 
     const numInstallments = sale.installments && sale.installments > 1 ? sale.installments : 1;
 
@@ -1156,8 +1199,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sale.items.forEach(item => updateStock(item.id, -item.quantity, `Venda #${sale.id}`, sale.id));
   };
 
-  const addBudget = (budget: Budget) => setBudgets(prev => [budget, ...prev]);
-  const updateBudgetStatus = (id: string, status: Budget['status']) => setBudgets(prev => prev.map(b => b.id === id ? { ...b, status } : b));
+  const addBudget = (budget: Budget) => syncAdd('budgets', budget, setBudgets);
+  const updateBudget = (budget: Budget) => syncUpdate('budgets', budget.id, budget, setBudgets);
+  const updateBudgetStatus = (id: string, status: Budget['status']) => {
+    setBudgets(prev => prev.map(b => b.id === id ? { ...b, status } : b));
+    if (isSupabaseConfigured()) api.updateItem('budgets', id, { status });
+  };
 
   // Purchases
   const addPurchaseOrder = (order: PurchaseOrder) => {
@@ -1169,7 +1216,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ledgerCode: '2.02.03',
       ledgerName: 'Material de Consumo'
     };
-    setPurchaseOrders(prev => [orderWithLedger, ...prev]);
+    syncAdd('purchase_orders', orderWithLedger, setPurchaseOrders);
     if (order.status === 'Recebido') {
       const expense: Transaction = {
         id: `exp-${order.id}`,
@@ -1211,6 +1258,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ledgerCode: '2.02.03',
           ledgerName: 'Material de Consumo'
         };
+        if (isSupabaseConfigured()) api.updateItem('purchase_orders', order.id, updated);
 
         // Fallback for Account
         const targetAccountId = order.targetAccountId || 'acc-1';
@@ -1241,10 +1289,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Vehicles
-  const addVehicle = (vehicle: FleetVehicle) => setFleet(prev => [vehicle, ...prev]);
-  const updateVehicle = (updatedVehicle: FleetVehicle) => setFleet(prev => prev.map(v => v.id === updatedVehicle.id ? updatedVehicle : v));
-  const updateVehicleStatus = (id: string, status: FleetVehicle['status']) => setFleet(prev => prev.map(v => v.id === id ? { ...v, status } : v));
-  const deleteVehicle = (id: string) => setFleet(prev => prev.filter(v => v.id !== id));
+  const addVehicle = (vehicle: FleetVehicle) => syncAdd('fleet', vehicle, setFleet);
+  const updateVehicle = (updatedVehicle: FleetVehicle) => syncUpdate('fleet', updatedVehicle.id, updatedVehicle, setFleet);
+  const updateVehicleStatus = (id: string, status: FleetVehicle['status']) => {
+    setFleet(prev => prev.map(v => v.id === id ? { ...v, status } : v));
+    if (isSupabaseConfigured()) api.updateItem('fleet', id, { status });
+  };
+  const deleteVehicle = (id: string) => syncDelete('fleet', id, setFleet);
 
   const addMaintenanceRecord = (vehicleId: string, record: MaintenanceRecord) => {
     const vehicle = fleet.find(v => v.id === vehicleId);
@@ -1375,9 +1426,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Tires
-  const addTire = (tire: Tire) => setTires(prev => [tire, ...prev]);
-  const updateTire = (updatedTire: Tire) => setTires(prev => prev.map(t => t.id === updatedTire.id ? updatedTire : t));
-  const deleteTire = (id: string) => setTires(prev => prev.filter(t => t.id !== id));
+  const addTire = (tire: Tire) => syncAdd('tires', tire, setTires);
+  const updateTire = (updatedTire: Tire) => syncUpdate('tires', updatedTire.id, updatedTire, setTires);
+  const deleteTire = (id: string) => syncDelete('tires', id, setTires);
   const addTireHistory = (tireId: string, entry: TireHistory) => {
     setTires(prev => prev.map(t => {
       if (t.id === tireId) {
@@ -1497,7 +1548,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addQualityTest = (orderId: string, test: QualityTest) => {
     setProductionOrders(prev => prev.map(o => {
       if (o.id === orderId) {
-        return { ...o, qualityTests: [test, ...(o.qualityTests || [])] };
+        const updatedTests = [test, ...(o.qualityTests || [])];
+        if (isSupabaseConfigured()) api.updateItem('production_orders', orderId, { qualityTests: updatedTests });
+        return { ...o, qualityTests: updatedTests };
       }
       return o;
     }));
@@ -1676,7 +1729,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addPayroll, payPayroll, addTimeLog,
       addVacation, updateVacationStatus, deleteVacation,
       addSalaryAdvance, updateAdvanceStatus, paySalaryAdvance, deleteAdvance,
-      addTransaction, updateTransaction, updateTransactionStatus, deleteTransaction, importTransactions, addSale, addBudget, updateBudgetStatus,
+      addTransaction, updateTransaction, updateTransactionStatus, deleteTransaction, importTransactions, addSale, addBudget, updateBudget, updateBudgetStatus,
       addPurchaseOrder, updatePurchaseOrder, receivePurchaseOrder,
       addStockItem, updateStock, updateStockItem, deleteStockItem,
       addVehicle, updateVehicle, updateVehicleStatus, deleteVehicle,
