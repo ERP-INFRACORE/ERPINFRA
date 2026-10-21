@@ -2181,7 +2181,8 @@ const Sales = () => {
                   )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-0 bg-slate-50/50 dark:bg-slate-900/20">
+                {/* Lista Rolável de Itens do Carrinho com Barra de Rolagem à Direita */}
+                <div className={`overflow-y-auto p-0 bg-slate-50/50 dark:bg-slate-900/20 custom-scrollbar pr-2 transition-all ${showCheckout ? 'max-h-36 shrink-0 border-b dark:border-slate-700' : 'flex-1'}`}>
                   {cart.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-6 grayscale opacity-50 p-6">
                       <ShoppingCart size={80} strokeWidth={1} />
@@ -2255,7 +2256,7 @@ const Sales = () => {
                   )}
                 </div>
 
-                <div className="p-6 bg-white dark:bg-gray-800 border-t dark:border-slate-700 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-20">
+                <div className={`bg-white dark:bg-gray-800 border-t dark:border-slate-700 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-20 transition-all ${showCheckout ? 'flex-1 flex flex-col min-h-0 overflow-hidden p-6' : 'shrink-0 p-6'}`}>
                   {!showCheckout ? (
                     <div className="space-y-6">
                       <div className="flex justify-between items-end">
@@ -2280,7 +2281,7 @@ const Sales = () => {
                         <button onClick={() => setShowCheckout(false)} className="text-xs font-bold text-cyan-600 hover:underline uppercase tracking-wide">Voltar ao Carrinho</button>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-5">
+                      <div className="flex-1 overflow-y-auto pr-3 custom-scrollbar space-y-5">
                         <div className="space-y-4">
                           {/* Seletor de Cliente com botão de Cadastro Rápido */}
                           <div>

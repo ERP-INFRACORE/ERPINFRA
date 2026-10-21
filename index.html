@@ -97,6 +97,39 @@
     ::-webkit-scrollbar-thumb:hover {
       background: #94a3b8;
     }
+
+    /* Custom Scrollbar Utility */
+    .custom-scrollbar {
+      scrollbar-width: thin;
+      scrollbar-color: #0284c7 rgba(241, 245, 249, 0.5);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(241, 245, 249, 0.6);
+      border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #0284c7;
+      border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #0369a1;
+    }
+    .dark .custom-scrollbar {
+      scrollbar-color: #0284c7 rgba(30, 41, 59, 0.5);
+    }
+    .dark .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(30, 41, 59, 0.6);
+    }
+    .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #0284c7;
+    }
+    .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #38bdf8;
+    }
   </style>
   <script type="importmap">
 {
