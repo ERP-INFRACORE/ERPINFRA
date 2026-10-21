@@ -72,7 +72,7 @@ import { APP_PERMISSIONS } from '../permission_constants';
 import { generateCameloData } from '../src/utils/seeder';
 import AIAuditAgent from '../components/AIAuditAgent';
 import AIAgentsHub from '../components/AIAgentsHub';
-import { AI_AGENTS_KEY, getAIConfig, describeAIConfigChange, isSuperAdminRole } from '../ai_agents_constants';
+import { AI_AGENTS_KEY, getAIConfig, describeAIConfigChange, isSuperAdminRole, isUserAdmin } from '../ai_agents_constants';
 
 // Internal Toast Component
 // Local Toast component removed in favor of global context
@@ -1821,13 +1821,9 @@ const Settings = () => {
         currentUser, addAuditLog
     } = useApp();
 
-    const currentRole = useMemo(() => roles.find(r => r.id === currentUser?.roleId), [roles, currentUser]);
     const isSuperAdmin = useMemo(
-        () =>
-            isSuperAdminRole(currentRole) ||
-            currentUser?.roleId === 'admin' ||
-            currentUser?.username?.toLowerCase() === 'admin',
-        [currentRole, currentUser]
+        () => isUserAdmin(currentUser, roles),
+        [currentUser, roles]
     );
 
     const [activeTab, setActiveTab] = useState<'company' | 'security' | 'system' | 'audit' | 'ai_agent' | 'ai_agents'>('company');

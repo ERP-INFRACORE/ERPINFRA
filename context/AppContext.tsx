@@ -652,10 +652,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const hasPermission = useCallback((permissionId: string) => {
     if (!currentUser) return false;
 
-    const userRole = roles.find(r => r.id === currentUser.roleId || (currentUser.roleId === 'manager' && r.id === 'manager_com'));
+    if (currentUser.roleId === 'admin' || currentUser.username?.toLowerCase() === 'admin') {
+      return true;
+    }
+
+    const userRole = roles.find(
+      r =>
+        r.id === currentUser.roleId ||
+        (currentUser.roleId === 'manager' && r.id === 'manager_com') ||
+        (currentUser.roleId === 'admin' && /^(adm|admin|administrador|super\s*admin)/i.test(r.name?.trim() || ''))
+    );
     if (!userRole) return false;
 
-    if (userRole.permissions.includes('all') || userRole.permissions.includes('*')) return true;
+    if (
+      userRole.permissions.includes('all') ||
+      userRole.permissions.includes('*') ||
+      /^(adm|admin|administrador|super\s*admin)/i.test(userRole.name?.trim() || '')
+    ) {
+      return true;
+    }
 
     if (userRole.permissions.includes(permissionId)) return true;
 

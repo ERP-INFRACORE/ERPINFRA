@@ -32,7 +32,7 @@ import { useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { APP_PERMISSIONS } from '../permission_constants';
-import { getAIConfig, setAIConfig, isSuperAdminRole, newId } from '../ai_agents_constants';
+import { getAIConfig, setAIConfig, isSuperAdminRole, isUserAdmin, newId } from '../ai_agents_constants';
 
 export interface CodeReviewSuggestion {
   id: string;
@@ -679,16 +679,9 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
   const { addToast } = useToast();
 
   // Strict Admin-Only Access Check (Super Admin / ADM only)
-  const currentRole = useMemo(
-    () => roles.find(r => r.id === currentUser?.roleId),
-    [roles, currentUser]
-  );
   const isAdmin = useMemo(
-    () =>
-      isSuperAdminRole(currentRole) ||
-      currentUser?.roleId === 'admin' ||
-      currentUser?.username?.toLowerCase() === 'admin',
-    [currentRole, currentUser]
+    () => isUserAdmin(currentUser, roles),
+    [currentUser, roles]
   );
 
   const [isOpen, setIsOpen] = useState(false);

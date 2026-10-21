@@ -43,12 +43,14 @@ import {
     AIAgentDefinition,
     CODE_AGENT_GUARDRAILS,
     CODE_AGENT_PROTECTED_PATHS,
+    findUserRole,
     formatPhone,
     getAgentSettings,
     getAIConfig,
     getPermissionName,
     getUserEligibility,
     isSuperAdminRole,
+    isUserAdmin,
     newId,
     normalizePhone,
     roleHasPermission,
@@ -124,8 +126,7 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
     const { addToast } = useToast();
 
     const config = useMemo(() => getAIConfig(settings), [settings]);
-    const currentRole = roles.find(r => r.id === currentUser?.roleId);
-    const isAdmin = isSuperAdminRole(currentRole);
+    const isAdmin = isUserAdmin(currentUser, roles);
 
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [department, setDepartment] = useState('Todos');
@@ -293,8 +294,7 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         if (!isAdmin) return addToast('Apenas o Super Administrador pode autorizar números.', 'error');
         const user = users.find(u => u.id === linkUserId);
         if (!user) return addToast('Selecione um usuário.', 'error');
-        const role = roles.find(r => r.id === user.roleId);
-        if (user.status !== 'Ativo' || !isSuperAdminRole(role)) {
+        if (user.status !== 'Ativo' || !isUserAdmin(user, roles)) {
             return addToast('Somente usuários ativos com perfil de Super Administrador podem ser autorizados.', 'error');
         }
         const { phone, error } = validateLink(linkUserId, linkPhone, config.codeAgent.links);
@@ -337,12 +337,12 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
     const visibleAgents = AI_AGENT_CATALOG.filter(a => department === 'Todos' || a.department === department);
     const activeCount = AI_AGENT_CATALOG.filter(a => getAgentSettings(config, a.id).enabled).length;
     const numbersCount = AI_AGENT_CATALOG.reduce((sum, a) => sum + getAgentSettings(config, a.id).links.length, 0);
-    const eligibleAdmins = users.filter(u => u.status === 'Ativo' && isSuperAdminRole(roles.find(r => r.id === u.roleId)));
+    const eligibleAdmins = users.filter(u => u.status === 'Ativo' && isUserAdmin(u, roles));
 
     const userLabel = (userId: string) => users.find(u => u.id === userId)?.name || 'Usuário removido';
     const roleLabel = (userId: string) => {
         const u = users.find(x => x.id === userId);
-        return roles.find(r => r.id === u?.roleId)?.name || '—';
+        return findUserRole(u, roles)?.name || '—';
     };
 
     return (
@@ -532,7 +532,7 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                             <ul className="space-y-2">
                                 {config.codeAgent.links.map(l => {
                                     const u = users.find(x => x.id === l.userId);
-                                    const stillAdmin = !!u && u.status === 'Ativo' && isSuperAdminRole(roles.find(r => r.id === u.roleId));
+                                    const stillAdmin = !!u && u.status === 'Ativo' && isUserAdmin(u, roles);
                                     return (
                                         <li key={l.id} className="flex items-center justify-between gap-3 bg-slate-800 rounded-xl px-3 py-2">
                                             <div className="min-w-0">

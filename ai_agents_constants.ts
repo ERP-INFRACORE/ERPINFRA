@@ -356,13 +356,34 @@ const PERMISSION_NAMES: Record<string, string> = APP_PERMISSIONS.reduce((acc, ca
 
 export const getPermissionName = (id: string): string => PERMISSION_NAMES[id] || id;
 
-export const roleHasPermission = (role: AppRole | undefined, permission: string): boolean => {
-    if (!role) return false;
-    return role.permissions.includes('all') || role.permissions.includes('*') || role.permissions.includes(permission);
+export const isSuperAdminRole = (role: AppRole | undefined): boolean =>
+    !!role && (
+        role.permissions.includes('all') ||
+        role.permissions.includes('*') ||
+        role.id === 'admin' ||
+        /^(adm|admin|administrador|super\s*admin)/i.test(role.name?.trim() || '')
+    );
+
+export const findUserRole = (user: User | null | undefined, roles: AppRole[]): AppRole | undefined => {
+    if (!user) return undefined;
+    return (
+        roles.find(r => r.id === user.roleId) ||
+        (user.roleId === 'admin' || user.username?.toLowerCase() === 'admin'
+            ? roles.find(r => isSuperAdminRole(r))
+            : undefined)
+    );
 };
 
-export const isSuperAdminRole = (role: AppRole | undefined): boolean =>
-    !!role && (role.permissions.includes('all') || role.permissions.includes('*'));
+export const isUserAdmin = (user: User | null | undefined, roles: AppRole[]): boolean => {
+    if (!user) return false;
+    if (user.roleId === 'admin' || user.username?.toLowerCase() === 'admin') return true;
+    return isSuperAdminRole(findUserRole(user, roles));
+};
+
+export const roleHasPermission = (role: AppRole | undefined, permission: string): boolean => {
+    if (!role) return false;
+    return isSuperAdminRole(role) || role.permissions.includes(permission);
+};
 
 /** Um usuário só pode ser vinculado a um agente se estiver ativo e seu perfil tiver todas as permissões mínimas. */
 export const getUserEligibility = (
@@ -370,8 +391,9 @@ export const getUserEligibility = (
     roles: AppRole[],
     minPermissions: string[]
 ): { eligible: boolean; missing: string[] } => {
-    const role = roles.find(r => r.id === user.roleId);
+    const role = findUserRole(user, roles);
     if (user.status !== 'Ativo') return { eligible: false, missing: [] };
+    if (isUserAdmin(user, roles)) return { eligible: true, missing: [] };
     const missing = minPermissions.filter(p => !roleHasPermission(role, p));
     return { eligible: missing.length === 0, missing };
 };
