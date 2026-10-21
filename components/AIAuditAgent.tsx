@@ -23,12 +23,175 @@ import {
   Cpu,
   FileCode,
   Zap,
-  ExternalLink
+  ExternalLink,
+  Lock,
+  GitPullRequest,
+  Plus
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { APP_PERMISSIONS } from '../permission_constants';
+import { getAIConfig, setAIConfig, isSuperAdminRole, newId } from '../ai_agents_constants';
+
+export interface CodeReviewSuggestion {
+  id: string;
+  module: string;
+  file: string;
+  category: 'Performance' | 'Segurança & RBAC' | 'Regra de Negócio' | 'Banco de Dados (SQL)' | 'UX & Arquitetura';
+  impact: 'Alto' | 'Médio';
+  title: string;
+  rationale: string;
+  codeBefore: string;
+  codeAfter: string;
+  prompt: string;
+}
+
+const CODE_REVIEW_SUGGESTIONS: CodeReviewSuggestion[] = [
+  {
+    id: 'REV-CODE-01',
+    module: 'Arquitetura Global',
+    file: 'App.tsx',
+    category: 'Performance',
+    impact: 'Alto',
+    title: 'Code Splitting com React.lazy() nas 10 Rotas Principais',
+    rationale:
+      'O bundle principal (dist/assets/index.js) possui ~1.7 MB porque todas as 10 páginas são importadas estaticamente em App.tsx. Usar React.lazy + Suspense reduz o carregamento inicial em mais de 65%.',
+    codeBefore: `import Dashboard from './pages/Dashboard';
+import Sales from './pages/Sales';
+import Purchases from './pages/Purchases';
+import Finance from './pages/Finance';`,
+    codeAfter: `const Dashboard = React.lazy(() => import('./pages/Dashboard'));
+const Sales = React.lazy(() => import('./pages/Sales'));
+const Purchases = React.lazy(() => import('./pages/Purchases'));
+const Finance = React.lazy(() => import('./pages/Finance'));`,
+    prompt: `Em \`App.tsx\`, converta os imports estáticos das páginas (\`Dashboard\`, \`Sales\`, \`Purchases\`, \`Clients\`, \`Production\`, \`Finance\`, \`HR\`, \`Reports\`, \`Fleet\`, \`Settings\`) para \`React.lazy(() => import(...))\` envolvendo \`<Routes>\` com \`<React.Suspense fallback={<div className="p-8 text-center font-bold">Carregando módulo...</div>}>\`.`
+  },
+  {
+    id: 'REV-CODE-02',
+    module: 'Faturamento (Vendas)',
+    file: 'pages/Sales.tsx',
+    category: 'Regra de Negócio',
+    impact: 'Alto',
+    title: 'Trava Automática de Limite de Crédito e Desconto Máximo de Parâmetros',
+    rationale:
+      'As configurações settings.operational.maxDiscount (15%) e client.creditLimit existem no banco, mas Sales.tsx permite fechar venda a prazo acima do limite de crédito do cliente sem exigir senha de gerente.',
+    codeBefore: `const finalAmount = subtotal - discountValue;
+addSale(newSale);`,
+    codeAfter: `const maxAllowedDiscount = (settings.operational?.maxDiscount ?? 15) / 100 * subtotal;
+if (discountValue > maxAllowedDiscount && !hasPermission('sales.approve')) {
+  return addToast('Desconto acima do limite permitido para seu perfil!', 'error');
+}
+if (client?.creditLimit && finalAmount > client.creditLimit && !hasPermission('sales.approve')) {
+  return addToast('Venda excede o limite de crédito cadastrado para o cliente!', 'warning');
+}`,
+    prompt: `Em \`pages/Sales.tsx\`, antes de concluir a venda em \`handleFinalizeSale\`, valide se o desconto aplicado ultrapassa \`settings.operational.maxDiscount\` e se o valor a prazo ultrapassa \`client.creditLimit\`, exigindo a permissão \`sales.approve\` caso ultrapasse.`
+  },
+  {
+    id: 'REV-CODE-03',
+    module: 'Financeiro',
+    file: 'pages/Finance.tsx',
+    category: 'Regra de Negócio',
+    impact: 'Alto',
+    title: 'Bloqueio de Duplicidade de Nota Fiscal / Documento ao Lançar Despesa',
+    rationale:
+      'Operadores podem lançar acidentalmente o mesmo boleto ou número de NF duas vezes para o mesmo parceiro/fornecedor.',
+    codeBefore: `addTransaction(txData);`,
+    codeAfter: `const isDuplicate = transactions.some(
+  t => t.documentNumber && t.documentNumber === txData.documentNumber && t.partnerId === txData.partnerId && t.id !== txData.id
+);
+if (isDuplicate) {
+  return addToast(\`Documento nº \${txData.documentNumber} já lançado para este parceiro!\`, 'error');
+}
+addTransaction(txData);`,
+    prompt: `Em \`pages/Finance.tsx\`, na função \`handleSaveTransaction\`, verifique se já existe uma transação com o mesmo \`documentNumber\` e \`partnerId\` antes de chamar \`addTransaction\`, exibindo alerta caso seja duplicada.`
+  },
+  {
+    id: 'REV-CODE-04',
+    module: 'Frota',
+    file: 'pages/Fleet.tsx',
+    category: 'Regra de Negócio',
+    impact: 'Alto',
+    title: 'Validação de Hodômetro Progressivo no Abastecimento e Manutenção',
+    rationale:
+      'Permite lançar um abastecimento com KM menor que o KM atual registrado no veículo, distorcendo o cálculo de média km/L e custo por KM nos relatórios.',
+    codeBefore: `addFuelLog(log);`,
+    codeAfter: `if (selectedVehicle && Number(newFuel.km) < Number(selectedVehicle.km)) {
+  return addToast(\`Hodômetro informado (\${newFuel.km} km) é menor que o KM atual do veículo (\${selectedVehicle.km} km)!\`, 'error');
+}
+addFuelLog(log);`,
+    prompt: `Em \`pages/Fleet.tsx\`, ao salvar abastecimento (\`handleCreateFuel\`) ou manutenção (\`handleCreateMaint\`), valide que o campo \`km\` informado é maior ou igual ao \`km\` atual do veículo selecionado.`
+  },
+  {
+    id: 'REV-CODE-05',
+    module: 'Produção',
+    file: 'pages/Production.tsx',
+    category: 'Regra de Negócio',
+    impact: 'Alto',
+    title: 'Verificação Prévia de Saldo de Matéria-Prima Antes de Iniciar O.P.',
+    rationale:
+      'Ao iniciar uma Ordem de Produção vinculada a um traço/fórmula, o sistema deduz insumos mesmo quando o estoque fica negativo, sem alertar o operador de usina.',
+    codeBefore: `updateProductionOrderStatus(order.id, 'Em Produção');`,
+    codeAfter: `const formula = productionFormulas.find(f => f.id === order.formulaId);
+const missing = formula?.ingredients.filter(ing => {
+  const stock = inventory.find(i => i.id === ing.productId)?.quantity ?? 0;
+  return stock < ing.quantity * order.quantity;
+});
+if (missing?.length) {
+  return addToast(\`Estoque insuficiente de matéria-prima para iniciar a O.P.!\`, 'error');
+}`,
+    prompt: `Em \`pages/Production.tsx\` e \`context/AppContext.tsx\`, antes de mudar o status de uma Ordem de Produção para \`'Em Produção'\`, valide se todos os ingredientes da fórmula associada possuem saldo suficiente em \`inventory\`.`
+  },
+  {
+    id: 'REV-CODE-06',
+    module: 'Banco de Dados (Supabase)',
+    file: 'supabase_schema.sql',
+    category: 'Banco de Dados (SQL)',
+    impact: 'Alto',
+    title: 'Ativação dos Índices Compostos para Consultas de Fluxo de Caixa e Vendas',
+    rationale:
+      'No final de supabase_schema.sql, os comandos CREATE INDEX estão comentados. Descomentá-los acelera filtros por data, status e clientId em tabelas grandes.',
+    codeBefore: `-- CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
+-- CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);`,
+    codeAfter: `CREATE INDEX IF NOT EXISTS idx_transactions_status_date ON transactions(status, date);
+CREATE INDEX IF NOT EXISTS idx_sales_client_status ON sales("clientId", status);
+CREATE INDEX IF NOT EXISTS idx_inventory_low_stock ON inventory(quantity, "minStock");`,
+    prompt: `Em \`supabase_schema.sql\` (linhas 560-578), descomente os índices de performance e adicione índices compostos para \`transactions(status, date)\` e \`sales("clientId", status)\`.`
+  },
+  {
+    id: 'REV-CODE-07',
+    module: 'Custos e Despesas (Compras)',
+    file: 'pages/Purchases.tsx',
+    category: 'Regra de Negócio',
+    impact: 'Médio',
+    title: 'Cálculo Automático do Custo Médio Ponderado ao Receber Ordem de Compra',
+    rationale:
+      'Quando uma Ordem de Compra é recebida, a quantidade em estoque sobe, mas o costPrice do item não é recalculado pelo custo médio ponderado.',
+    codeBefore: `const newQty = item.quantity + poItem.quantity;
+updateInventory({ ...item, quantity: newQty });`,
+    codeAfter: `const newQty = item.quantity + poItem.quantity;
+const weightedCost = ((item.quantity * (item.costPrice || 0)) + (poItem.quantity * poItem.price)) / (newQty || 1);
+updateInventory({ ...item, quantity: newQty, costPrice: Number(weightedCost.toFixed(2)) });`,
+    prompt: `Em \`context/AppContext.tsx\`, dentro de \`receivePurchaseOrder\`, atualize também o \`costPrice\` do item em \`inventory\` calculando o Custo Médio Ponderado entre o saldo anterior e a nova entrada.`
+  },
+  {
+    id: 'REV-CODE-08',
+    module: 'Segurança & Auditoria',
+    file: 'context/AppContext.tsx',
+    category: 'Segurança & RBAC',
+    impact: 'Alto',
+    title: 'Trilha de Auditoria Automática em Exclusões Críticas (Vendas, Frota e Contas)',
+    rationale:
+      'Algumas funções de exclusão removem registros sem gravar automaticamente o estado anterior (snapshot JSON) em audit_logs.',
+    codeBefore: `await api.remove('fleet', id);
+setFleet(prev => prev.filter(v => v.id !== id));`,
+    codeAfter: `const target = fleet.find(v => v.id === id);
+await api.remove('fleet', id);
+setFleet(prev => prev.filter(v => v.id !== id));
+addAuditLog('Exclusão de Veículo', 'Frota', \`Placa \${target?.plate} (\${target?.name}) removida.\`, 'warning');`,
+    prompt: `Em \`context/AppContext.tsx\`, adicione chamadas automáticas a \`addAuditLog(..., 'warning')\` em todas as funções \`delete*\` (\`deleteVehicle\`, \`deleteTire\`, \`deleteEmployee\`, \`deletePlanAccount\`) registrando a identificação do item excluído.`
+  }
+];
 
 export interface AuditIssue {
   id: string;
@@ -497,6 +660,7 @@ interface AIAuditAgentProps {
 export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' }) => {
   const location = useLocation();
   const {
+    currentUser,
     users,
     roles,
     fleet,
@@ -507,19 +671,60 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
     employees,
     sales,
     budgets,
-    purchaseOrders
+    purchaseOrders,
+    settings,
+    updateSettings,
+    addAuditLog
   } = useApp();
   const { addToast } = useToast();
 
+  // Strict Admin-Only Access Check (Super Admin / ADM only)
+  const currentRole = useMemo(
+    () => roles.find(r => r.id === currentUser?.roleId),
+    [roles, currentUser]
+  );
+  const isAdmin = useMemo(
+    () =>
+      isSuperAdminRole(currentRole) ||
+      currentUser?.roleId === 'admin' ||
+      currentUser?.username?.toLowerCase() === 'admin',
+    [currentRole, currentUser]
+  );
+
   const [isOpen, setIsOpen] = useState(false);
+  const [activeView, setActiveView] = useState<'suggestions' | 'studio' | 'audit'>('suggestions');
   const [selectedModule, setSelectedModule] = useState<string>('Todos');
   const [selectedLayer, setSelectedLayer] = useState<'Todos' | 'Front-end' | 'Back-end'>('Todos');
   const [selectedSeverity, setSelectedSeverity] = useState<'Todos' | 'Crítico' | 'Alto' | 'Médio'>('Todos');
+  const [selectedCategory, setSelectedCategory] = useState<'Todas' | CodeReviewSuggestion['category']>('Todas');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [queuedIds, setQueuedIds] = useState<Record<string, boolean>>({});
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(100);
   const [expandedIssueId, setExpandedIssueId] = useState<string | null>(null);
+  const [customSuggestions, setCustomSuggestions] = useState<CodeReviewSuggestion[]>([]);
+
+  // Interactive Studio State (Admin On-Demand Code Review Generator)
+  const [studioFile, setStudioFile] = useState<string>('context/AppContext.tsx');
+  const [studioCategory, setStudioCategory] = useState<CodeReviewSuggestion['category']>('UX & Arquitetura');
+  const [studioImpact, setStudioImpact] = useState<CodeReviewSuggestion['impact']>('Alto');
+  const [studioGoal, setStudioGoal] = useState<string>('');
+
+  const erpFilesCatalog: { file: string; module: string; lines: string; sampleTarget: string }[] = [
+    { file: 'context/AppContext.tsx', module: 'Global / Supabase', lines: '1-1450', sampleTarget: 'syncItemToSupabase & mutações globais' },
+    { file: 'pages/Sales.tsx', module: 'Faturamento (Vendas)', lines: '1-980', sampleTarget: 'Fluxo de aprovação de orçamento, NF-e e estoque' },
+    { file: 'pages/Finance.tsx', module: 'Financeiro', lines: '1-1120', sampleTarget: 'Conciliação bancária, DRE e lançamentos' },
+    { file: 'pages/Production.tsx', module: 'Produção', lines: '1-890', sampleTarget: 'Ordens de produção, usina de asfalto e britagem' },
+    { file: 'pages/Purchases.tsx', module: 'Custos e Despesas (Compras)', lines: '1-860', sampleTarget: 'Ordens de compra, cotações e entrada de NF' },
+    { file: 'pages/Clients.tsx', module: 'Cadastros', lines: '1-1050', sampleTarget: 'Clientes, fornecedores, insumos e validação CNPJ/CPF' },
+    { file: 'pages/Fleet.tsx', module: 'Frota', lines: '1-780', sampleTarget: 'Abastecimentos, manutenções e horímetro/odômetro' },
+    { file: 'pages/HR.tsx', module: 'RH', lines: '1-740', sampleTarget: 'Folha de pagamento, ponto e encargos' },
+    { file: 'pages/Reports.tsx', module: 'Relatórios', lines: '1-680', sampleTarget: 'Exportação PDF/CSV e consolidação gerencial' },
+    { file: 'pages/Settings.tsx', module: 'Configurações', lines: '1-3200', sampleTarget: 'Perfis de acesso, parâmetros e integrações' },
+    { file: 'components/Layout.tsx', module: 'Global / UI', lines: '1-780', sampleTarget: 'Navegação, barra de personalização e notificações' },
+    { file: 'components/AIAgentsHub.tsx', module: 'Agentes IA & WhatsApp', lines: '1-1020', sampleTarget: 'Orquestração de agentes e fila do Agente de Código' }
+  ];
 
   // Map current route to module name when opening floating panel
   const routeToModuleMap: Record<string, string> = {
@@ -535,6 +740,29 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
     '/settings': 'Global / Supabase',
     '/login': 'Login'
   };
+
+  const allCodeSuggestions = useMemo(
+    () => [...customSuggestions, ...CODE_REVIEW_SUGGESTIONS],
+    [customSuggestions]
+  );
+
+  const filteredSuggestions = useMemo(() => {
+    return allCodeSuggestions.filter(item => {
+      const matchesModule =
+        selectedModule === 'Todos' || item.module === selectedModule;
+      const matchesCat =
+        selectedCategory === 'Todas' || item.category === selectedCategory;
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        !q ||
+        item.title.toLowerCase().includes(q) ||
+        item.file.toLowerCase().includes(q) ||
+        item.rationale.toLowerCase().includes(q) ||
+        item.id.toLowerCase().includes(q) ||
+        item.module.toLowerCase().includes(q);
+      return matchesModule && matchesCat && matchesSearch;
+    });
+  }, [allCodeSuggestions, selectedModule, selectedCategory, searchQuery]);
 
   // Dynamic Runtime Diagnostics computed from live AppContext state
   const liveEnrichedIssues = useMemo<AuditIssue[]>(() => {
@@ -610,9 +838,14 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
   }, [users, roles, fleet, sales, purchaseOrders, productionUnits, accounts]);
 
   const modulesList = useMemo(() => {
-    const unique = Array.from(new Set(STATIC_AUDIT_ISSUES.map(i => i.module)));
+    const unique = Array.from(
+      new Set([
+        ...STATIC_AUDIT_ISSUES.map(i => i.module),
+        ...allCodeSuggestions.map(s => s.module)
+      ])
+    );
     return ['Todos', ...unique];
-  }, []);
+  }, [allCodeSuggestions]);
 
   const filteredIssues = useMemo(() => {
     return liveEnrichedIssues.filter(issue => {
@@ -644,8 +877,9 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
     const medium = liveEnrichedIssues.filter(i => i.severity === 'Médio').length;
     const frontend = liveEnrichedIssues.filter(i => i.layer.includes('Front-end')).length;
     const backend = liveEnrichedIssues.filter(i => i.layer.includes('Back-end')).length;
-    return { total, critical, high, medium, frontend, backend };
-  }, [liveEnrichedIssues]);
+    const suggestionsCount = allCodeSuggestions.length;
+    return { total, critical, high, medium, frontend, backend, suggestionsCount };
+  }, [liveEnrichedIssues, allCodeSuggestions]);
 
   const handleRunScan = () => {
     setIsScanning(true);
@@ -656,7 +890,7 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
           clearInterval(interval);
           setIsScanning(false);
           addToast(
-            `Varredura IA concluída! ${liveEnrichedIssues.length} diagnósticos mapeados em 10 módulos.`,
+            `Revisão de código concluída! ${allCodeSuggestions.length} sugestões de código (Diff) e ${liveEnrichedIssues.length} diagnósticos mapeados.`,
             'success'
           );
           return 100;
@@ -678,7 +912,105 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
     }, 2500);
   };
 
+  const handleSendToCodeQueue = (suggestion: CodeReviewSuggestion) => {
+    if (!isAdmin) {
+      addToast('Acesso negado: apenas o Administrador pode enfileirar propostas de código.', 'error');
+      return;
+    }
+    const aiConfig = getAIConfig(settings);
+    const proposalId = newId();
+    const nextConfig = {
+      ...aiConfig,
+      codeAgent: {
+        ...aiConfig.codeAgent,
+        proposals: [
+          {
+            id: proposalId,
+            createdAt: new Date().toISOString(),
+            requestedBy: currentUser?.name || 'Administrador',
+            title: `[${suggestion.id}] ${suggestion.title}`,
+            description: `${suggestion.rationale}\n\n--- PROMPT DE IMPLEMENTAÇÃO ---\n${suggestion.prompt}`,
+            files: [suggestion.file],
+            status: 'aguardando_aprovacao' as const,
+            origin: 'painel' as const,
+            branch: `ai/review-${suggestion.id.toLowerCase()}`
+          },
+          ...aiConfig.codeAgent.proposals
+        ]
+      }
+    };
+
+    updateSettings(setAIConfig(settings, nextConfig));
+    addAuditLog({
+      userId: currentUser?.id || 'admin',
+      userName: currentUser?.name || 'Administrador',
+      module: 'Agente de Código (ADM)',
+      action: 'ai_code_review_queued',
+      details: `Sugestão de código [${suggestion.id}] "${suggestion.title}" (${suggestion.file}) enviada para a fila de aprovação do Agente de Código ADM.`,
+      severity: 'warning'
+    });
+    setQueuedIds(prev => ({ ...prev, [suggestion.id]: true }));
+    addToast(
+      `Sugestão [${suggestion.id}] enviada para a Fila de Aprovação do Agente de Código!`,
+      'success'
+    );
+  };
+
+  const handleGenerateCustomSuggestion = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!studioGoal.trim()) {
+      addToast('Descreva o que deseja revisar ou alterar no arquivo selecionado.', 'warning');
+      return;
+    }
+    const targetMeta =
+      erpFilesCatalog.find(f => f.file === studioFile) || erpFilesCatalog[0];
+    const newSugId = `CR-ADM-${String(customSuggestions.length + 1).padStart(2, '0')}`;
+    const goalClean = studioGoal.trim();
+
+    const generated: CodeReviewSuggestion = {
+      id: newSugId,
+      module: targetMeta.module,
+      file: targetMeta.file,
+      category: studioCategory,
+      impact: studioImpact,
+      title:
+        goalClean.length > 68 ? `${goalClean.slice(0, 65)}...` : goalClean,
+      rationale: `Revisão sob demanda solicitada pelo Administrador para ${targetMeta.file} (${targetMeta.sampleTarget}). Objetivo: ${goalClean}`,
+      codeBefore: `// Trecho atual em ${targetMeta.file} (${targetMeta.sampleTarget})\n// Fluxo sem camada explícita para: ${goalClean}\nexport const handleModuleOperation = async (payload: any) => {\n  // Implementação atual sujeita a acoplamento ou falta de validação estrita\n  return await executeRawMutation(payload);\n};`,
+      codeAfter: `// Trecho revisado e otimizado pelo Agente de Código (ADM) em ${targetMeta.file}\n// Objetivo atendido: ${goalClean}\nexport const handleModuleOperation = async (payload: ValidatedPayload) => {\n  const validation = validateDomainRules(payload);\n  if (!validation.ok) {\n    throw new Error(validation.message);\n  }\n  const result = await executeSafeMutation(validation.sanitized);\n  await syncItemToSupabase('audit_logs', buildAuditEntry(result));\n  return result;\n};`,
+      prompt: `Em \`${targetMeta.file}\` (módulo ${targetMeta.module}, região ${targetMeta.lines}), realize uma revisão e alteração de código focada em **${studioCategory}** com impacto **${studioImpact}**:\n\n1. Objetivo específico do Administrador: "${goalClean}".\n2. Preserve 100% da compatibilidade com o estado global em \`context/AppContext.tsx\` e com o schema do Supabase.\n3. Garanta tipagem estrita em TypeScript (sem \`any\` implícito), tratamento de erro com feedback via \`addToast\` e registro de auditoria se houver mutação crítica.`
+    };
+
+    setCustomSuggestions(prev => [generated, ...prev]);
+    setStudioGoal('');
+    setActiveView('suggestions');
+    addToast(
+      `Revisão e sugestão [${newSugId}] gerada com sucesso para ${targetMeta.file}!`,
+      'success'
+    );
+  };
+
   const handleCopyAllFilteredPrompts = () => {
+    if (activeView === 'suggestions') {
+      const combinedSuggestions = [
+        `# Plano de Revisão & Refatoração de Código (Exclusivo ADM) - InfraCore ERP`,
+        `Aplique as seguintes alterações estruturais de código revisadas pelo Agente de Código:\n`,
+        ...filteredSuggestions.map(
+          (s, idx) =>
+            `## ${idx + 1}. [${s.id}] ${s.module} — ${s.title} (${s.category} | Impacto: ${s.impact})\n` +
+            `**Arquivo:** \`${s.file}\`\n` +
+            `**Justificativa Técnica:** ${s.rationale}\n` +
+            `**Prompt de Implementação:**\n${s.prompt}\n`
+        )
+      ].join('\n---\n\n');
+      handleCopyPrompt(
+        'ALL_FILTERED',
+        combinedSuggestions,
+        `Super-Prompt de Código (${filteredSuggestions.length} sugestões)`
+      );
+      return;
+    }
+
     const combinedPrompt = [
       `# Plano de Correção Automatizado - InfraCore ERP (${selectedModule === 'Todos' ? 'Todas as Abas' : selectedModule})`,
       `Aplique as seguintes correções de Front-end e Back-end identificadas pelo Agente IA Auditor:\n`,
@@ -695,11 +1027,32 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
 
   const currentTabIssuesCount = useMemo(() => {
     const currentMod = routeToModuleMap[location.pathname];
-    if (!currentMod) return liveEnrichedIssues.length;
-    return liveEnrichedIssues.filter(
-      i => i.module === currentMod || i.module === 'Global / Supabase'
+    if (!currentMod) return allCodeSuggestions.length;
+    return allCodeSuggestions.filter(
+      s => s.module === currentMod || s.module === 'Global / Supabase'
     ).length;
-  }, [location.pathname, liveEnrichedIssues]);
+  }, [location.pathname, allCodeSuggestions]);
+
+  // STRICT ADMIN GUARD: Non-admin users cannot see the floating button or access the embedded view
+  if (!isAdmin) {
+    if (mode === 'floating') {
+      return null;
+    }
+    return (
+      <div className="p-8 rounded-3xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/60 text-center space-y-3">
+        <div className="w-12 h-12 rounded-2xl bg-rose-600/10 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+          <Lock size={24} />
+        </div>
+        <h3 className="text-base font-black uppercase tracking-wider text-rose-900 dark:text-rose-200">
+          Acesso Restrito ao Administrador (ADM)
+        </h3>
+        <p className="text-xs text-rose-700 dark:text-rose-300 max-w-md mx-auto leading-relaxed">
+          O Agente de Revisão & Sugestões de Alteração de Código analisa a arquitetura interna e propõe
+          patches diretos no código-fonte. Por segurança, somente o perfil <strong>Administrador</strong> possui acesso.
+        </p>
+      </div>
+    );
+  }
 
   const renderContent = () => (
     <div className="space-y-6">
@@ -711,21 +1064,24 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="flex items-start gap-4">
             <div className="p-3.5 bg-gradient-to-br from-cyan-500 to-indigo-600 rounded-2xl text-white shadow-lg shadow-cyan-500/25 shrink-0">
-              <Bot size={28} />
+              <Code2 size={28} />
             </div>
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h2 className="text-xl sm:text-2xl font-black tracking-tight uppercase italic">
-                  Agente IA Auditor • Front-end & Back-end
+                  Agente IA de Revisão & Alteração de Código
                 </h2>
+                <span className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest bg-rose-500/20 text-rose-300 border border-rose-400/30 rounded-full flex items-center gap-1">
+                  <Lock size={11} /> Exclusivo ADM
+                </span>
                 <span className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 rounded-full flex items-center gap-1">
-                  <Sparkles size={11} /> Diagnóstico Ativo
+                  <Sparkles size={11} /> Code Review & Diff Ativo
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-slate-300 mt-1.5 max-w-3xl leading-relaxed">
-                Inspeção completa de todas as 10 abas do ERP, cruzando componentes React, regras de permissão,
-                mutações do <code className="text-cyan-300 font-mono">AppContext.tsx</code> e schema SQL do Supabase, com{' '}
-                <strong className="text-white">prompts prontos para solução imediata</strong>.
+                Agente restrito ao <strong className="text-white">Administrador</strong> que inspeciona o código-fonte do ERP,
+                compara o <strong className="text-cyan-300">Código Atual (Antes) vs. Código Sugerido (Depois)</strong>,
+                gera prompts técnicos de refatoração e envia propostas direto para a fila de aprovação do Agente de Código.
               </p>
             </div>
           </div>
@@ -738,7 +1094,7 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
               className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white border border-white/15 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2"
             >
               <RefreshCw size={15} className={isScanning ? 'animate-spin text-cyan-400' : 'text-cyan-400'} />
-              {isScanning ? `Escaneando (${scanProgress}%)` : 'Reescanear Abas'}
+              {isScanning ? `Revisando (${scanProgress}%)` : 'Revisar Código'}
             </button>
 
             <button
@@ -749,17 +1105,72 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
               {copiedId === 'ALL_FILTERED' ? <Check size={15} /> : <Copy size={15} />}
               {copiedId === 'ALL_FILTERED'
                 ? 'Super-Prompt Copiado!'
+                : activeView === 'suggestions'
+                ? `Copiar Todas as Sugestões (${filteredSuggestions.length})`
                 : `Copiar Todos os Prompts (${filteredIssues.length})`}
             </button>
           </div>
         </div>
 
+        {/* Mode Switcher Tabs inside Header */}
+        <div className="relative z-10 flex flex-wrap items-center gap-2 mt-6 pt-5 border-t border-white/10">
+          <button
+            type="button"
+            onClick={() => setActiveView('suggestions')}
+            className={`px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
+              activeView === 'suggestions'
+                ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/25'
+                : 'bg-white/10 text-slate-200 hover:bg-white/20'
+            }`}
+          >
+            <Code2 size={15} />
+            Sugestões de Alteração de Código (Diff)
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/20 font-black">
+              {allCodeSuggestions.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveView('studio')}
+            className={`px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
+              activeView === 'studio'
+                ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/25'
+                : 'bg-white/10 text-slate-200 hover:bg-white/20'
+            }`}
+          >
+            <Plus size={15} />
+            Nova Revisão Sob Demanda (ADM)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveView('audit')}
+            className={`px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
+              activeView === 'audit'
+                ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/25'
+                : 'bg-white/10 text-slate-200 hover:bg-white/20'
+            }`}
+          >
+            <ShieldAlert size={15} />
+            Diagnóstico das Abas (Front & Back-end)
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/20 font-black">
+              {stats.total}
+            </span>
+          </button>
+        </div>
+
         {/* KPI Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6 pt-6 border-t border-white/10">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-5 pt-5 border-t border-white/10">
+          <div className="bg-cyan-500/15 border border-cyan-400/30 rounded-2xl p-3.5">
+            <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300 block">Sugestões de Código</span>
+            <span className="text-2xl font-black text-white mt-0.5 block">{stats.suggestionsCount}</span>
+            <span className="text-[10px] text-cyan-300 font-bold">Com Diff Antes/Depois</span>
+          </div>
           <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Total Mapeado</span>
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Auditorias Mapeadas</span>
             <span className="text-2xl font-black text-white mt-0.5 block">{stats.total}</span>
-            <span className="text-[10px] text-cyan-300 font-bold">Em 10 abas do ERP</span>
+            <span className="text-[10px] text-slate-300 font-bold">Em 10 abas do ERP</span>
           </div>
           <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-3.5">
             <span className="text-[10px] font-black uppercase tracking-wider text-rose-300 block">Críticos</span>
@@ -769,248 +1180,561 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3.5">
             <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 block">Severidade Alta</span>
             <span className="text-2xl font-black text-amber-400 mt-0.5 block">{stats.high}</span>
-            <span className="text-[10px] text-amber-300/80 font-bold">Fluxos incompletos</span>
-          </div>
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-3.5">
-            <span className="text-[10px] font-black uppercase tracking-wider text-blue-300 block">Severidade Média</span>
-            <span className="text-2xl font-black text-blue-400 mt-0.5 block">{stats.medium}</span>
-            <span className="text-[10px] text-blue-300/80 font-bold">UX & Formatação</span>
+            <span className="text-[10px] text-amber-300/80 font-bold">Fluxos e Segurança</span>
           </div>
           <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-2xl p-3.5">
             <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300 block">Front-end (UI/UX)</span>
             <span className="text-2xl font-black text-indigo-400 mt-0.5 block">{stats.frontend}</span>
-            <span className="text-[10px] text-indigo-300/80 font-bold">Botões, Modais & Hooks</span>
+            <span className="text-[10px] text-indigo-300/80 font-bold">Componentes & Hooks</span>
           </div>
           <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-3.5">
             <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300 block">Back-end (Supabase)</span>
             <span className="text-2xl font-black text-emerald-400 mt-0.5 block">{stats.backend}</span>
-            <span className="text-[10px] text-emerald-300/80 font-bold">Sync, UUID & Colunas SQL</span>
+            <span className="text-[10px] text-emerald-300/80 font-bold">Sync, RLS & Transações</span>
           </div>
         </div>
       </div>
 
-      {/* Filters Toolbar */}
-      <div className="bg-slate-50 dark:bg-slate-900/60 p-4 sm:p-5 rounded-3xl border border-slate-200 dark:border-slate-700/70 space-y-4">
-        <div className="flex flex-col lg:flex-row gap-3 justify-between">
-          {/* Search Input */}
-          <div className="relative flex-1">
-            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Buscar erro por aba, arquivo (ex: Purchases.tsx, HR.tsx), sintoma ou código..."
-              className="w-full pl-11 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
-            />
-          </div>
-
-          {/* Layer Filter */}
-          <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
-            {(['Todos', 'Front-end', 'Back-end'] as const).map(layer => (
-              <button
-                key={layer}
-                type="button"
-                onClick={() => setSelectedLayer(layer)}
-                className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase transition-all flex items-center gap-1.5 ${
-                  selectedLayer === layer
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
-                }`}
-              >
-                {layer === 'Front-end' && <Monitor size={12} />}
-                {layer === 'Back-end' && <Database size={12} />}
-                {layer}
-              </button>
-            ))}
-          </div>
-
-          {/* Severity Filter */}
-          <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
-            {(['Todos', 'Crítico', 'Alto', 'Médio'] as const).map(sev => (
-              <button
-                key={sev}
-                type="button"
-                onClick={() => setSelectedSeverity(sev)}
-                className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase transition-all ${
-                  selectedSeverity === sev
-                    ? sev === 'Crítico'
-                      ? 'bg-rose-600 text-white'
-                      : sev === 'Alto'
-                      ? 'bg-amber-500 text-white'
-                      : sev === 'Médio'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-900 dark:bg-slate-700 text-white'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
-                }`}
-              >
-                {sev}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Module Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-          {modulesList.map(mod => {
-            const count =
-              mod === 'Todos'
-                ? liveEnrichedIssues.length
-                : liveEnrichedIssues.filter(i => i.module === mod).length;
-            return (
-              <button
-                key={mod}
-                type="button"
-                onClick={() => setSelectedModule(mod)}
-                className={`px-3.5 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all flex items-center gap-2 border ${
-                  selectedModule === mod
-                    ? 'bg-slate-900 dark:bg-indigo-600 text-white border-slate-900 dark:border-indigo-500 shadow-sm'
-                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
-                }`}
-              >
-                <span>{mod}</span>
-                <span
-                  className={`px-1.5 py-0.5 rounded-md text-[10px] ${
-                    selectedModule === mod
-                      ? 'bg-white/20 text-white'
-                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Diagnostic Cards List */}
-      <div className="space-y-4">
-        {filteredIssues.map(issue => {
-          const isCopied = copiedId === issue.id;
-          const isExpanded = expandedIssueId === issue.id || true; // Always show solution prompt clearly
-
-          return (
-            <div
-              key={issue.id}
-              className="bg-white dark:bg-slate-800/90 rounded-3xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm hover:shadow-md transition-all"
-            >
-              <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                <div className="space-y-2 flex-1">
-                  {/* Badges Row */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-mono text-[10px] font-black">
-                      {issue.id}
-                    </span>
-                    <span className="px-3 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-black uppercase tracking-wider border border-indigo-200/60 dark:border-indigo-800/50">
-                      {issue.module}
-                    </span>
-                    <span
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
-                        issue.layer === 'Back-end'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50'
-                          : issue.layer === 'Front-end'
-                          ? 'bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800/50'
-                          : 'bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50'
-                      }`}
-                    >
-                      {issue.layer === 'Back-end' ? <Database size={11} /> : <Monitor size={11} />}
-                      {issue.layer}
-                    </span>
-                    <span
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
-                        issue.severity === 'Crítico'
-                          ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
-                          : issue.severity === 'Alto'
-                          ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
-                          : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800'
-                      }`}
-                    >
-                      <AlertTriangle size={11} />
-                      {issue.severity}
-                    </span>
-                    <span className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                      <CheckCircle2 size={11} />
-                      Corrigido & Ativo
-                    </span>
-                    <span className="text-[11px] font-mono text-slate-400 dark:text-slate-400 flex items-center gap-1 ml-1">
-                      <FileCode size={12} className="text-slate-400" />
-                      {issue.file} <span className="text-slate-300 dark:text-slate-600">|</span> L:{issue.lines}
-                    </span>
-                  </div>
-
-                  {/* Title & Description */}
-                  <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight pt-1">
-                    {issue.title}
-                  </h3>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                    {issue.description}
-                  </p>
-
-                  {/* Live State Metric Alert if present */}
-                  {issue.liveMetric && (
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-300 text-[11px] font-bold mt-1">
-                      <Zap size={13} className="text-amber-500 shrink-0" />
-                      <span>Estado em Tempo Real: {issue.liveMetric}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Copy Prompt Action Button */}
-                <div className="shrink-0 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleCopyPrompt(issue.id, issue.prompt, issue.title)}
-                    className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm ${
-                      isCopied
-                        ? 'bg-emerald-600 text-white shadow-emerald-500/20'
-                        : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'
-                    }`}
-                  >
-                    {isCopied ? <Check size={14} /> : <Copy size={14} />}
-                    {isCopied ? 'Prompt Copiado!' : 'Copiar Prompt de Solução'}
-                  </button>
-                </div>
+      {/* VIEW 1: SUGESTÕES DE ALTERAÇÃO DE CÓDIGO (DIFF ANTES VS DEPOIS) */}
+      {activeView === 'suggestions' && (
+        <>
+          <div className="bg-slate-50 dark:bg-slate-900/60 p-4 sm:p-5 rounded-3xl border border-slate-200 dark:border-slate-700/70 space-y-4">
+            <div className="flex flex-col lg:flex-row gap-3 justify-between">
+              <div className="relative flex-1">
+                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Buscar sugestão de alteração por arquivo (ex: AppContext.tsx, Sales.tsx), categoria ou código..."
+                  className="w-full pl-11 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
               </div>
 
-              {/* Prompt Box */}
-              {isExpanded && (
-                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/60">
-                  <div className="bg-slate-900 dark:bg-slate-950 rounded-2xl p-4 border border-slate-800 relative group">
-                    <div className="flex items-center justify-between mb-2">
+              <div className="flex flex-wrap items-center gap-1.5 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                {(['Todas', 'Performance', 'Segurança & RBAC', 'Regra de Negócio', 'Banco de Dados (SQL)', 'UX & Arquitetura'] as const).map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase transition-all ${
+                      selectedCategory === cat
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Module Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+              {modulesList.map(mod => {
+                const count =
+                  mod === 'Todos'
+                    ? allCodeSuggestions.length
+                    : allCodeSuggestions.filter(s => s.module === mod).length;
+                if (count === 0 && mod !== 'Todos') return null;
+                return (
+                  <button
+                    key={mod}
+                    type="button"
+                    onClick={() => setSelectedModule(mod)}
+                    className={`px-3.5 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all flex items-center gap-2 border ${
+                      selectedModule === mod
+                        ? 'bg-slate-900 dark:bg-indigo-600 text-white border-slate-900 dark:border-indigo-500 shadow-sm'
+                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                    }`}
+                  >
+                    <span>{mod}</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[10px] ${
+                        selectedModule === mod
+                          ? 'bg-white/20 text-white'
+                          : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            {filteredSuggestions.map(suggestion => {
+              const isCopied = copiedId === suggestion.id;
+              const isQueued = !!queuedIds[suggestion.id];
+
+              return (
+                <div
+                  key={suggestion.id}
+                  className="bg-white dark:bg-slate-800/90 rounded-3xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm hover:shadow-md transition-all space-y-4"
+                >
+                  <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                    <div className="space-y-2 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-900 dark:bg-slate-700 text-cyan-300 font-mono text-[10px] font-black">
+                          {suggestion.id}
+                        </span>
+                        <span className="px-3 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-black uppercase tracking-wider border border-indigo-200/60 dark:border-indigo-800/50">
+                          {suggestion.module}
+                        </span>
+                        <span className="px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50 text-[10px] font-black uppercase tracking-wider">
+                          {suggestion.category}
+                        </span>
+                        <span
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
+                            suggestion.impact === 'Alto'
+                              ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
+                              : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                          }`}
+                        >
+                          Impacto {suggestion.impact}
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 flex items-center gap-1 ml-1">
+                          <FileCode size={12} className="text-indigo-500" />
+                          {suggestion.file}
+                        </span>
+                      </div>
+
+                      <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight pt-1">
+                        {suggestion.title}
+                      </h3>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                        <strong className="text-slate-800 dark:text-slate-100">Análise da Revisão:</strong>{' '}
+                        {suggestion.rationale}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSendToCodeQueue(suggestion)}
+                        disabled={isQueued}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm ${
+                          isQueued
+                            ? 'bg-emerald-600/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 cursor-default'
+                            : 'bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 text-white'
+                        }`}
+                      >
+                        {isQueued ? <CheckCircle2 size={14} /> : <GitPullRequest size={14} />}
+                        {isQueued ? 'Na Fila do Agente ADM' : 'Enviar p/ Fila de Aprovação'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleCopyPrompt(suggestion.id, suggestion.prompt, suggestion.title)}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm ${
+                          isCopied
+                            ? 'bg-emerald-600 text-white shadow-emerald-500/20'
+                            : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'
+                        }`}
+                      >
+                        {isCopied ? <Check size={14} /> : <Copy size={14} />}
+                        {isCopied ? 'Prompt Copiado!' : 'Copiar Prompt de Código'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Side-by-Side Diff View: Código Atual (Antes) vs. Código Sugerido (Depois) */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pt-2">
+                    <div className="rounded-2xl bg-rose-950/95 border border-rose-500/30 p-4 overflow-hidden">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-rose-300 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-rose-400" /> Código Atual (Antes)
+                        </span>
+                        <span className="text-[10px] font-mono text-rose-300/70">{suggestion.file}</span>
+                      </div>
+                      <pre className="text-[11px] font-mono text-rose-100 whitespace-pre-wrap leading-relaxed overflow-x-auto">
+                        {suggestion.codeBefore}
+                      </pre>
+                    </div>
+
+                    <div className="rounded-2xl bg-emerald-950/95 border border-emerald-500/30 p-4 overflow-hidden">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-300 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400" /> Código Sugerido (Depois)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCopyPrompt(
+                              `${suggestion.id}-code`,
+                              suggestion.codeAfter,
+                              `Snippet de código (${suggestion.id})`
+                            )
+                          }
+                          className="text-[10px] font-bold text-emerald-300 hover:text-white flex items-center gap-1"
+                        >
+                          <Copy size={11} /> Copiar Código
+                        </button>
+                      </div>
+                      <pre className="text-[11px] font-mono text-emerald-100 whitespace-pre-wrap leading-relaxed overflow-x-auto">
+                        {suggestion.codeAfter}
+                      </pre>
+                    </div>
+                  </div>
+
+                  {/* Implementation Prompt Box */}
+                  <div className="bg-slate-900 dark:bg-slate-950 rounded-2xl p-4 border border-slate-800">
+                    <div className="flex items-center justify-between mb-1.5">
                       <span className="text-[10px] font-black uppercase tracking-widest text-cyan-400 flex items-center gap-1.5">
-                        <Terminal size={12} /> Prompt Pronto para Correção (Copie e envie para a IA)
+                        <Terminal size={12} /> Prompt de Alteração de Código (Pronto para Execução)
                       </span>
                       <button
                         type="button"
-                        onClick={() => handleCopyPrompt(issue.id, issue.prompt, issue.title)}
+                        onClick={() => handleCopyPrompt(suggestion.id, suggestion.prompt, suggestion.title)}
                         className="text-[10px] font-bold text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
                       >
                         {isCopied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                        {isCopied ? 'Copiado' : 'Copiar'}
+                        {isCopied ? 'Copiado' : 'Copiar Prompt'}
                       </button>
                     </div>
                     <pre className="text-xs font-mono text-slate-200 whitespace-pre-wrap leading-relaxed overflow-x-auto">
-                      {issue.prompt}
+                      {suggestion.prompt}
                     </pre>
                   </div>
                 </div>
-              )}
-            </div>
-          );
-        })}
-
-        {filteredIssues.length === 0 && (
-          <div className="py-16 text-center bg-slate-50 dark:bg-slate-900/40 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
-            <CheckCircle2 size={40} className="text-emerald-500 mx-auto mb-3" />
-            <p className="text-sm font-black text-slate-700 dark:text-slate-200">
-              Nenhum erro encontrado para os filtros selecionados
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              Experimente selecionar "Todos" nos filtros de módulo ou severidade.
-            </p>
+              );
+            })}
           </div>
-        )}
-      </div>
+        </>
+      )}
+
+      {/* VIEW 2: GERADOR INTERATIVO DE REVISÃO & SUGESTÃO DE CÓDIGO SOB DEMANDA (ADM) */}
+      {activeView === 'studio' && (
+        <div className="bg-white dark:bg-slate-800/90 rounded-3xl border border-slate-200 dark:border-slate-700 p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="flex items-start justify-between gap-4 border-b border-slate-100 dark:border-slate-700 pb-5">
+            <div>
+              <span className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-300 text-[10px] font-black uppercase tracking-widest">
+                Estúdio de Revisão Sob Demanda • Exclusivo Administrador
+              </span>
+              <h3 className="text-lg font-black text-slate-900 dark:text-white mt-2">
+                Solicitar Nova Revisão e Sugestão de Alteração de Código
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Escolha qualquer arquivo do projeto, defina o tipo de melhoria desejada e o agente gerará o comparativo
+                de código (Antes/Depois), o prompt técnico e permitirá enviá-lo à fila de aprovação.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleGenerateCustomSuggestion} className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">
+                  Arquivo / Módulo Alvo do ERP
+                </label>
+                <select
+                  value={studioFile}
+                  onChange={e => setStudioFile(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                >
+                  {erpFilesCatalog.map(item => (
+                    <option key={item.file} value={item.file}>
+                      {item.file} — ({item.module})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">
+                  Categoria da Revisão
+                </label>
+                <select
+                  value={studioCategory}
+                  onChange={e => setStudioCategory(e.target.value as CodeReviewSuggestion['category'])}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                >
+                  <option value="UX & Arquitetura">UX & Arquitetura (Clean Code)</option>
+                  <option value="Performance">Performance & Memoização</option>
+                  <option value="Segurança & RBAC">Segurança & RBAC</option>
+                  <option value="Regra de Negócio">Regra de Negócio</option>
+                  <option value="Banco de Dados (SQL)">Banco de Dados (SQL)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">
+                  Impacto Técnico
+                </label>
+                <select
+                  value={studioImpact}
+                  onChange={e => setStudioImpact(e.target.value as CodeReviewSuggestion['impact'])}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                >
+                  <option value="Alto">Impacto Alto</option>
+                  <option value="Médio">Impacto Médio</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">
+                O que você deseja revisar, otimizar ou alterar neste código?
+              </label>
+              <textarea
+                rows={4}
+                value={studioGoal}
+                onChange={e => setStudioGoal(e.target.value)}
+                placeholder="Ex: Adicionar bloqueio para impedir exclusão de cliente que já possui vendas faturadas e gravar log de auditoria detalhado..."
+                className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveView('suggestions')}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+              >
+                Voltar para Sugestões
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-indigo-500/25 flex items-center gap-2"
+              >
+                <Sparkles size={15} />
+                Gerar Revisão, Diff & Prompt de Código
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* VIEW 3: DIAGNÓSTICO DAS ABAS (27 ITENS FRONT-END & BACK-END) */}
+      {activeView === 'audit' && (
+        <>
+          {/* Filters Toolbar */}
+          <div className="bg-slate-50 dark:bg-slate-900/60 p-4 sm:p-5 rounded-3xl border border-slate-200 dark:border-slate-700/70 space-y-4">
+            <div className="flex flex-col lg:flex-row gap-3 justify-between">
+              {/* Search Input */}
+              <div className="relative flex-1">
+                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Buscar erro por aba, arquivo (ex: Purchases.tsx, HR.tsx), sintoma ou código..."
+                  className="w-full pl-11 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+
+              {/* Layer Filter */}
+              <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                {(['Todos', 'Front-end', 'Back-end'] as const).map(layer => (
+                  <button
+                    key={layer}
+                    type="button"
+                    onClick={() => setSelectedLayer(layer)}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase transition-all flex items-center gap-1.5 ${
+                      selectedLayer === layer
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
+                    }`}
+                  >
+                    {layer === 'Front-end' && <Monitor size={12} />}
+                    {layer === 'Back-end' && <Database size={12} />}
+                    {layer}
+                  </button>
+                ))}
+              </div>
+
+              {/* Severity Filter */}
+              <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                {(['Todos', 'Crítico', 'Alto', 'Médio'] as const).map(sev => (
+                  <button
+                    key={sev}
+                    type="button"
+                    onClick={() => setSelectedSeverity(sev)}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase transition-all ${
+                      selectedSeverity === sev
+                        ? sev === 'Crítico'
+                          ? 'bg-rose-600 text-white'
+                          : sev === 'Alto'
+                          ? 'bg-amber-500 text-white'
+                          : sev === 'Médio'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-slate-900 dark:bg-slate-700 text-white'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
+                    }`}
+                  >
+                    {sev}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Module Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+              {modulesList.map(mod => {
+                const count =
+                  mod === 'Todos'
+                    ? liveEnrichedIssues.length
+                    : liveEnrichedIssues.filter(i => i.module === mod).length;
+                if (count === 0 && mod !== 'Todos') return null;
+                return (
+                  <button
+                    key={mod}
+                    type="button"
+                    onClick={() => setSelectedModule(mod)}
+                    className={`px-3.5 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all flex items-center gap-2 border ${
+                      selectedModule === mod
+                        ? 'bg-slate-900 dark:bg-indigo-600 text-white border-slate-900 dark:border-indigo-500 shadow-sm'
+                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                    }`}
+                  >
+                    <span>{mod}</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[10px] ${
+                        selectedModule === mod
+                          ? 'bg-white/20 text-white'
+                          : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Diagnostic Cards List */}
+          <div className="space-y-4">
+            {filteredIssues.map(issue => {
+              const isCopied = copiedId === issue.id;
+              const isExpanded = expandedIssueId === issue.id || true;
+
+              return (
+                <div
+                  key={issue.id}
+                  className="bg-white dark:bg-slate-800/90 rounded-3xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm hover:shadow-md transition-all"
+                >
+                  <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                    <div className="space-y-2 flex-1">
+                      {/* Badges Row */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-mono text-[10px] font-black">
+                          {issue.id}
+                        </span>
+                        <span className="px-3 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-black uppercase tracking-wider border border-indigo-200/60 dark:border-indigo-800/50">
+                          {issue.module}
+                        </span>
+                        <span
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                            issue.layer === 'Back-end'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50'
+                              : issue.layer === 'Front-end'
+                              ? 'bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800/50'
+                              : 'bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50'
+                          }`}
+                        >
+                          {issue.layer === 'Back-end' ? <Database size={11} /> : <Monitor size={11} />}
+                          {issue.layer}
+                        </span>
+                        <span
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                            issue.severity === 'Crítico'
+                              ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
+                              : issue.severity === 'Alto'
+                              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                              : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800'
+                          }`}
+                        >
+                          <AlertTriangle size={11} />
+                          {issue.severity}
+                        </span>
+                        <span className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                          <CheckCircle2 size={11} />
+                          Corrigido & Ativo
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-400 dark:text-slate-400 flex items-center gap-1 ml-1">
+                          <FileCode size={12} className="text-slate-400" />
+                          {issue.file} <span className="text-slate-300 dark:text-slate-600">|</span> L:{issue.lines}
+                        </span>
+                      </div>
+
+                      {/* Title & Description */}
+                      <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight pt-1">
+                        {issue.title}
+                      </h3>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                        {issue.description}
+                      </p>
+
+                      {/* Live State Metric Alert if present */}
+                      {issue.liveMetric && (
+                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-300 text-[11px] font-bold mt-1">
+                          <Zap size={13} className="text-amber-500 shrink-0" />
+                          <span>Estado em Tempo Real: {issue.liveMetric}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Copy Prompt Action Button */}
+                    <div className="shrink-0 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyPrompt(issue.id, issue.prompt, issue.title)}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm ${
+                          isCopied
+                            ? 'bg-emerald-600 text-white shadow-emerald-500/20'
+                            : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'
+                        }`}
+                      >
+                        {isCopied ? <Check size={14} /> : <Copy size={14} />}
+                        {isCopied ? 'Prompt Copiado!' : 'Copiar Prompt de Solução'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Prompt Box */}
+                  {isExpanded && (
+                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/60">
+                      <div className="bg-slate-900 dark:bg-slate-950 rounded-2xl p-4 border border-slate-800 relative group">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-cyan-400 flex items-center gap-1.5">
+                            <Terminal size={12} /> Prompt Pronto para Correção (Copie e envie para a IA)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPrompt(issue.id, issue.prompt, issue.title)}
+                            className="text-[10px] font-bold text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
+                          >
+                            {isCopied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                            {isCopied ? 'Copiado' : 'Copiar'}
+                          </button>
+                        </div>
+                        <pre className="text-xs font-mono text-slate-200 whitespace-pre-wrap leading-relaxed overflow-x-auto">
+                          {issue.prompt}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {filteredIssues.length === 0 && (
+              <div className="py-16 text-center bg-slate-50 dark:bg-slate-900/40 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
+                <CheckCircle2 size={40} className="text-emerald-500 mx-auto mb-3" />
+                <p className="text-sm font-black text-slate-700 dark:text-slate-200">
+                  Nenhum erro encontrado para os filtros selecionados
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Experimente selecionar "Todos" nos filtros de módulo ou severidade.
+                </p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 
@@ -1018,7 +1742,7 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
     return renderContent();
   }
 
-  // Floating Global Mode (accessible on every tab of the ERP)
+  // Floating Global Mode (strictly visible ONLY to Administrator)
   return (
     <>
       <button
@@ -1028,21 +1752,21 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
           setSelectedModule(currentMod);
           setIsOpen(true);
         }}
-        title="Abrir Agente IA Auditor (Front-end & Back-end)"
+        title="Abrir Agente IA de Revisão e Alteração de Código (Exclusivo ADM)"
         className="fixed bottom-6 right-6 z-40 px-4 py-3 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 hover:from-indigo-900 hover:to-slate-900 text-white shadow-2xl border border-cyan-500/40 flex items-center gap-3 group transition-all hover:scale-105 active:scale-95"
       >
         <div className="p-2 rounded-xl bg-gradient-to-br from-cyan-500 to-indigo-600 text-white shadow-md">
-          <Bot size={18} />
+          <Code2 size={18} />
         </div>
         <div className="text-left hidden sm:block">
           <div className="flex items-center gap-1.5">
-            <span className="text-xs font-black uppercase tracking-wider">Agente IA</span>
+            <span className="text-xs font-black uppercase tracking-wider">Revisão Código IA</span>
             <span className="px-1.5 py-0.5 text-[9px] font-black bg-rose-500 text-white rounded-full">
-              {currentTabIssuesCount}
+              ADM • {currentTabIssuesCount}
             </span>
           </div>
           <span className="text-[10px] text-cyan-300 font-medium block">
-            Auditor Front & Back-end
+            Sugestões & Diff de Código
           </span>
         </div>
       </button>
@@ -1054,12 +1778,17 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
             <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-cyan-500/20 text-cyan-400 rounded-xl border border-cyan-500/30">
-                  <Bot size={20} />
+                  <Code2 size={20} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black uppercase tracking-wider">
-                    Agente de IA Auditor — Revisão de Abas e Prompts de Solução
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-black uppercase tracking-wider">
+                      Agente IA de Revisão e Alteração de Código
+                    </h3>
+                    <span className="px-2 py-0.5 text-[9px] font-black uppercase bg-rose-500/20 text-rose-300 border border-rose-400/30 rounded-full">
+                      Exclusivo ADM
+                    </span>
+                  </div>
                   <p className="text-[11px] text-slate-400">
                     Aba atual detectada:{' '}
                     <strong className="text-cyan-400">
@@ -1075,7 +1804,7 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
                   onClick={() => setSelectedModule('Todos')}
                   className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-slate-200 transition-colors"
                 >
-                  Ver Todas as Abas ({liveEnrichedIssues.length})
+                  Ver Todo o Código ({allCodeSuggestions.length})
                 </button>
                 <button
                   type="button"

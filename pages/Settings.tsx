@@ -72,7 +72,7 @@ import { APP_PERMISSIONS } from '../permission_constants';
 import { generateCameloData } from '../src/utils/seeder';
 import AIAuditAgent from '../components/AIAuditAgent';
 import AIAgentsHub from '../components/AIAgentsHub';
-import { AI_AGENTS_KEY, getAIConfig, describeAIConfigChange } from '../ai_agents_constants';
+import { AI_AGENTS_KEY, getAIConfig, describeAIConfigChange, isSuperAdminRole } from '../ai_agents_constants';
 
 // Internal Toast Component
 // Local Toast component removed in favor of global context
@@ -1821,6 +1821,15 @@ const Settings = () => {
         currentUser, addAuditLog
     } = useApp();
 
+    const currentRole = useMemo(() => roles.find(r => r.id === currentUser?.roleId), [roles, currentUser]);
+    const isSuperAdmin = useMemo(
+        () =>
+            isSuperAdminRole(currentRole) ||
+            currentUser?.roleId === 'admin' ||
+            currentUser?.username?.toLowerCase() === 'admin',
+        [currentRole, currentUser]
+    );
+
     const [activeTab, setActiveTab] = useState<'company' | 'security' | 'system' | 'audit' | 'ai_agent' | 'ai_agents'>('company');
     const [subTab, setSubTab] = useState<string>('general'); // Generic subtab state
     const [systemCategory, setSystemCategory] = useState<'all' | 'fiscal' | 'operational' | 'appearance' | 'integrations' | 'documents' | 'maintenance'>('all');
@@ -2018,7 +2027,7 @@ const Settings = () => {
                     {hasPermission('users.manage') && <TabButton id="security" label="Segurança & Acesso" icon={ShieldCheck} />}
                     <TabButton id="system" label="Parâmetros" icon={Cpu} />
                     <TabButton id="audit" label="Auditoria" icon={History} />
-                    <TabButton id="ai_agent" label="Agente IA (Diagnóstico)" icon={Bot} />
+                    {isSuperAdmin && <TabButton id="ai_agent" label="Agente de Revisão & Código (ADM)" icon={Bot} />}
                     {hasPermission('ai.agents.view') && <TabButton id="ai_agents" label="Agentes IA & WhatsApp" icon={MessageCircle} />}
                 </div>
             </div>
@@ -3089,8 +3098,8 @@ const Settings = () => {
                         </div>
                     )}
 
-                    {/* AI AUDIT AGENT TAB */}
-                    {activeTab === 'ai_agent' && (
+                    {/* AI AUDIT & CODE REVIEW AGENT TAB (STRICTLY ADMIN ONLY) */}
+                    {activeTab === 'ai_agent' && isSuperAdmin && (
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <AIAuditAgent mode="embedded" />
                         </div>
