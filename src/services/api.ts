@@ -45,6 +45,38 @@ export const toDeterministicUUID = (input: any): string => {
     return `${p1}-${p2}-${p3}-${p4}-${p5}`.toLowerCase();
 };
 
+export const toIsoDate = (dateStr?: string): string | null => {
+    if (!dateStr) return null;
+    if (dateStr.includes('-')) {
+        const parts = dateStr.split('T')[0].split('-');
+        if (parts.length === 3 && parts[0].length === 4) return parts.join('-');
+    }
+    if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+            const day = parts[0].padStart(2, '0');
+            const month = parts[1].padStart(2, '0');
+            const year = parts[2];
+            return `${year}-${month}-${day}`;
+        }
+    }
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+};
+
+export const toLocaleDate = (dateStr?: string): string => {
+    if (!dateStr) return new Date().toLocaleDateString('pt-BR');
+    if (dateStr.includes('/')) return dateStr;
+    if (dateStr.includes('-')) {
+        const parts = dateStr.split('T')[0].split('-');
+        if (parts.length === 3 && parts[0].length === 4) {
+            return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+        }
+    }
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? dateStr : d.toLocaleDateString('pt-BR');
+};
+
 export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) => {
     if (!item || typeof item !== 'object') return item;
     const cleaned: Record<string, any> = { ...item };
@@ -55,6 +87,57 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
         }
     } else {
         delete cleaned.id;
+    }
+
+    // Specific mapping for transactions (PostgreSQL schema compatibility)
+    if (table === 'transactions') {
+        const mapped: Record<string, any> = {
+            date: toIsoDate(cleaned.date) || new Date().toISOString().split('T')[0],
+            due_date: toIsoDate(cleaned.dueDate || cleaned.due_date || cleaned.date),
+            description: cleaned.description || 'Lançamento',
+            category: cleaned.category || 'Vendas',
+            account: cleaned.account || 'Caixa Geral',
+            account_id: cleaned.accountId && isValidUUID(cleaned.accountId) ? cleaned.accountId : (cleaned.account_id && isValidUUID(cleaned.account_id) ? cleaned.account_id : null),
+            amount: Number(cleaned.amount || 0),
+            status: cleaned.status || 'Pendente',
+            type: cleaned.type || 'Receita',
+            document_number: cleaned.documentNumber || cleaned.document_number || null,
+            partner_id: cleaned.partnerId && isValidUUID(cleaned.partnerId) ? cleaned.partnerId : (cleaned.partner_id && isValidUUID(cleaned.partner_id) ? cleaned.partner_id : null),
+            origin_module: cleaned.originModule || cleaned.origin_module || null,
+            origin_id: cleaned.originId || cleaned.origin_id || null,
+            ledger_code: cleaned.ledgerCode || cleaned.ledger_code || null,
+            ledger_name: cleaned.ledgerName || cleaned.ledger_name || null,
+        };
+        if (isCreate) {
+            mapped.id = cleaned.id;
+        }
+        return mapped;
+    }
+
+    // Specific mapping for sales (PostgreSQL schema compatibility)
+    if (table === 'sales') {
+        const mapped: Record<string, any> = {
+            date: toIsoDate(cleaned.date) || new Date().toISOString().split('T')[0],
+            category: cleaned.category || 'Vendas',
+            amount: Number(cleaned.amount || 0),
+            status: cleaned.status || 'Pendente',
+            type: cleaned.type || 'Receita',
+            client_id: cleaned.clientId && isValidUUID(cleaned.clientId) ? cleaned.clientId : (cleaned.client_id && isValidUUID(cleaned.client_id) ? cleaned.client_id : null),
+            client_name: cleaned.clientName || cleaned.client_name || 'Cliente Balcão',
+            items: Array.isArray(cleaned.items) ? cleaned.items : [],
+            payment_method: cleaned.paymentMethod || cleaned.payment_method || 'credit',
+            installments: Number(cleaned.installments || 1),
+        };
+        if (cleaned.weightTicket || cleaned.weight_ticket) {
+            mapped.weight_ticket = cleaned.weightTicket || cleaned.weight_ticket;
+        }
+        if (cleaned.measuredWeight !== undefined || cleaned.measured_weight !== undefined) {
+            mapped.measured_weight = cleaned.measuredWeight ?? cleaned.measured_weight;
+        }
+        if (isCreate) {
+            mapped.id = cleaned.id;
+        }
+        return mapped;
     }
 
     // Specific table cleanups: strip relations / columns that don't exist in Supabase tables
@@ -98,13 +181,49 @@ export const fetchData = async <T>(table: string): Promise<T[]> => {
                 console.error(`Error fetching ${table}:`, fallback.error);
                 return [];
             }
-            return (fallback.data as T[]) || [];
+            return transformFetchedData<T>(table, fallback.data);
         }
-        return (data as T[]) || [];
+        return transformFetchedData<T>(table, data);
     } catch (e) {
         console.error(`Unexpected error fetching ${table}:`, e);
         return [];
     }
+};
+
+const transformFetchedData = <T>(table: string, data: any[] | null): T[] => {
+    if (!Array.isArray(data)) return [];
+
+    if (table === 'transactions') {
+        return data.map(row => ({
+            ...row,
+            date: toLocaleDate(row.date),
+            dueDate: toLocaleDate(row.due_date || row.date),
+            accountId: row.account_id || row.accountId || '',
+            account: row.account || 'Caixa Geral',
+            documentNumber: row.document_number || row.documentNumber || '',
+            partnerId: row.partner_id || row.partnerId || '',
+            partnerName: row.partner_name || row.partnerName || '',
+            originModule: row.origin_module || row.originModule || '',
+            originId: row.origin_id || row.originId || '',
+            ledgerCode: row.ledger_code || row.ledgerCode || '',
+            ledgerName: row.ledger_name || row.ledgerName || '',
+        })) as T[];
+    }
+
+    if (table === 'sales') {
+        return data.map(row => ({
+            ...row,
+            date: toLocaleDate(row.date),
+            clientId: row.client_id || row.clientId || '',
+            clientName: row.client_name || row.clientName || '',
+            paymentMethod: row.payment_method || row.paymentMethod || '',
+            installments: row.installments || 1,
+            weightTicket: row.weight_ticket || row.weightTicket || '',
+            measuredWeight: row.measured_weight ?? row.measuredWeight,
+        })) as T[];
+    }
+
+    return data as T[];
 };
 
 // Generic Create

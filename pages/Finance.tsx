@@ -298,17 +298,30 @@ const Finance = () => {
       return isDeferred || isPending || hasInstallments;
    };
 
-   const isSaleSynced = (sale: Sale, allTransactions: Transaction[]): boolean => {
-      return allTransactions.some(tx => {
+   const getMatchingTransactionsForSale = (sale: Sale, allTransactions: Transaction[]): Transaction[] => {
+      const docBase = sale.documentNumber || (sale.id && sale.id.startsWith('S-') ? sale.id.slice(2) : sale.id.slice(0, 8));
+      return allTransactions.filter(tx => {
          if (tx.originId && tx.originId === sale.id) return true;
-         if (tx.id && (tx.id === toDeterministicUUID(`TX-SALE-${sale.id}-P1`) || tx.id.includes(sale.id))) return true;
-         if (sale.documentNumber && tx.documentNumber && tx.originModule === 'Vendas') {
-            if (tx.documentNumber === sale.documentNumber || tx.documentNumber.startsWith(`${sale.documentNumber}-`)) {
+         if (tx.id && (tx.id.includes(sale.id) || tx.id === toDeterministicUUID(`TX-SALE-${sale.id}-P1`))) return true;
+         if (tx.originModule === 'Vendas' && docBase && tx.documentNumber) {
+            if (tx.documentNumber === docBase || tx.documentNumber.startsWith(`${docBase}-`)) {
                return true;
             }
          }
          return false;
       });
+   };
+
+   const isSaleSynced = (sale: Sale, allTransactions: Transaction[]): boolean => {
+      const matching = getMatchingTransactionsForSale(sale, allTransactions);
+      if (matching.length === 0) return false;
+
+      const numInstallments = sale.installments && sale.installments > 1 ? sale.installments : 1;
+      if (numInstallments > 1 && matching.length < numInstallments) {
+         return false;
+      }
+
+      return true;
    };
 
    const generateTransactionsForSale = (sale: Sale): Transaction[] => {
@@ -418,6 +431,11 @@ const Finance = () => {
 
       let generatedCount = 0;
       unSynced.forEach(sale => {
+         const matching = getMatchingTransactionsForSale(sale, transactions);
+         const numInstallments = sale.installments && sale.installments > 1 ? sale.installments : 1;
+         if (numInstallments > 1 && matching.length === 1 && !matching[0].description.includes('(1/')) {
+            deleteTransaction(matching[0].id);
+         }
          const newTxs = generateTransactionsForSale(sale);
          newTxs.forEach(tx => {
             addTransaction(tx);
@@ -461,6 +479,11 @@ const Finance = () => {
 
          let createdCount = 0;
          unSynced.forEach(sale => {
+            const matching = getMatchingTransactionsForSale(sale, transactions);
+            const numInstallments = sale.installments && sale.installments > 1 ? sale.installments : 1;
+            if (numInstallments > 1 && matching.length === 1 && !matching[0].description.includes('(1/')) {
+               deleteTransaction(matching[0].id);
+            }
             const newTxs = generateTransactionsForSale(sale);
             newTxs.forEach(tx => {
                addTransaction(tx);
@@ -2393,8 +2416,10 @@ const Finance = () => {
                                        </div>
                                        <div>
                                           <p className="font-bold text-slate-800 dark:text-slate-200">{tx.description}</p>
-                                          {tx.partnerName && (
-                                             <p className="text-[10px] text-slate-400 font-semibold">{tx.partnerName}</p>
+                                          {(tx.partnerName || (tx.originModule === 'Vendas' && tx.originId && sales.find(s => s.id === tx.originId)?.clientName)) && (
+                                             <p className="text-[10px] text-slate-400 font-semibold">
+                                                {tx.partnerName || (tx.originId && sales.find(s => s.id === tx.originId)?.clientName)}
+                                             </p>
                                           )}
                                           <div className="flex flex-wrap items-center gap-1.5 mt-1">
                                              {tx.documentNumber && (
@@ -2402,9 +2427,20 @@ const Finance = () => {
                                                    Doc: {tx.documentNumber}
                                                 </span>
                                              )}
-                                             {tx.paymentMethod && (
+                                             {(() => {
+                                                const match = (tx.description || '').match(/\((\d+\/\d+)\)/) || (tx.documentNumber || '').match(/-(\d+\/\d+)$/);
+                                                if (match) {
+                                                   return (
+                                                      <span className="text-[10px] text-amber-700 dark:text-amber-300 font-bold bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-200/50 dark:border-amber-800/50">
+                                                         Parcela {match[1]}
+                                                      </span>
+                                                   );
+                                                }
+                                                return null;
+                                             })()}
+                                             {(tx.paymentMethod || (tx.originModule === 'Vendas' && tx.originId && sales.find(s => s.id === tx.originId)?.paymentMethod)) && (
                                                 <span className="text-[10px] text-slate-600 dark:text-slate-300 font-semibold bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">
-                                                   {tx.paymentMethod}
+                                                   {tx.paymentMethod || getPaymentMethodDisplay(sales.find(s => s.id === tx.originId)?.paymentMethod)}
                                                 </span>
                                              )}
                                              {tx.originModule === 'Vendas' && (

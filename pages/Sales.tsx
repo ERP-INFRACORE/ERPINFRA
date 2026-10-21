@@ -473,18 +473,21 @@ const Sales = () => {
     };
   }, [requiresWeighing, grossWeight, tareWeight, cart]);
 
-  // Effect to reset installments for instant payments
+  // Effect to reset installments for instant payments and calculate due dates for deferred
   React.useEffect(() => {
     if (['money', 'pix', 'transfer'].includes(paymentMethod)) {
       setInstallments(1);
       setCustomDueDates([]);
-    } else if (installments > 1) {
-      const dates = Array.from({ length: installments }, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() + ((i + 1) * 30));
-        return d.toISOString().split('T')[0];
+    } else {
+      const numInst = Math.max(1, installments || 1);
+      setCustomDueDates(prev => {
+        if (prev.length === numInst) return prev;
+        return Array.from({ length: numInst }, (_, i) => {
+          const d = new Date();
+          d.setDate(d.getDate() + ((i + 1) * 30));
+          return d.toISOString().split('T')[0];
+        });
       });
-      setCustomDueDates(dates);
     }
   }, [paymentMethod, installments]);
 
@@ -710,14 +713,26 @@ const Sales = () => {
 
       // Calculate Due Date for Financial Records
       let finalDueDate: string | undefined = undefined;
-      if (!isPaid && installments === 1) {
-        const term = Number(settings?.operational?.defaultPaymentTerm) || 30;
-        const d = new Date();
-        d.setDate(d.getDate() + term);
-        finalDueDate = d.toLocaleDateString('pt-BR');
+      if (!isPaid) {
+        if (customDueDates.length > 0 && customDueDates[0]) {
+          const parts = customDueDates[0].split('-');
+          if (parts.length === 3) {
+            finalDueDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+          } else {
+            finalDueDate = customDueDates[0];
+          }
+        } else {
+          const term = Number(settings?.operational?.defaultPaymentTerm) || 30;
+          const d = new Date();
+          d.setDate(d.getDate() + term);
+          finalDueDate = d.toLocaleDateString('pt-BR');
+        }
       }
 
-      const accountObj = financialAccounts.find(a => a.id === account);
+      const accountObj = financialAccounts.find(a => a.id === account) || financialAccounts[0] || { id: 'acc-1', name: 'Caixa Geral' };
+      const selectedAccountId = account || accountObj.id;
+      const selectedAccountName = accountObj.name || 'Caixa Geral';
+      const safeInstallments = Math.max(1, installments || 1);
 
       addSale({
         id: saleId,
@@ -725,8 +740,8 @@ const Sales = () => {
         dueDate: finalDueDate,
         description: `Venda Direta${vehicle ? ` - Veículo: ${vehicle.plate}` : ''}`,
         category: 'Vendas',
-        accountId: account,
-        account: accountObj?.name || 'Caixa Geral',
+        accountId: selectedAccountId,
+        account: selectedAccountName,
         amount: finalAmount,
         status: transactionStatus,
         type: 'Receita',
@@ -734,7 +749,7 @@ const Sales = () => {
         clientName: client?.name || 'Cliente Avulso',
         items: finalItems,
         paymentMethod,
-        installments,
+        installments: safeInstallments,
         installmentDueDates: customDueDates.length > 0 ? customDueDates : undefined,
         vehicleId: selectedVehicle,
         driverName: driverName,
@@ -833,8 +848,9 @@ const Sales = () => {
         grossWeight: requiresWeighing ? grossWeight : undefined,
         netWeight: calculatedNetWeight,
         weightNotes: weightNotes || weighingCalculations?.explanation,
-        paymentMethod: paymentMethod
-      };
+        paymentMethod: paymentMethod,
+        installments: installments
+      } as any;
 
       if (editingBudgetId) {
         updateBudget(newBudget);
@@ -865,13 +881,23 @@ const Sales = () => {
           const paymentMethod = budget.paymentMethod || 'credit';
           const isPaid = ['money', 'pix', 'debit', 'transfer'].includes(paymentMethod);
           const status = isPaid ? 'Conciliado' : 'Pendente';
+          const numInst = (budget as any).installments && Number((budget as any).installments) > 1 ? Number((budget as any).installments) : 1;
 
           let conversionDueDate: string | undefined = undefined;
+          const instDueDates: string[] = [];
           if (!isPaid) {
             const term = Number(settings?.operational?.defaultPaymentTerm) || 30;
             const d = new Date();
             d.setDate(d.getDate() + term);
             conversionDueDate = d.toLocaleDateString('pt-BR');
+
+            if (numInst > 1) {
+              for (let i = 1; i <= numInst; i++) {
+                const id = new Date();
+                id.setDate(id.getDate() + (i * 30));
+                instDueDates.push(id.toISOString().split('T')[0]);
+              }
+            }
           }
 
           const targetAcc = financialAccounts[0] || { id: 'acc-1', name: 'Caixa Geral' };
@@ -891,8 +917,12 @@ const Sales = () => {
             clientName: budget.clientName,
             items: budget.items,
             paymentMethod: paymentMethod,
+            installments: numInst,
+            installmentDueDates: instDueDates.length > 0 ? instDueDates : undefined,
             originModule: 'Vendas',
-            originId: budget.id
+            originId: budget.id,
+            ledgerCode: '1.01.01',
+            ledgerName: 'Vendas de Mercadorias'
           });
 
           updateBudgetStatus(budget.id, 'Convertido');
@@ -1697,31 +1727,9 @@ const Sales = () => {
                   onClick={() => handlePrintBudget(selectedBudget)}
                   className="flex-1 py-3 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 text-slate-700 dark:text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors text-xs"
                 >
-                  <Printer size={16} /> Imprimir / PDF
+                  <Printer size={16} /> Imprimir Orçamento
                 </button>
-                {selectedBudget.status === 'Aberto' && (
-                  <>
-                    <button
-                      onClick={() => {
-                        handleUpdateBudgetStatus(selectedBudget.id, 'Aprovado');
-                        setSelectedBudget(prev => prev ? { ...prev, status: 'Aprovado' } : null);
-                      }}
-                      className="px-4 py-3 bg-emerald-50 text-emerald-700 font-bold rounded-xl hover:bg-emerald-100 transition-colors text-xs flex items-center gap-1.5"
-                    >
-                      <CheckCircle size={16} /> Aprovar
-                    </button>
-                    <button
-                      onClick={() => {
-                        handleUpdateBudgetStatus(selectedBudget.id, 'Rejeitado');
-                        setSelectedBudget(prev => prev ? { ...prev, status: 'Rejeitado' } : null);
-                      }}
-                      className="px-4 py-3 bg-rose-50 text-rose-700 font-bold rounded-xl hover:bg-rose-100 transition-colors text-xs flex items-center gap-1.5"
-                    >
-                      <XCircle size={16} /> Rejeitar
-                    </button>
-                  </>
-                )}
-                {(selectedBudget.status === 'Aberto' || selectedBudget.status === 'Aprovado') && (
+                {selectedBudget.status !== 'Convertido' && (
                   <button
                     onClick={() => {
                       handleConvertBudgetToSale(selectedBudget);
@@ -2375,25 +2383,38 @@ const Sales = () => {
 
                             {!['money', 'pix', 'transfer'].includes(paymentMethod) && (
                               <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Parcelamento</label>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">
+                                  {['prazo', 'boleto'].includes(paymentMethod) ? 'Condição / Parcelamento' : 'Parcelamento'}
+                                </label>
                                 <select
                                   value={installments}
                                   onChange={e => setInstallments(Number(e.target.value))}
                                   className="w-full p-2.5 bg-white dark:bg-gray-600 border border-slate-200 dark:border-gray-500 rounded-lg text-xs font-bold"
                                 >
                                   {[1, 2, 3, 4, 5, 6, 10, 12].map(n => (
-                                    <option key={n} value={n}>{n}x {n > 1 ? 'sem juros' : 'à vista'}</option>
+                                    <option key={n} value={n}>
+                                      {['prazo', 'boleto'].includes(paymentMethod)
+                                        ? `${n}x (${n === 1 ? '30 dias' : Array.from({ length: n }, (_, i) => (i + 1) * 30).join('/') + ' dias'})`
+                                        : `${n}x ${n > 1 ? 'sem juros' : 'à vista'}`}
+                                    </option>
                                   ))}
                                 </select>
                               </div>
                             )}
 
-                            {installments > 1 && !['money', 'pix', 'transfer'].includes(paymentMethod) && (
+                            {!['money', 'pix', 'transfer'].includes(paymentMethod) && customDueDates.length > 0 && (
                               <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Vencimento das Parcelas</label>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">
+                                  {installments > 1 ? 'Vencimento das Parcelas' : 'Vencimento do Título'}
+                                </label>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                   {customDueDates.map((date, idx) => (
                                     <div key={idx}>
+                                      {installments > 1 && (
+                                        <span className="text-[9px] font-bold text-slate-400 block mb-0.5">
+                                          Parcela {idx + 1}/{installments}
+                                        </span>
+                                      )}
                                       <input
                                         type="date"
                                         value={date}
@@ -2582,10 +2603,8 @@ const Sales = () => {
                 className="py-2 px-3 bg-white dark:bg-gray-700 border-none rounded-xl text-xs font-bold shadow-sm text-slate-700 dark:text-slate-200 cursor-pointer"
               >
                 <option value="all">Status: Todos</option>
-                <option value="Aberto">Aberto</option>
-                <option value="Aprovado">Aprovado</option>
-                <option value="Rejeitado">Rejeitado</option>
-                <option value="Convertido">Convertido</option>
+                <option value="Aberto">Em Aberto</option>
+                <option value="Convertido">Convertido em Venda</option>
               </select>
               <div className="relative">
                 <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -2658,58 +2677,18 @@ const Sales = () => {
                       </td>
                       <td className="px-6 py-5 text-center text-xs font-bold text-slate-500">{b.expiryDate}</td>
                       <td className="px-6 py-5 text-right">
-                        <div className="flex items-center justify-end gap-1 opacity-20 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => setSelectedBudget(b)} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white rounded-lg transition-all" title="Ver Detalhes"><Eye size={18} /></button>
-                          <button onClick={() => handlePrintBudget(b)} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white rounded-lg transition-all" title="Imprimir Orçamento"><Printer size={18} /></button>
-                          <button onClick={() => setShowNFE({ type: 'budget', data: b })} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white rounded-lg transition-all" title="Gerar NF-e (DANFE)"><FileSearch size={18} /></button>
-                          {b.status === 'Aberto' && (
-                            <>
-                              <button
-                                onClick={() => {
-                                  setEditingBudgetId(b.id);
-                                  setCart(b.items);
-                                  setSelectedClient(b.clientId);
-                                  setDiscount((b.discount || 0).toString());
-                                  setActiveTab('new');
-                                  setShowCheckout(true);
-                                }}
-                                className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
-                                title="Editar Orçamento"
-                              >
-                                <MoreVertical size={18} className="rotate-90" />
-                              </button>
-                              <button
-                                onClick={() => handleUpdateBudgetStatus(b.id, 'Aprovado')}
-                                className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                                title="Aprovar Orçamento"
-                              >
-                                <CheckCircle size={18} />
-                              </button>
-                              <button
-                                onClick={() => handleUpdateBudgetStatus(b.id, 'Rejeitado')}
-                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                                title="Rejeitar Orçamento"
-                              >
-                                <XCircle size={18} />
-                              </button>
-                            </>
-                          )}
-                          {b.status === 'Rejeitado' && (
-                            <button
-                              onClick={() => handleUpdateBudgetStatus(b.id, 'Aberto')}
-                              className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition-all"
-                              title="Reabrir Orçamento"
-                            >
-                              <RefreshCw size={18} />
-                            </button>
-                          )}
-                          {(b.status === 'Aberto' || b.status === 'Aprovado') && (
+                        <div className="flex items-center justify-end gap-1.5 opacity-20 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => setSelectedBudget(b)} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all" title="Ver Detalhes"><Eye size={18} /></button>
+                          <button onClick={() => handlePrintBudget(b)} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all" title="Imprimir Orçamento"><Printer size={18} /></button>
+                          <button onClick={() => setShowNFE({ type: 'budget', data: b })} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all" title="Gerar NF-e (DANFE)"><FileSearch size={18} /></button>
+                          {b.status !== 'Convertido' && (
                             <button
                               onClick={() => handleConvertBudgetToSale(b)}
-                              className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-600 hover:text-white transition-all"
+                              className="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 rounded-lg hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-1 font-bold text-xs"
                               title="Converter em Venda"
                             >
-                              <CheckCircle size={18} />
+                              <ShoppingCart size={16} />
+                              <span className="hidden sm:inline">Converter Venda</span>
                             </button>
                           )}
                         </div>
