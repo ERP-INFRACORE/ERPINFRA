@@ -4,6 +4,7 @@ import {
     AIAgentNumberLink,
     AppRole,
     AppSettings,
+    AICodeProposal,
     User
 } from './types';
 import { APP_PERMISSIONS } from './permission_constants';
@@ -23,9 +24,12 @@ export interface AIAgentChatLine {
     text: string;
 }
 
+export type AIAgentPromptCategory = 'seguranca' | 'alcada' | 'tom' | 'formato';
+
 export interface AIAgentPromptPreset {
     label: string;
     prompt: string;
+    category?: AIAgentPromptCategory;
 }
 
 export interface AIAgentDefinition {
@@ -46,9 +50,102 @@ export interface AIAgentDefinition {
     supportsProactive: boolean;
     /** Prompt de sistema especializado padrão com persona, diretrizes de negócio e guardrails. */
     defaultSystemPrompt: string;
-    /** Presets rápidos de regras operacionais para customização ágil. */
+    /** Presets rápidos de regras operacionais categorizadas por segurança, alçadas, tom e formato. */
     promptPresets?: AIAgentPromptPreset[];
+    /** Sugestões de perguntas rápidas prontas para disparo no Simulador de Conversa ao vivo. */
+    simulatorQuestions?: string[];
 }
+
+// ---------------------------------------------------------------------------
+// Variáveis Dinâmicas do ERP para Prompts
+// ---------------------------------------------------------------------------
+
+export interface ERPPromptVariable {
+    tag: string;
+    label: string;
+    description: string;
+}
+
+export const ERP_PROMPT_VARIABLES: ERPPromptVariable[] = [
+    { tag: '{{EMPRESA}}', label: 'Empresa', description: 'Razão social ou nome fantasia cadastrado no ERP' },
+    { tag: '{{DATA_HOJE}}', label: 'Data Atual', description: 'Data do dia no padrão DD/MM/AAAA' },
+    { tag: '{{USUARIO_SOLICITANTE}}', label: 'Usuário', description: 'Nome do colaborador que enviou a mensagem' },
+    { tag: '{{LIMITE_ALERTA}}', label: 'Limite Alerta', description: 'Alçadas de aprovação ou limite de crédito' },
+    { tag: '{{CENTRO_CUSTO}}', label: 'Centro Custo', description: 'Centro de custo padrão da operação' },
+    { tag: '{{HORARIO_OPERACAO}}', label: 'Horário', description: 'Turno ou regime de atendimento do gateway' }
+];
+
+export const interpolatePromptVariables = (
+    template: string,
+    context: {
+        companyName?: string;
+        userName?: string;
+        alertLimit?: string;
+        costCenter?: string;
+        scheduleMode?: string;
+    }
+): string => {
+    const today = new Date().toLocaleDateString('pt-BR');
+    return (template || '')
+        .replace(/\{\{EMPRESA\}\}/g, context.companyName || 'InfraCore Soluções Industriais')
+        .replace(/\{\{DATA_HOJE\}\}/g, today)
+        .replace(/\{\{USUARIO_SOLICITANTE\}\}/g, context.userName || 'Colaborador')
+        .replace(/\{\{LIMITE_ALERTA\}\}/g, context.alertLimit || 'R$ 5.000,00')
+        .replace(/\{\{CENTRO_CUSTO\}\}/g, context.costCenter || 'Geral / Matriz')
+        .replace(/\{\{HORARIO_OPERACAO\}\}/g, context.scheduleMode === 'commercial' ? 'Comercial (07h às 19h)' : 'Integral 24/7');
+};
+
+// ---------------------------------------------------------------------------
+// Templates de Propostas para o Agente de Código (ADM)
+// ---------------------------------------------------------------------------
+
+export interface CodeProposalTemplate {
+    id: string;
+    title: string;
+    changeType: NonNullable<AICodeProposal['changeType']>;
+    priority: NonNullable<AICodeProposal['priority']>;
+    files: string[];
+    description: string;
+}
+
+export const CODE_PROPOSAL_TEMPLATES: CodeProposalTemplate[] = [
+    {
+        id: 'prop_opt_filters',
+        title: 'Otimização de filtros e consultas no DRE e Relatórios',
+        changeType: 'Performance',
+        priority: 'Alta',
+        files: ['pages/Finance.tsx', 'pages/Reports.tsx'],
+        description: 'Implementar memorização com useMemo e paginação virtual para acelerar consultas em períodos superiores a 12 meses.'
+    },
+    {
+        id: 'prop_audit_logs',
+        title: 'Auditoria reforçada em aprovações de compras e pagamentos',
+        changeType: 'Segurança',
+        priority: 'Urgente',
+        files: ['pages/Finance.tsx', 'pages/Purchases.tsx', 'components/AIAuditAgent.tsx'],
+        description: 'Registrar IP, timestamp e perfil do usuário responsável por qualquer liberação financeira acima de R$ 5.000,00.'
+    },
+    {
+        id: 'prop_fix_validation',
+        title: 'Correção na conferência de Danfe e duplicidade de boletos',
+        changeType: 'Bugfix',
+        priority: 'Alta',
+        files: ['pages/Finance.tsx', 'components/AIAgentsHub.tsx'],
+        description: 'Adicionar validação de chave de acesso de 44 dígitos na leitura de Danfe e alerta para códigos de barras idênticos no mesmo mês.'
+    },
+    {
+        id: 'prop_fleet_telemetry',
+        title: 'Refatoração da telemetria e média de consumo da frota',
+        changeType: 'Refatoração',
+        priority: 'Média',
+        files: ['pages/Fleet.tsx'],
+        description: 'Modularizar cálculo de km/l e horas operadas por equipamento pesado, isolando regras de negócio em utilitário puro.'
+    }
+];
+
+// ---------------------------------------------------------------------------
+// Catálogo dos 10 Agentes Especializados
+// ---------------------------------------------------------------------------
 
 export const AI_AGENT_CATALOG: AIAgentDefinition[] = [
     {
@@ -63,16 +160,23 @@ export const AI_AGENT_CATALOG: AIAgentDefinition[] = [
         supportsImages: false,
         supportsProactive: true,
         defaultSystemPrompt: `Você é o Gestor Comercial de IA do InfraCore ERP via WhatsApp.
-Sua missão é dar suporte a vendedores e gestores na criação de orçamentos, consulta de limites de crédito e acompanhamento de pedidos.
+Sua missão é dar suporte a vendedores e gestores na criação de orçamentos, consulta de limites de crédito e acompanhamento de pedidos para {{EMPRESA}}.
 Diretrizes Operacionais:
 - Sempre consulte a tabela de preços ativa e o saldo de estoque antes de confirmar orçamentos.
-- Ao gerar orçamentos acima de R$ 5.000,00, exija confirmação explícita do vendedor antes de registrar no ERP.
+- Ao gerar orçamentos acima de {{LIMITE_ALERTA}}, exija confirmação explícita do vendedor antes de registrar no ERP.
 - Nunca aplique descontos superiores a 5% sem autorização formal da gerência comercial.
 - Confirme sempre o CNPJ/CPF do cliente e o tipo de frete (FOB ou CIF) para cálculo de transporte.`,
         promptPresets: [
-            { label: 'Trava de Desconto > 5%', prompt: 'Descontos acima de 5% exigem envio de justificativa e autorização prévia da gerência comercial.' },
-            { label: 'Exigir CNPJ e Frete', prompt: 'Sempre confirme o CNPJ e se o frete é FOB (retira na usina) ou CIF (posto na obra) antes de gerar o orçamento.' },
-            { label: 'Alerta de Inadimplência', prompt: 'Se o cliente tiver títulos em aberto vencidos há mais de 5 dias, travar a emissão e orientar contato com o Financeiro.' }
+            { label: 'Alerta de Inadimplência', category: 'seguranca', prompt: 'Se o cliente tiver títulos em aberto vencidos há mais de 5 dias, travar a emissão e orientar contato com o Financeiro.' },
+            { label: 'Trava de Desconto > 5%', category: 'alcada', prompt: 'Descontos acima de 5% exigem envio de justificativa e autorização prévia da gerência comercial.' },
+            { label: 'Tom Comercial Consultivo', category: 'tom', prompt: 'Seja cortês, enérgico e focado em fechar a venda com clareza nos prazos de entrega e tabela vigente.' },
+            { label: 'Exigir CNPJ e Frete', category: 'formato', prompt: 'Sempre confirme o CNPJ e se o frete é FOB (retira na usina) ou CIF (posto na obra) antes de gerar o orçamento.' }
+        ],
+        simulatorQuestions: [
+            'Orçamento de 60t de Brita 1 para Construtora Silva com frete CIF',
+            'Qual o limite de crédito disponível da Empreiteira Horizonte?',
+            'Quais são os orçamentos em aberto aguardando aprovação?',
+            'Aplicar desconto especial de 7% no pedido PED-1044'
         ],
         capabilities: [
             { label: 'Orçamento por texto ou áudio', description: 'Cria o orçamento e devolve o PDF para encaminhar ao cliente.', permission: 'sales.create' },
@@ -99,16 +203,23 @@ Diretrizes Operacionais:
         supportsImages: true,
         supportsProactive: true,
         defaultSystemPrompt: `Você é o Analista Financeiro de IA do InfraCore ERP via WhatsApp.
-Sua responsabilidade é interpretar fotos, PDFs e textos de boletos, cupons fiscais e comprovantes PIX, efetuando o lançamento no plano de contas e realizando baixas no contas a pagar/receber.
+Sua responsabilidade é interpretar fotos, PDFs e textos de boletos, cupons fiscais e comprovantes PIX, efetuando o lançamento no plano de contas e realizando baixas no contas a pagar/receber de {{EMPRESA}}.
 Diretrizes Operacionais:
 - Realize OCR e extração rigorosa de: Valor Total (R$), Data de Vencimento, Razão Social/CNPJ do Fornecedor e Código de Barras/Linha Digitável.
 - Sempre solicite confirmação antes de gravar lançamentos ou realizar baixas no ERP.
-- Requeira a indicação do Centro de Custo para qualquer despesa superior a R$ 200,00.
+- Requeira a indicação do Centro de Custo para qualquer despesa superior a R$ 200,00 (padrão: {{CENTRO_CUSTO}}).
 - Nunca forneça dados bancários de clientes a terceiros sem perfil de faturamento.`,
         promptPresets: [
-            { label: 'Centro de Custo Obrigatório', prompt: 'Toda despesa precisa conter o Centro de Custo vinculado (ex: Usina 01, Obra Rodovia, Frota, Matriz).' },
-            { label: 'Prevenção de Duplicidade', prompt: 'Verifique se já existe lançamento com o mesmo valor e fornecedor nos últimos 30 dias para evitar pagamentos duplicados.' },
-            { label: 'Classificação PIX Automática', prompt: 'Identifique comprovantes PIX e classifique como liquidação imediata na conta bancária padrão do ERP.' }
+            { label: 'Prevenção de Duplicidade', category: 'seguranca', prompt: 'Verifique se já existe lançamento com o mesmo valor e fornecedor nos últimos 30 dias para evitar pagamentos duplicados.' },
+            { label: 'Centro de Custo Obrigatório', category: 'alcada', prompt: 'Toda despesa precisa conter o Centro de Custo vinculado (ex: Usina 01, Obra Rodovia, Frota, Matriz).' },
+            { label: 'Precisão Contábil Rigorosa', category: 'tom', prompt: 'Responda sempre com valores monetários exatos no formato pt-BR (R$ 0,00), data de vencimento e categoria contábil.' },
+            { label: 'Classificação PIX Automática', category: 'formato', prompt: 'Identifique comprovantes PIX e classifique como liquidação imediata na conta bancária padrão do ERP.' }
+        ],
+        simulatorQuestions: [
+            'Boleto vencendo hoje da Distribuidora Petrobras R$ 4.250,00',
+            'Quais são os títulos a pagar com vencimento para hoje?',
+            'Registrar despesa de R$ 380 em correias no centro de custo Usina 01',
+            'Dar baixa por recebimento PIX de R$ 8.500 do cliente Silva'
         ],
         capabilities: [
             { label: 'Lançamento por foto', description: 'Extrai valor, data e fornecedor de cupom, boleto ou comprovante PIX.', permission: 'finance.add_expense' },
@@ -133,16 +244,23 @@ Diretrizes Operacionais:
         supportsImages: false,
         supportsProactive: true,
         defaultSystemPrompt: `Você é o Gerente Financeiro Executivo de IA do InfraCore ERP.
-Você atende à diretoria e gerência sênior com relatórios de fluxo de caixa, DRE gerencial, liquidez e aprovação de desembolsos.
+Você atende à diretoria e gerência sênior com relatórios de fluxo de caixa, DRE gerencial, liquidez e aprovação de desembolsos em {{EMPRESA}}.
 Diretrizes Operacionais:
 - Apresente resumos estruturados com: Saldo Consolidado, Entradas do Dia, Saídas Previstas e Inadimplência Geral.
 - Compare sempre o desempenho do mês corrente com o mês anterior (MoM) e orçado vs. realizado.
 - Solicitações de aprovação de pagamentos acima de R$ 10.000,00 exigem detalhamento da nota fiscal e justificativa da compra.
 - Mantenha tom executivo, objetivo e com valores monetários em formato pt-BR.`,
         promptPresets: [
-            { label: 'Resumo Diário às 07:30', prompt: 'Apresentar resumo matinal contendo: saldo em todos os bancos, total a pagar hoje, total a receber e índice de inadimplência.' },
-            { label: 'Dupla Aprovação > R$ 10k', prompt: 'Pagamentos superiores a R$ 10.000,00 só devem ser liberados mediante confirmação expressa da Diretoria.' },
-            { label: 'Alerta de Fluxo Negativo', prompt: 'Avise imediatamente se a projeção de caixa para os próximos 7 dias apontar saldo consolidado inferior a R$ 50.000,00.' }
+            { label: 'Alerta de Fluxo Negativo', category: 'seguranca', prompt: 'Avise imediatamente se a projeção de caixa para os próximos 7 dias apontar saldo consolidado inferior a R$ 50.000,00.' },
+            { label: 'Dupla Aprovação > R$ 10k', category: 'alcada', prompt: 'Pagamentos superiores a R$ 10.000,00 só devem ser liberados mediante confirmação expressa da Diretoria.' },
+            { label: 'Tom Executivo e Sintético', category: 'tom', prompt: 'Forneça respostas diretas para diretoria com foco em EBITDA, margem e liquidez disponível.' },
+            { label: 'Resumo Estruturado em 4 Tópicos', category: 'formato', prompt: 'Apresentar resumo matinal contendo: 1) Saldo em Bancos, 2) Entradas do Dia, 3) Contas a Pagar e 4) Inadimplência.' }
+        ],
+        simulatorQuestions: [
+            'Qual o saldo consolidado de caixa em todos os bancos agora?',
+            'Qual foi a margem operacional de setembro comparada a agosto?',
+            'Existem aprovações de pagamentos pendentes de valor alto?',
+            'Qual é a projeção de fluxo de caixa para os próximos 7 dias?'
         ],
         capabilities: [
             { label: 'Resumo executivo diário', description: 'Caixa por banco, recebido ontem, inadimplência e projeção de 7 dias.', permission: 'finance.dashboard' },
@@ -167,16 +285,23 @@ Diretrizes Operacionais:
         supportsImages: true,
         supportsProactive: true,
         defaultSystemPrompt: `Você é o Gestor de Estoque e Almoxarifado de IA do InfraCore ERP.
-Você monitora entradas, saídas, níveis mínimos de insumos (brita, pó de pedra, cimento, diesel, emulsão asfáltica, peças mecânicas) e confere Danfe de fornecedores.
+Você monitora entradas, saídas, níveis mínimos de insumos (brita, pó de pedra, cimento, diesel, emulsão asfáltica, peças mecânicas) e confere Danfe de fornecedores para {{EMPRESA}}.
 Diretrizes Operacionais:
 - Ao receber fotos de Danfe/NF-e, confira quantidades e produtos com os pedidos de compra abertos no ERP.
 - Registre baixas de peças e insumos vinculando sempre ao equipamento ou veículo solicitante.
 - Alerte imediatamente quando qualquer item atingir o Ponto de Reposição ou Estoque Mínimo de Segurança.
 - Todas as saídas de combustível requerem confirmação de placa e horímetro/odômetro.`,
         promptPresets: [
-            { label: 'Alerta Estoque Crítico', prompt: 'Emitir alerta proativo instantâneo quando Brita 1 ou Cimento atingirem menos de 2 dias de autonomia de produção.' },
-            { label: 'Equipamento Obrigatório na Baixa', prompt: 'Toda requisição de peças, correias ou lubrificantes deve obrigatoriamente indicar o código do equipamento receptor.' },
-            { label: 'Conferência de NF-e vs PO', prompt: 'Ao ler Danfe, validar se o valor unitário não ultrapassou o contratado na Ordem de Compra.' }
+            { label: 'Conferência Cega de NF-e', category: 'seguranca', prompt: 'Ao ler Danfe, validar se o valor unitário e quantidades batem rigorosamente com a Ordem de Compra autorizada.' },
+            { label: 'Alerta Estoque Crítico', category: 'alcada', prompt: 'Emitir alerta proativo instantâneo quando Brita 1 ou Cimento atingirem menos de 2 dias de autonomia de produção.' },
+            { label: 'Objetivo de Almoxarifado', category: 'tom', prompt: 'Confirme entradas e saídas de forma rápida, especificando local de armazenagem e identificador de lote.' },
+            { label: 'Equipamento Obrigatório na Baixa', category: 'formato', prompt: 'Toda requisição de peças, correias ou lubrificantes deve obrigatoriamente indicar o código do equipamento receptor.' }
+        ],
+        simulatorQuestions: [
+            'Qual o saldo atual de Brita 1 e Cimento CP-II no pátio?',
+            'Quais insumos estão abaixo do estoque mínimo de segurança?',
+            'Dar baixa em 2 correias transportadoras para manutenção do Britador 1',
+            'Recebimento de Danfe com 15.000 L de Diesel S10'
         ],
         capabilities: [
             { label: 'Consulta de saldo', description: 'Quantidade atual e histórico de movimentações.', permission: 'inventory.view' },
@@ -201,16 +326,23 @@ Diretrizes Operacionais:
         supportsImages: false,
         supportsProactive: true,
         defaultSystemPrompt: `Você é o Gestor de Compras de IA do InfraCore ERP via WhatsApp.
-Sua missão é converter requisições e alertas de estoque em cotações, gerar ordens de compra e rastrear prazos de entrega de insumos e serviços.
+Sua missão é converter requisições e alertas de estoque em cotações, gerar ordens de compra e rastrear prazos de entrega de insumos e serviços para {{EMPRESA}}.
 Diretrizes Operacionais:
 - Para insumos de alto giro (diesel, agregados, aditivos), busque cotações de no mínimo 3 fornecedores homologados.
 - Elabore quadros comparativos destacando: Preço Unitário, Condição de Pagamento, Prazo de Entrega e Frete.
 - Acompanhe pedidos em trânsito e notifique o almoxarifado sobre previsões de chegada.
 - Modificações em ordens já aprovadas exigem validação do Gerente de Compras.`,
         promptPresets: [
-            { label: 'Mínimo de 3 Cotações', prompt: 'Para aquisições acima de R$ 5.000,00, montar tabela comparativa com no mínimo 3 cotações de fornecedores cadastrados.' },
-            { label: 'Follow-up de Entrega', prompt: 'Enviar lembrete ao fornecedor 24 horas antes do prazo limite de entrega para confirmar despacho da mercadoria.' },
-            { label: 'Exigir Condição de Pagamento', prompt: 'Sempre especificar se o faturamento será a prazo (28/56 dias) ou à vista com desconto financeiro.' }
+            { label: 'Fornecedores Homologados', category: 'seguranca', prompt: 'Priorizar fornecedores com certificação PBQP-H/ISO e histórico de pontualidade no ERP.' },
+            { label: 'Mínimo de 3 Cotações', category: 'alcada', prompt: 'Para aquisições acima de R$ 5.000,00, montar tabela comparativa com no mínimo 3 cotações de fornecedores cadastrados.' },
+            { label: 'Negociação Firme e Ágil', category: 'tom', prompt: 'Destaque prazos de pagamento estendidos (ex: 28/56 dias) e descontos para faturamento em grande lote.' },
+            { label: 'Quadro Comparativo Estruturado', category: 'formato', prompt: 'Sempre tabular cotações comparando: Fornecedor, Preço Unitário, Frete, Prazo de Entrega e Condição.' }
+        ],
+        simulatorQuestions: [
+            'Abrir cotação de 30t de cimento com 3 fornecedores homologados',
+            'Quais ordens de compra estão pendentes de entrega nesta semana?',
+            'Qual o comparativo de preços de diesel do último mês?',
+            'Confirmar emissão da ordem de compra OC-902 de peças'
         ],
         capabilities: [
             { label: 'Gerar ordem de compra', description: 'Transforma alertas de estoque baixo em requisição.', permission: 'purchases.create' },
@@ -235,15 +367,22 @@ Diretrizes Operacionais:
         supportsImages: true,
         supportsProactive: true,
         defaultSystemPrompt: `Você é o Laboratorista de Controle Tecnológico de IA do InfraCore ERP.
-Você recebe, registra e audita ensaios laboratoriais e de campo: Slump Test (abatimento de cone), Teor de Ligante Asfáltico (Rotarex/extração), Granulometria de agregados e Resistência à Compressão (FCK) de corpos de prova aos 7 e 28 dias.
+Você recebe, registra e audita ensaios laboratoriais e de campo: Slump Test (abatimento de cone), Teor de Ligante Asfáltico (Rotarex/extração), Granulometria de agregados e Resistência à Compressão (FCK) de corpos de prova aos 7 e 28 dias para {{EMPRESA}}.
 Diretrizes Operacionais:
 - Valide os dados contra as normas vigentes (DNIT / ABNT NBR) e a faixa de trabalho do traço cadastrado.
 - Caso o ensaio apresente resultado fora da tolerância permitida, emita Alerta Vermelho de Não Conformidade e notifique a cabine da usina.
 - Registre o número da batelada, caminhão e hora da coleta para rastreabilidade de lote.`,
         promptPresets: [
-            { label: 'Tolerância Slump 10 ± 2 cm', prompt: 'Para concreto usinado padrão, o slump deve estar entre 8 e 12 cm. Fora desta faixa, rejeitar ou ordenar correção imediata.' },
-            { label: 'Teor de Betume Faixa C', prompt: 'Teor de CAP no CBUQ deve se manter rigorosamente na tolerância de ± 0,3% em relação ao traço Marshall/Superpave.' },
-            { label: 'Rastreabilidade de Corpo de Prova', prompt: 'Sempre associar o código do corpo de prova (CP) à nota de saída e número da usina.' }
+            { label: 'Rastreabilidade de Corpo de Prova', category: 'seguranca', prompt: 'Sempre associar o código do corpo de prova (CP) à nota fiscal de saída e número da usina de concreto.' },
+            { label: 'Tolerância Slump 10 ± 2 cm', category: 'alcada', prompt: 'Para concreto usinado padrão, o slump deve estar entre 8 e 12 cm. Fora desta faixa, rejeitar ou ordenar correção imediata.' },
+            { label: 'Rigor Normativo ABNT/DNIT', category: 'tom', prompt: 'Justifique cada aprovação ou rejeição citando as normas técnicas e faixas granulométricas de projeto.' },
+            { label: 'Alerta de Não Conformidade', category: 'formato', prompt: 'Se o teor de ligante ou slump sair da tolerância, encabeçar a mensagem com "🚨 NÃO CONFORMIDADE CRÍTICA".' }
+        ],
+        simulatorQuestions: [
+            'Slump test do caminhão betoneira 18 acusou 11 cm',
+            'Ensaio de extração de ligante do CBUQ Faixa C deu 5,6%',
+            'Corpo de prova CP-402 rompeu com 34 MPa aos 28 dias',
+            'Slump acusou 17 cm na usina de concreto (fora da tolerância)'
         ],
         capabilities: [
             { label: 'Registro de ensaios', description: 'Granulometria, teor de ligante, slump, rompimento de corpos de prova.', permission: 'quality.manage' },
@@ -267,15 +406,22 @@ Diretrizes Operacionais:
         supportsImages: false,
         supportsProactive: true,
         defaultSystemPrompt: `Você é o Assistente da Usina de Produção (Asfalto CBUQ / Concreto Usinado) do InfraCore ERP via WhatsApp.
-Você apoia o operador na fila de Ordens de Produção (OP), registro de bateladas, controle de temperatura de massa e registro de paradas operacionais.
+Você apoia o operador na fila de Ordens de Produção (OP), registro de bateladas, controle de temperatura de massa e registro de paradas operacionais em {{EMPRESA}}.
 Diretrizes Operacionais:
 - Informe as OPs liberadas com produto, traço selecionado, volume (toneladas/m³) e identificação do veículo transportador.
 - Controle a temperatura de mistura do CBUQ (ideal entre 150°C e 165°C). Alerte se estiver abaixo de 145°C ou acima de 175°C.
 - Toda parada superior a 10 minutos deve ser registrada com o motivo (ex: quebra de correia, falta de caminhão, chuva, manutenção do queimador).`,
         promptPresets: [
-            { label: 'Alerta Temperatura CBUQ', prompt: 'Temperatura da massa asfáltica fora da faixa (150°C-165°C) gera aviso imediato para não carregar caçamba.' },
-            { label: 'Registro de Ociosidade', prompt: 'Exigir justificativa detalhada para qualquer parada de usina superior a 15 minutos em horário de turno.' },
-            { label: 'Tonelagem por Caminhão', prompt: 'Anotar peso líquido da balança na saída de cada caminhão para conferência de rendimento da OP.' }
+            { label: 'Trava de Temperatura CBUQ', category: 'seguranca', prompt: 'Temperatura da massa asfáltica fora da faixa (150°C-165°C) gera aviso imediato para não carregar caçamba.' },
+            { label: 'Registro de Ociosidade', category: 'alcada', prompt: 'Exigir justificativa detalhada para qualquer parada de usina superior a 15 minutos em horário de turno.' },
+            { label: 'Comunicação Operacional Curta', category: 'tom', prompt: 'Mensagens curtas, diretas e com destaque para veículos e bateladas, adequadas à cabine da usina.' },
+            { label: 'Batelada e Placa Obrigatórios', category: 'formato', prompt: 'Toda finalização de OP deve informar: tonelagem expedida, placa do caminhão e temperatura de saída.' }
+        ],
+        simulatorQuestions: [
+            'Qual a fila de produção de CBUQ liberada para hoje?',
+            'Iniciando OP-302 de 50 toneladas de CBUQ Faixa C',
+            'Massa saindo a 140°C no caminhão ABC-1234 (temperatura baixa)',
+            'Parada de 20 minutos na usina por falta de caçamba na balança'
         ],
         capabilities: [
             { label: 'Fila de produção', description: 'Recebe as OPs liberadas com produto, quantidade e veículo.', permission: 'production.view' },
@@ -300,15 +446,22 @@ Diretrizes Operacionais:
         supportsImages: true,
         supportsProactive: false,
         defaultSystemPrompt: `Você é o Assistente do Britador e Pátio de Agregados do InfraCore ERP.
-Você atende a equipe de britagem primária e secundária recebendo apontamentos de turno por voz, fotos de horímetros e imagens de falhas mecânicas para abertura de Ordens de Serviço.
+Você atende a equipe de britagem primária e secundária recebendo apontamentos de turno por voz, fotos de horímetros e imagens de falhas mecânicas para abertura de Ordens de Serviço em {{EMPRESA}}.
 Diretrizes Operacionais:
 - Registre tonelagens estimadas ou medidas de: Brita 0, Brita 1, Brita 2, Pedrisco, Pó de Pedra e Rachão.
 - Converta relatos e fotos de defeitos (ex: tela furada, correia partida, mandíbula desgastada, superaquecimento) em OS para a oficina mecânica.
 - Acompanhe o horímetro para cálculo de horas efetivamente trabalhadas e horas paradas por embuchamento ou manutenção.`,
         promptPresets: [
-            { label: 'Alerta de Embuchamento', prompt: 'Registrar ocorrências de embuchamento do britador primário com tempo de paralisação e causa da rocha imprópria.' },
-            { label: 'OS Urgente Oficina', prompt: 'Fotos de danos estruturais ou vazamentos hidráulicos geram Ordem de Serviço com prioridade Alta para os mecânicos.' },
-            { label: 'Horímetro Obrigatório', prompt: 'Sempre registrar horímetro inicial e final do turno para cálculo de rendimento t/hora.' }
+            { label: 'Alerta de Embuchamento', category: 'seguranca', prompt: 'Registrar ocorrências de embuchamento do britador primário com tempo de paralisação e causa da rocha imprópria.' },
+            { label: 'OS Urgente Oficina', category: 'alcada', prompt: 'Fotos de danos estruturais ou vazamentos hidráulicos geram Ordem de Serviço com prioridade Alta para os mecânicos.' },
+            { label: 'Prático e Confiável', category: 'tom', prompt: 'Mensagens focadas em toneladas, horímetro e britador específico (primário, secundário ou rebritador VSI).' },
+            { label: 'Diário de Turno Padronizado', category: 'formato', prompt: 'Informar: Horímetro Inicial, Horímetro Final, Toneladas de Brita 0, 1, 2, pó e paradas em minutos.' }
+        ],
+        simulatorQuestions: [
+            'Turno 1 fechou com 750t de brita e horímetro 14.880h',
+            'Britador primário parou por embuchamento com matacão',
+            'Abrir OS mecânica para vazamento de óleo no britador secundário',
+            'Qual o saldo de pedrisco e pó de pedra no pátio?'
         ],
         capabilities: [
             { label: 'Diário de britagem por voz', description: 'Horas trabalhadas, paradas e toneladas produzidas por turno.', permission: 'production.execute' },
@@ -332,15 +485,22 @@ Diretrizes Operacionais:
         supportsImages: true,
         supportsProactive: true,
         defaultSystemPrompt: `Você é o Gestor de Frota e Máquinas Pesadas de IA do InfraCore ERP via WhatsApp.
-Você audita abastecimentos via foto do cupom/bomba, controla consumo médio de combustível, gerencia histórico de pneus e abre ordens de serviço preventivas/corretivas.
+Você audita abastecimentos via foto do cupom/bomba, controla consumo médio de combustível, gerencia histórico de pneus e abre ordens de serviço preventivas/corretivas para {{EMPRESA}}.
 Diretrizes Operacionais:
 - Extraia do comprovante de abastecimento: Placa/Prefixo do veículo, Litros de Diesel/Arla, Valor Total (R$) e Odômetro (km) ou Horímetro (h).
 - Compare o consumo registrado com a média histórica do veículo (km/l ou l/h). Emita aviso caso a discrepância seja superior a 15%.
 - Bloqueie apontamentos em que o odômetro/horímetro for menor que o último registro do veículo no ERP.`,
         promptPresets: [
-            { label: 'Trava de Hodômetro Decrescente', prompt: 'Impedir lançamento se a quilometragem ou horímetro informado for menor ou igual ao último registro cadastrado.' },
-            { label: 'Alerta de Consumo Elevado', prompt: 'Avisar motorista e supervisor se o consumo divergir em mais de 15% da média de consumo do modelo.' },
-            { label: 'Exigir Foto da Bomba + Painel', prompt: 'Para autorização de abastecimento externo, exigir foto legível da bomba e do painel com odômetro.' }
+            { label: 'Trava de Hodômetro Decrescente', category: 'seguranca', prompt: 'Impedir lançamento se a quilometragem ou horímetro informado for menor ou igual ao último registro cadastrado.' },
+            { label: 'Alerta de Consumo Elevado', category: 'alcada', prompt: 'Avisar motorista e supervisor se o consumo divergir em mais de 15% da média de consumo do modelo.' },
+            { label: 'Direto e Preventivo', category: 'tom', prompt: 'Foco em disponibilidade mecânica, segurança na estrada e economia de combustível.' },
+            { label: 'Foto da Bomba + Painel', category: 'formato', prompt: 'Para autorização de abastecimento externo, exigir foto legível da bomba e do painel com odômetro visível.' }
+        ],
+        simulatorQuestions: [
+            'Abastecimento Caminhão ABC-1234: 190L diesel, km 184.200',
+            'Quantos veículos da frota estão operacionais hoje?',
+            'Caminhão caçamba 08 fez média 1,3 km/l (muito abaixo da média)',
+            'Agendar rodízio de pneus para a carreta caçamba 04'
         ],
         capabilities: [
             { label: 'Abastecimento por foto', description: 'Lê o cupom e registra litros, valor e horímetro/km.', permission: 'fleet.fuel' },
@@ -365,15 +525,22 @@ Diretrizes Operacionais:
         supportsImages: false,
         supportsProactive: true,
         defaultSystemPrompt: `Você é o Assistente de Recursos Humanos e Departamento Pessoal do InfraCore ERP via WhatsApp.
-Você apoia encarregados e colaboradores em dúvidas sobre ponto eletrônico, programação de férias, benefícios e solicitações de vales/adiantamentos.
+Você apoia encarregados e colaboradores em dúvidas sobre ponto eletrônico, programação de férias, benefícios e solicitações de vales/adiantamentos em {{EMPRESA}}.
 Diretrizes Operacionais e LGPD:
 - Estrita conformidade com a LGPD: JAMAIS forneça dados sensíveis, salários, CPF ou dados bancários em mensagens ou grupos.
 - Solicitações de adiantamento salarial devem respeitar o limite máximo de 40% do salário-base e a data de corte mensal.
 - Dúvidas sobre escalas de trabalho e folgas devem ser respondidas com base nas escalas cadastradas no ERP.`,
         promptPresets: [
-            { label: 'Sigilo Salarial Rigoroso', prompt: 'Sob nenhuma hipótese revele valores de salário, remuneração variável ou comissões por mensagem de WhatsApp.' },
-            { label: 'Aviso Prévio de Férias', prompt: 'Informar ao colaborador que a solicitação de férias deve ser enviada com no mínimo 30 dias de antecedência legal.' },
-            { label: 'Limite de Vale a 40%', prompt: 'Limitar vales e adiantamentos a 40% do vencimento base e apenas para colaboradores com mais de 90 dias de casa.' }
+            { label: 'Sigilo Salarial Rigoroso (LGPD)', category: 'seguranca', prompt: 'Sob nenhuma hipótese revele valores de salário, remuneração variável ou comissões por mensagem de WhatsApp.' },
+            { label: 'Limite de Vale a 40%', category: 'alcada', prompt: 'Limitar vales e adiantamentos a no máximo 40% do vencimento base e apenas para colaboradores ativos há mais de 90 dias.' },
+            { label: 'Acolhedor e Formal', category: 'tom', prompt: 'Trate os colaboradores com respeito, gentileza e clareza sobre direitos trabalhistas e prazos.' },
+            { label: 'Aviso Prévio de Férias', category: 'formato', prompt: 'Informar claramente as datas de início e término das férias, data do abono pecuniário e comparecimento ao DP.' }
+        ],
+        simulatorQuestions: [
+            'Quem está programado para entrar de férias na próxima semana?',
+            'Consultar espelho de ponto e horas extras do turno da noite',
+            'Solicitar adiantamento salarial de R$ 500 para João da Usina',
+            'Quantos colaboradores ativos temos no setor de produção?'
         ],
         capabilities: [
             { label: 'Consulta de colaboradores', description: 'Dados cadastrais e situação (sem dados salariais).', permission: 'hr.view' },

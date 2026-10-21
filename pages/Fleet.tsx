@@ -59,6 +59,7 @@ const Fleet = () => {
 
     // Search/Filters
     const [searchTerm, setSearchTerm] = useState('');
+    const [vehicleStatusFilter, setVehicleStatusFilter] = useState<string>('all');
 
     // Modals
     const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
@@ -334,10 +335,12 @@ const Fleet = () => {
         maxKm: 100000
     });
 
-    const filteredVehicles = fleet.filter(v =>
-        v.plate.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        v.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredVehicles = fleet.filter(v => {
+        const matchesSearch = v.plate.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            v.name.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesStatus = vehicleStatusFilter === 'all' || v.status === vehicleStatusFilter;
+        return matchesSearch && matchesStatus;
+    });
 
     const vehicleCosts = useMemo(() => {
         return fleet.map(v => {
@@ -808,7 +811,20 @@ const Fleet = () => {
                             >
                                 <Download size={18} />
                             </button>
-                            <button className="p-2.5 bg-white dark:bg-gray-700 rounded-xl shadow-sm border dark:border-gray-600 text-slate-400 hover:text-teal-600"><Filter size={18} /></button>
+                            <div className="flex items-center gap-1.5 bg-white dark:bg-gray-700 rounded-xl px-2.5 py-1 shadow-sm border dark:border-gray-600">
+                                <Filter size={14} className="text-slate-400" />
+                                <select
+                                    value={vehicleStatusFilter}
+                                    onChange={e => setVehicleStatusFilter(e.target.value)}
+                                    className="bg-transparent text-xs font-bold text-slate-600 dark:text-slate-200 outline-none cursor-pointer py-1"
+                                    title="Filtrar por Status Operacional"
+                                >
+                                    <option value="all">Todos os Status</option>
+                                    <option value="Operacional">Operacional</option>
+                                    <option value="Em Manutenção">Em Manutenção</option>
+                                    <option value="Inativo">Inativo</option>
+                                </select>
+                            </div>
 
                         </div>
                     </div>

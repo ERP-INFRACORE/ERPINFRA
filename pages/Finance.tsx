@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
    Upload,
    Plus,
@@ -45,8 +45,9 @@ import {
 import { useToast } from '../context/ToastContext';
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, AreaChart, Area, Legend } from 'recharts';
 import { useApp } from '../context/AppContext';
-import { Transaction } from '../types';
+import { Transaction, Sale } from '../types';
 import { printDocument } from '../utils/exportUtils';
+import { toDeterministicUUID } from '../src/services/api';
 
 type FinanceTab = 'overview' | 'cashflow' | 'ledger' | 'receivables' | 'payables' | 'accounts' | 'planning';
 
@@ -71,7 +72,8 @@ const Finance = () => {
    const {
       transactions, financials, addTransaction, deleteTransaction, importTransactions, updateTransactionStatus, updateTransaction,
       accounts, addAccount, deleteAccount,
-      planOfAccounts, addPlanAccount, deletePlanAccount, updatePlanAccount, hasPermission, currentUser, settings
+      planOfAccounts, addPlanAccount, deletePlanAccount, updatePlanAccount, hasPermission, currentUser, settings,
+      sales
    } = useApp();
    const { addToast } = useToast();
 
@@ -250,6 +252,295 @@ const Finance = () => {
    const payables = useMemo(() => {
       return transactions.filter(tx => tx.type === 'Despesa' && tx.status !== 'Conciliado' && tx.status !== 'Cancelado');
    }, [transactions]);
+
+   // =========================================================================
+   // RECONCILIAÇÃO AUTOMÁTICA DE VENDAS A PRAZO & BOLETOS -> CONTAS A RECEBER
+   // =========================================================================
+   const formatToLocaleDate = (dateStr?: string): string => {
+      if (!dateStr) return new Date().toLocaleDateString('pt-BR');
+      if (dateStr.includes('/')) return dateStr;
+      if (dateStr.includes('-')) {
+         const parts = dateStr.split('T')[0].split('-');
+         if (parts.length === 3) {
+            return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+         }
+      }
+      const d = new Date(dateStr);
+      return isNaN(d.getTime()) ? dateStr : d.toLocaleDateString('pt-BR');
+   };
+
+   const addDaysToDate = (baseDate: Date, days: number): string => {
+      const d = new Date(baseDate);
+      d.setDate(d.getDate() + days);
+      return d.toLocaleDateString('pt-BR');
+   };
+
+   const getPaymentMethodDisplay = (method?: string): string => {
+      const m = (method || '').toLowerCase();
+      if (m === 'boleto') return 'Boleto Bancário';
+      if (m === 'prazo') return 'A Prazo / Crediário';
+      if (m === 'credit') return 'Cartão de Crédito';
+      if (m === 'debit') return 'Cartão de Débito';
+      if (m === 'pix') return 'PIX';
+      if (m === 'money') return 'Dinheiro';
+      if (m === 'transfer') return 'Transferência Bancária';
+      return method ? method.toUpperCase() : 'A Prazo';
+   };
+
+   const isSaleNeedingReceivable = (sale: Sale): boolean => {
+      if (!sale || !sale.id || (sale.amount || 0) <= 0) return false;
+      if (sale.status === 'Cancelado') return false;
+      const method = (sale.paymentMethod || '').toLowerCase();
+      const isDeferred = ['boleto', 'prazo', 'credit', 'crediario', 'faturado', 'duplicata', 'cheque'].includes(method);
+      const isPending = sale.status === 'Pendente';
+      const hasInstallments = (sale.installments || 0) > 1;
+      return isDeferred || isPending || hasInstallments;
+   };
+
+   const isSaleSynced = (sale: Sale, allTransactions: Transaction[]): boolean => {
+      return allTransactions.some(tx => {
+         if (tx.originId && tx.originId === sale.id) return true;
+         if (tx.id && (tx.id === toDeterministicUUID(`TX-SALE-${sale.id}-P1`) || tx.id.includes(sale.id))) return true;
+         if (sale.documentNumber && tx.documentNumber && tx.originModule === 'Vendas') {
+            if (tx.documentNumber === sale.documentNumber || tx.documentNumber.startsWith(`${sale.documentNumber}-`)) {
+               return true;
+            }
+         }
+         return false;
+      });
+   };
+
+   const generateTransactionsForSale = (sale: Sale): Transaction[] => {
+      const numInstallments = sale.installments && sale.installments > 1 ? sale.installments : 1;
+      const totalAmount = Number(sale.amount || 0);
+      const saleDate = sale.date || new Date().toLocaleDateString('pt-BR');
+      const baseDate = parseDateString(saleDate);
+
+      const targetAccount = accounts.find(a => a.id === sale.accountId) || accounts[0] || { id: 'acc-1', name: 'Caixa Geral' };
+      const defaultAccountId = sale.accountId || targetAccount.id;
+      const defaultAccountName = sale.account || targetAccount.name;
+
+      const docBase = sale.documentNumber || (sale.id && sale.id.startsWith('S-') ? sale.id.slice(2) : sale.id.slice(0, 8));
+      const txsToCreate: Transaction[] = [];
+
+      if (numInstallments > 1) {
+         const baseInstallment = Number((totalAmount / numInstallments).toFixed(2));
+         const sumOthers = Number((baseInstallment * (numInstallments - 1)).toFixed(2));
+         const lastInstallment = Number((totalAmount - sumOthers).toFixed(2));
+
+         for (let i = 1; i <= numInstallments; i++) {
+            let dueDate = addDaysToDate(baseDate, i * 30);
+            if (sale.installmentDueDates && sale.installmentDueDates[i - 1]) {
+               dueDate = formatToLocaleDate(sale.installmentDueDates[i - 1]);
+            }
+
+            const parcelAmount = i === numInstallments ? lastInstallment : baseInstallment;
+
+            const instTx: Transaction = {
+               id: toDeterministicUUID(`TX-SALE-${sale.id}-P${i}`),
+               date: saleDate,
+               dueDate: dueDate,
+               description: `Venda #${docBase} - ${sale.clientName || 'Cliente'} (${i}/${numInstallments})`,
+               category: '1.01.01 - Receita de Vendas',
+               ledgerCode: sale.ledgerCode || '1.01.01',
+               ledgerName: sale.ledgerName || 'Receita de Vendas',
+               accountId: defaultAccountId,
+               account: defaultAccountName,
+               amount: parcelAmount,
+               status: 'Pendente',
+               type: 'Receita',
+               documentNumber: `${docBase}-${i}/${numInstallments}`,
+               partnerId: sale.clientId || sale.partnerId,
+               partnerName: sale.clientName || sale.partnerName || 'Cliente',
+               originModule: 'Vendas',
+               originId: sale.id,
+               paymentMethod: getPaymentMethodDisplay(sale.paymentMethod),
+               competenceDate: saleDate,
+               notes: `Lançamento automático de Contas a Receber referente à Venda #${docBase} via ${getPaymentMethodDisplay(sale.paymentMethod)} - Parcela ${i}/${numInstallments}`
+            };
+
+            txsToCreate.push(instTx);
+         }
+      } else {
+         const dueDate = sale.dueDate
+            ? formatToLocaleDate(sale.dueDate)
+            : addDaysToDate(baseDate, Number(settings?.operational?.defaultPaymentTerm) || 30);
+
+         const singleTx: Transaction = {
+            id: toDeterministicUUID(`TX-SALE-${sale.id}-P1`),
+            date: saleDate,
+            dueDate: dueDate,
+            description: `Venda #${docBase} - ${sale.clientName || 'Cliente'}`,
+            category: '1.01.01 - Receita de Vendas',
+            ledgerCode: sale.ledgerCode || '1.01.01',
+            ledgerName: sale.ledgerName || 'Receita de Vendas',
+            accountId: defaultAccountId,
+            account: defaultAccountName,
+            amount: totalAmount,
+            status: 'Pendente',
+            type: 'Receita',
+            documentNumber: docBase,
+            partnerId: sale.clientId || sale.partnerId,
+            partnerName: sale.clientName || sale.partnerName || 'Cliente',
+            originModule: 'Vendas',
+            originId: sale.id,
+            paymentMethod: getPaymentMethodDisplay(sale.paymentMethod),
+            competenceDate: saleDate,
+            notes: `Lançamento automático de Contas a Receber referente à Venda #${docBase} via ${getPaymentMethodDisplay(sale.paymentMethod)}`
+         };
+
+         txsToCreate.push(singleTx);
+      }
+
+      return txsToCreate;
+   };
+
+   // Missing Term/Boleto sales detection
+   const unreconciledSales = useMemo(() => {
+      if (!Array.isArray(sales)) return [];
+      return sales.filter(s => isSaleNeedingReceivable(s) && !isSaleSynced(s, transactions));
+   }, [sales, transactions]);
+
+   const [isSyncingSales, setIsSyncingSales] = useState(false);
+   const syncedSaleIdsRef = useRef<Set<string>>(new Set());
+   const isAutoSyncingRef = useRef<boolean>(false);
+
+   // Auto-reconciliation of term/boleto sales
+   useEffect(() => {
+      if (!Array.isArray(sales) || sales.length === 0 || isAutoSyncingRef.current) return;
+
+      const unSynced = sales.filter(s => isSaleNeedingReceivable(s) && !isSaleSynced(s, transactions) && !syncedSaleIdsRef.current.has(s.id));
+      if (unSynced.length === 0) return;
+
+      isAutoSyncingRef.current = true;
+      unSynced.forEach(s => syncedSaleIdsRef.current.add(s.id));
+
+      let generatedCount = 0;
+      unSynced.forEach(sale => {
+         const newTxs = generateTransactionsForSale(sale);
+         newTxs.forEach(tx => {
+            addTransaction(tx);
+            generatedCount++;
+         });
+      });
+
+      if (generatedCount > 0) {
+         addToast(
+            `Sincronização Contas a Receber: ${generatedCount} títulos gerados a partir de ${unSynced.length} venda(s) a prazo/boleto.`,
+            'info',
+            5000
+         );
+      }
+
+      const timer = setTimeout(() => {
+         isAutoSyncingRef.current = false;
+      }, 1000);
+
+      return () => clearTimeout(timer);
+   }, [sales, transactions, addTransaction, addToast]);
+
+   // Manual Trigger for Synchronization
+   const handleManualSyncSales = () => {
+      if (!Array.isArray(sales) || sales.length === 0) {
+         addToast("Nenhuma venda encontrada no sistema para sincronização.", 'info');
+         return;
+      }
+
+      setIsSyncingSales(true);
+      try {
+         const unSynced = sales.filter(s => isSaleNeedingReceivable(s) && !isSaleSynced(s, transactions));
+
+         if (unSynced.length === 0) {
+            addToast("Todas as vendas a prazo e boletos já estão sincronizadas com o Contas a Receber.", 'info');
+            setIsSyncingSales(false);
+            return;
+         }
+
+         unSynced.forEach(s => syncedSaleIdsRef.current.add(s.id));
+
+         let createdCount = 0;
+         unSynced.forEach(sale => {
+            const newTxs = generateTransactionsForSale(sale);
+            newTxs.forEach(tx => {
+               addTransaction(tx);
+               createdCount++;
+            });
+         });
+
+         addToast(
+            `Sucesso: ${createdCount} títulos de Contas a Receber gerados a partir de ${unSynced.length} venda(s) a prazo/boleto!`,
+            'success',
+            6000
+         );
+      } catch (err) {
+         console.error("Erro ao sincronizar vendas a prazo:", err);
+         addToast("Erro ao processar a sincronização das vendas.", 'error');
+      } finally {
+         setTimeout(() => {
+            setIsSyncingSales(false);
+         }, 500);
+      }
+   };
+
+   // Enhanced Filtered Lists for Receivables and Payables with Search & Status
+   const filteredReceivables = useMemo(() => {
+      return transactions.filter(tx => {
+         if (tx.type !== 'Receita' || tx.status === 'Cancelado') return false;
+
+         if (statusFilter === 'Todos') {
+            if (tx.status === 'Conciliado') return false;
+         } else if (tx.status !== statusFilter) {
+            return false;
+         }
+
+         if (searchTerm.trim()) {
+            const term = searchTerm.toLowerCase();
+            const matches = (tx.description || '').toLowerCase().includes(term) ||
+               (tx.category || '').toLowerCase().includes(term) ||
+               (tx.ledgerName || '').toLowerCase().includes(term) ||
+               (tx.account || '').toLowerCase().includes(term) ||
+               (tx.documentNumber || '').toLowerCase().includes(term) ||
+               (tx.partnerName || '').toLowerCase().includes(term) ||
+               (tx.paymentMethod || '').toLowerCase().includes(term);
+            if (!matches) return false;
+         }
+
+         return true;
+      });
+   }, [transactions, searchTerm, statusFilter]);
+
+   const filteredPayables = useMemo(() => {
+      return transactions.filter(tx => {
+         if (tx.type !== 'Despesa' || tx.status === 'Cancelado') return false;
+
+         if (statusFilter === 'Todos') {
+            if (tx.status === 'Conciliado') return false;
+         } else if (tx.status !== statusFilter) {
+            return false;
+         }
+
+         if (searchTerm.trim()) {
+            const term = searchTerm.toLowerCase();
+            const matches = (tx.description || '').toLowerCase().includes(term) ||
+               (tx.category || '').toLowerCase().includes(term) ||
+               (tx.ledgerName || '').toLowerCase().includes(term) ||
+               (tx.account || '').toLowerCase().includes(term) ||
+               (tx.documentNumber || '').toLowerCase().includes(term) ||
+               (tx.partnerName || '').toLowerCase().includes(term) ||
+               (tx.paymentMethod || '').toLowerCase().includes(term);
+            if (!matches) return false;
+         }
+
+         return true;
+      });
+   }, [transactions, searchTerm, statusFilter]);
+
+   const currentTabTransactions = useMemo(() => {
+      if (activeTab === 'ledger') return filteredTransactions;
+      if (activeTab === 'receivables') return filteredReceivables;
+      if (activeTab === 'payables') return filteredPayables;
+      return [];
+   }, [activeTab, filteredTransactions, filteredReceivables, filteredPayables]);
 
    // Overview 6-Month Chart Data
    const chartData = useMemo(() => {
@@ -1684,6 +1975,24 @@ const Finance = () => {
                         <option value="Vencido">Vencidos</option>
                      </select>
 
+                     {/* Sincronização Manual de Vendas a Prazo / Boletos */}
+                     {activeTab === 'receivables' && (
+                        <button
+                           onClick={handleManualSyncSales}
+                           disabled={isSyncingSales}
+                           className="py-2 px-3 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                           title="Sincronizar Vendas a Prazo e Boletos com Contas a Receber"
+                        >
+                           <RefreshCw size={14} className={isSyncingSales ? 'animate-spin' : ''} />
+                           <span>Sincronizar Vendas</span>
+                           {unreconciledSales.length > 0 && (
+                              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500 text-white font-black animate-pulse">
+                                 {unreconciledSales.length}
+                              </span>
+                           )}
+                        </button>
+                     )}
+
                      {/* Import OFX/CSV */}
                      <label className="p-2.5 text-slate-500 hover:text-cyan-600 bg-slate-50 hover:bg-slate-100 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-xl cursor-pointer transition-colors" title="Importar Extrato OFX/CSV">
                         <Upload size={16} />
@@ -1693,7 +2002,7 @@ const Finance = () => {
                      {/* Export CSV */}
                      <button
                         onClick={() => {
-                           const list = activeTab === 'ledger' ? filteredTransactions : activeTab === 'receivables' ? receivables : payables;
+                           const list = currentTabTransactions;
                            const headers = 'Data;Vencimento;Descricao;Categoria;Conta;Tipo;Valor;Status\n';
                            const rows = list.map(t => `"${t.date}";"${t.dueDate || t.date}";"${t.description}";"${t.ledgerName || t.category}";"${t.account}";"${t.type}";"${t.amount.toFixed(2)}";"${t.status}"`).join('\n');
                            const corporateHeader = [
@@ -1721,6 +2030,33 @@ const Finance = () => {
                   </div>
                </div>
 
+               {/* Banner de Alerta para Vendas a Prazo/Boleto Pendentes de Sincronização */}
+               {activeTab === 'receivables' && unreconciledSales.length > 0 && (
+                  <div className="mx-6 my-4 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-300">
+                     <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 shrink-0">
+                           <AlertCircle size={20} />
+                        </div>
+                        <div>
+                           <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                              {unreconciledSales.length} {unreconciledSales.length === 1 ? 'venda a prazo/boleto identificada' : 'vendas a prazo/boletos identificadas'} sem títulos no Contas a Receber
+                           </p>
+                           <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                              Existem vendas com cobrança a prazo ou boleto que ainda não geraram títulos. Clique ao lado para sincronizar.
+                           </p>
+                        </div>
+                     </div>
+                     <button
+                        onClick={handleManualSyncSales}
+                        disabled={isSyncingSales}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md shadow-amber-600/20 flex items-center gap-2 transition-all shrink-0 cursor-pointer disabled:opacity-50"
+                     >
+                        <RefreshCw size={14} className={isSyncingSales ? 'animate-spin' : ''} />
+                        {isSyncingSales ? 'Sincronizando...' : 'Sincronizar Agora'}
+                     </button>
+                  </div>
+               )}
+
                {/* Table */}
                <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left">
@@ -1729,8 +2065,8 @@ const Finance = () => {
                            <th className="px-4 py-4 text-center w-12">
                               <input
                                  type="checkbox"
-                                 checked={selectedTxIds.length > 0 && selectedTxIds.length === (activeTab === 'ledger' ? filteredTransactions : activeTab === 'receivables' ? receivables : payables).length}
-                                 onChange={() => handleToggleSelectAll(activeTab === 'ledger' ? filteredTransactions : activeTab === 'receivables' ? receivables : payables)}
+                                 checked={selectedTxIds.length > 0 && selectedTxIds.length === currentTabTransactions.length}
+                                 onChange={() => handleToggleSelectAll(currentTabTransactions)}
                                  className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 w-4 h-4 cursor-pointer"
                               />
                            </th>
@@ -1744,7 +2080,7 @@ const Finance = () => {
                         </tr>
                      </thead>
                      <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
-                        {(activeTab === 'ledger' ? filteredTransactions : activeTab === 'receivables' ? receivables : payables).map(tx => {
+                        {currentTabTransactions.map(tx => {
                            const isSelected = selectedTxIds.includes(tx.id);
                            const isSettled = tx.status === 'Conciliado';
 
@@ -1777,9 +2113,23 @@ const Finance = () => {
                                           {tx.partnerName && (
                                              <p className="text-[10px] text-slate-400 font-semibold">{tx.partnerName}</p>
                                           )}
-                                          {tx.documentNumber && (
-                                             <span className="text-[10px] text-cyan-600 font-mono font-bold">Doc: {tx.documentNumber}</span>
-                                          )}
+                                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                             {tx.documentNumber && (
+                                                <span className="text-[10px] text-cyan-600 font-mono font-bold bg-cyan-50 dark:bg-cyan-950/50 px-1.5 py-0.5 rounded">
+                                                   Doc: {tx.documentNumber}
+                                                </span>
+                                             )}
+                                             {tx.paymentMethod && (
+                                                <span className="text-[10px] text-slate-600 dark:text-slate-300 font-semibold bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                                                   {tx.paymentMethod}
+                                                </span>
+                                             )}
+                                             {tx.originModule === 'Vendas' && (
+                                                <span className="text-[9px] text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-200/50 dark:border-emerald-800/50">
+                                                   Vendas
+                                                </span>
+                                             )}
+                                          </div>
                                        </div>
                                     </div>
                                  </td>
@@ -1872,6 +2222,23 @@ const Finance = () => {
                               </tr>
                            );
                         })}
+                        {currentTabTransactions.length === 0 && (
+                           <tr>
+                              <td colSpan={8} className="py-12 text-center text-slate-400">
+                                 <div className="flex flex-col items-center justify-center gap-2">
+                                    <Info size={32} className="text-slate-300 dark:text-gray-600" />
+                                    <p className="font-bold text-slate-600 dark:text-slate-300 text-sm">
+                                       Nenhum título ou lançamento encontrado
+                                    </p>
+                                    <p className="text-xs text-slate-400 max-w-sm">
+                                       {activeTab === 'receivables'
+                                          ? 'Não há contas a receber pendentes com os filtros atuais. Se novas vendas a prazo foram emitidas, utilize o botão "Sincronizar Vendas".'
+                                          : 'Nenhum lançamento corresponde aos filtros ou critérios de busca informados.'}
+                                    </p>
+                                 </div>
+                              </td>
+                           </tr>
+                        )}
                      </tbody>
                   </table>
                </div>

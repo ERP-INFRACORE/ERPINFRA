@@ -35,7 +35,11 @@ import {
   FileJson,
   Radio,
   Clock,
-  ShieldCheck
+  ShieldCheck,
+  Maximize2,
+  Minimize2,
+  SlidersHorizontal,
+  HelpCircle
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
@@ -700,6 +704,7 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
   const [telemetrySearch, setTelemetrySearch] = useState('');
   const [pingStatus, setPingStatus] = useState<string | null>(null);
   const [copiedTelemetryId, setCopiedTelemetryId] = useState<string | null>(null);
+  const [isCompactMode, setIsCompactMode] = useState<boolean>(true);
   const [selectedModule, setSelectedModule] = useState<string>('Todos');
   const [selectedLayer, setSelectedLayer] = useState<'Todos' | 'Front-end' | 'Back-end'>('Todos');
   const [selectedSeverity, setSelectedSeverity] = useState<'Todos' | 'Crítico' | 'Alto' | 'Médio'>('Todos');
@@ -1545,23 +1550,43 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
                 <span className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 rounded-full flex items-center gap-1">
                   <Sparkles size={11} /> Code Review & Diff Ativo
                 </span>
+                <span className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 rounded-full flex items-center gap-1">
+                  <Activity size={11} /> Telemetria Contínua
+                </span>
               </div>
-              <p className="text-xs sm:text-sm text-slate-300 mt-1.5 max-w-3xl leading-relaxed">
-                Agente restrito ao <strong className="text-white">Administrador</strong> que inspeciona o código-fonte do ERP,
-                compara o <strong className="text-cyan-300">Código Atual (Antes) vs. Código Sugerido (Depois)</strong>,
-                gera prompts técnicos de refatoração e envia propostas direto para a fila de aprovação do Agente de Código.
-              </p>
+              {!isCompactMode && (
+                <p className="text-xs sm:text-sm text-slate-300 mt-1.5 max-w-3xl leading-relaxed animate-in fade-in duration-200">
+                  Agente restrito ao <strong className="text-white">Administrador</strong> que inspeciona o código-fonte do ERP,
+                  compara o <strong className="text-cyan-300">Código Atual (Antes) vs. Código Sugerido (Depois)</strong>,
+                  gera prompts técnicos de refatoração e envia propostas direto para a fila de aprovação do Agente de Código.
+                </p>
+              )}
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {/* Toggle Modo Compacto / Modo Completo */}
+            <button
+              type="button"
+              onClick={() => setIsCompactMode(prev => !prev)}
+              className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm"
+              title={isCompactMode ? "Dica: Alternar para Modo Completo (exibe métricas e KPIs detalhados)" : "Dica: Alternar para Modo Compacto (foco direto nas sugestões e telemetria sem ruído visual)"}
+            >
+              {isCompactMode ? <Maximize2 size={14} className="text-cyan-400" /> : <Minimize2 size={14} className="text-cyan-400" />}
+              <span>{isCompactMode ? 'Modo Completo' : 'Modo Compacto'}</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-cyan-500/20 text-cyan-300 border border-cyan-400/30">
+                {isCompactMode ? 'Foco Limpo' : 'KPIs'}
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={handleGenerateAutoSuggestions}
-              className="px-4 py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg shadow-amber-500/25 transition-all flex items-center gap-2"
+              className="px-4 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg shadow-amber-500/25 transition-all flex items-center gap-2"
+              title="Dica: Sintetiza dinamicamente novas sugestões de código baseadas nas métricas ativas do ERP"
             >
-              <Wand2 size={15} />
-              Gerar Novas Sugestões de Prompts
+              <Wand2 size={14} />
+              Gerar Sugestões
             </button>
 
             <button
@@ -1653,8 +1678,9 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
           </button>
         </div>
 
-        {/* KPI Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-5 pt-5 border-t border-white/10">
+        {/* KPI Summary Cards (Ocultos no Modo Compacto) */}
+        {!isCompactMode && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-5 pt-5 border-t border-white/10 animate-in fade-in duration-200">
           <div className="bg-cyan-500/15 border border-cyan-400/30 rounded-2xl p-3.5">
             <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300 block">Sugestões de Código</span>
             <span className="text-2xl font-black text-white mt-0.5 block">{stats.suggestionsCount}</span>
@@ -1686,6 +1712,7 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
             <span className="text-[10px] text-emerald-300/80 font-bold">Sync, RLS & Transações</span>
           </div>
         </div>
+        )}
       </div>
 
       {/* VIEW 1: SUGESTÕES DE ALTERAÇÃO DE CÓDIGO (DIFF ANTES VS DEPOIS) */}
@@ -2323,24 +2350,29 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
               <button
                 type="button"
                 onClick={handleTriggerTelemetryPing}
-                className="px-3.5 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-400/40 text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm"
+                className="px-3.5 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-400/40 text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm group"
+                title="Dica: Dispara um teste de latência em milissegundos e grava evento de pulso auditado no banco de logs"
               >
                 <Radio size={14} className="animate-ping" />
-                Disparar Pulso de Telemetria
+                <span>Disparar Pulso</span>
+                <span className="px-1.5 py-0.2 rounded text-[8px] bg-cyan-400/30 text-cyan-200 font-mono font-bold">PING</span>
               </button>
               <button
                 type="button"
                 onClick={handleExportTelemetryJSON}
-                className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm"
+                className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm group"
+                title="Dica: Faz o download de um snapshot JSON contendo integridade diagnóstica e os últimos eventos para SIEM"
               >
                 <Download size={14} />
-                Exportar Snapshot JSON
+                <span>Exportar Snapshot</span>
+                <span className="px-1.5 py-0.2 rounded text-[8px] bg-white/20 text-white font-mono font-bold">JSON</span>
               </button>
             </div>
           </div>
 
-          {/* Telemetry KPIs */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Telemetry KPIs (Ocultos no Modo Compacto) */}
+          {!isCompactMode && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-in fade-in duration-200">
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Ações dos Agentes IA</span>
@@ -2393,6 +2425,7 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
               </span>
             </div>
           </div>
+          )}
 
           {/* Diagnostic Integrity Panel */}
           <div className="bg-slate-50 dark:bg-slate-900/60 p-4 sm:p-5 rounded-3xl border border-slate-200 dark:border-slate-700/70 space-y-3">

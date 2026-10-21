@@ -52,6 +52,8 @@ import {
     ExternalLink,
     Settings as SettingsGear,
     Sliders,
+    SlidersHorizontal,
+    HelpCircle,
     Package,
     TrendingUp,
     DollarSign,
@@ -2994,6 +2996,15 @@ const Settings = () => {
     const [selectedAuditLog, setSelectedAuditLog] = useState<AuditLog | null>(null);
     const [showAuditReportModal, setShowAuditReportModal] = useState(false);
     const [copiedLogField, setCopiedLogField] = useState<string | null>(null);
+    const [showAdvancedAuditFilters, setShowAdvancedAuditFilters] = useState(false);
+
+    const activeAdvancedFilterCount = useMemo(() => {
+        let count = 0;
+        if (auditUserFilter !== 'Todos') count++;
+        if (auditModuleFilter !== 'Todos') count++;
+        if (auditPeriodPreset === 'custom') count++;
+        return count;
+    }, [auditUserFilter, auditModuleFilter, auditPeriodPreset]);
 
     const handleSetPeriodPreset = (preset: '30days' | '7days' | 'today' | 'yesterday' | 'thisMonth' | 'all') => {
         setAuditPeriodPreset(preset);
@@ -3037,6 +3048,7 @@ const Settings = () => {
         setAuditSeverityFilter('all');
         handleSetPeriodPreset('30days');
         setAuditPage(1);
+        setShowAdvancedAuditFilters(false);
         addToast('Filtros de auditoria redefinidos para os padrões.', 'info');
     };
 
@@ -3177,6 +3189,15 @@ const Settings = () => {
 
         const isExistingUser = users.some(u => u.id === editingUser.id);
         const originalUser = isExistingUser ? users.find(u => u.id === editingUser.id) : undefined;
+        const isRootAdmin = originalUser?.username?.toLowerCase() === 'admin';
+
+        // Governança: Inviolabilidade da Conta Raiz @admin
+        if (isRootAdmin) {
+            if (cleanUsername !== 'admin') {
+                addToast('O identificador da conta raiz "@admin" é protegido e não pode ser renomeado.', 'error');
+                return;
+            }
+        }
 
         // Unicidade de Login
         const duplicateUsername = users.some(
@@ -3213,6 +3234,18 @@ const Settings = () => {
         const willBeAdmin = isSuperAdminRole(selectedRole);
         const wasAdmin = originalUser ? isUserAdmin(originalUser, roles) : false;
 
+        // Governança: Conta raiz @admin deve permanecer obrigatoriamente como Administrador
+        if (isRootAdmin && !willBeAdmin) {
+            addToast('A conta raiz "@admin" deve permanecer obrigatoriamente vinculada ao perfil de Administrador.', 'error');
+            return;
+        }
+
+        // Governança: Prevenção de Auto-Elevação de Privilégios (Anti-Privilege Escalation)
+        if (isExistingUser && editingUser.id === currentUser?.id && editingUser.roleId !== originalUser?.roleId && !isSuperAdmin) {
+            addToast('Violação de governança: Você não possui autorização para alterar o seu próprio perfil de acesso.', 'error');
+            return;
+        }
+
         // Se o operador não for Super Admin, não pode promover a admin nem modificar conta de admin
         if ((willBeAdmin || wasAdmin) && !isSuperAdmin) {
             addToast('Apenas administradores podem atribuir ou modificar usuários com perfil de Administrador.', 'error');
@@ -3224,7 +3257,13 @@ const Settings = () => {
 
         // Não permitir inativar a si próprio
         if (editingUser.id && editingUser.id === currentUser?.id && newStatus === 'Inativo') {
-            addToast('Você não pode desativar a sua própria conta de usuário.', 'error');
+            addToast('Você não pode desativar a sua própria conta de usuário conectada.', 'error');
+            return;
+        }
+
+        // Governança: Conta raiz @admin não pode ser inativada
+        if (isRootAdmin && newStatus === 'Inativo') {
+            addToast('A conta raiz "@admin" é protegida pelo sistema e não pode ser inativada.', 'error');
             return;
         }
 
@@ -3232,7 +3271,7 @@ const Settings = () => {
         if (newStatus === 'Inativo' && wasAdmin) {
             const activeAdmins = users.filter(u => u.id !== editingUser.id && u.status === 'Ativo' && isUserAdmin(u, roles));
             if (activeAdmins.length === 0) {
-                addToast('Operação negada: O sistema não pode ficar sem nenhum Administrador ativo.', 'error');
+                addToast('Operação negada pela governança: O sistema não pode ficar sem nenhum Administrador ativo.', 'error');
                 return;
             }
         }
@@ -3241,7 +3280,7 @@ const Settings = () => {
         if (wasAdmin && !willBeAdmin) {
             const activeAdmins = users.filter(u => u.id !== editingUser.id && u.status === 'Ativo' && isUserAdmin(u, roles));
             if (activeAdmins.length === 0) {
-                addToast('Operação negada: O sistema deve possuir pelo menos um Administrador ativo.', 'error');
+                addToast('Operação negada pela governança: O sistema deve possuir pelo menos um Administrador ativo.', 'error');
                 return;
             }
         }
@@ -3257,14 +3296,39 @@ const Settings = () => {
                 addToast('A senha não cumpre a política de segurança: mínimo 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.', 'error');
                 return;
             }
-        } else {
-            if (rawPassword && !isStrongPassword(rawPassword)) {
-                addToast('A nova senha não cumpre a política de segurança: mínimo 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.', 'error');
+            if (cleanUsername && rawPassword.toLowerCase().includes(cleanUsername.toLowerCase())) {
+                addToast('A senha de acesso não pode conter o seu nome de usuário por diretrizes de segurança.', 'error');
                 return;
+            }
+        } else {
+            if (rawPassword) {
+                if (!isStrongPassword(rawPassword)) {
+                    addToast('A nova senha não cumpre a política de segurança: mínimo 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.', 'error');
+                    return;
+                }
+                if (cleanUsername && rawPassword.toLowerCase().includes(cleanUsername.toLowerCase())) {
+                    addToast('A senha de acesso não pode conter o seu nome de usuário por diretrizes de segurança.', 'error');
+                    return;
+                }
             }
         }
 
         try {
+            const isPasswordChanged = Boolean(rawPassword && (!originalUser || rawPassword !== originalUser.password));
+            const isRoleChanged = Boolean(isExistingUser && originalUser?.roleId !== selectedRole.id);
+            const isStatusChanged = Boolean(isExistingUser && originalUser?.status !== newStatus);
+            const isElevatedToAdmin = !wasAdmin && willBeAdmin;
+            const isDemotedFromAdmin = wasAdmin && !willBeAdmin;
+
+            const auditSeverity: 'info' | 'warning' | 'critical' =
+                isElevatedToAdmin || isDemotedFromAdmin
+                    ? 'warning'
+                    : isPasswordChanged || (isStatusChanged && newStatus === 'Inativo')
+                        ? 'warning'
+                        : willBeAdmin
+                            ? 'warning'
+                            : 'info';
+
             if (isExistingUser) {
                 const userToUpdate: User = {
                     ...editingUser,
@@ -3282,8 +3346,8 @@ const Settings = () => {
                     userName: currentUser?.name || 'Sistema',
                     module: 'Segurança',
                     action: 'Atualização de Usuário',
-                    details: `Usuário @${cleanUsername} atualizado. Cargo: "${selectedRole.name}", Status: ${newStatus}${rawPassword ? ' (senha redefinida)' : ''}.`,
-                    severity: wasAdmin !== willBeAdmin ? 'warning' : 'info'
+                    details: `Usuário @${cleanUsername} atualizado. Cargo: "${selectedRole.name}"${isRoleChanged ? ` (anterior: "${roles.find(r => r.id === originalUser?.roleId)?.name || 'N/A'}")` : ''}, Status: ${newStatus}${isPasswordChanged ? ', Senha Redefinida' : ''}.`,
+                    severity: auditSeverity
                 });
                 addToast(`Usuário @${cleanUsername} atualizado com sucesso!`, 'success');
             } else {
@@ -3307,7 +3371,7 @@ const Settings = () => {
                     module: 'Segurança',
                     action: 'Criação de Usuário',
                     details: `Novo usuário @${cleanUsername} (${cleanName}) criado com cargo "${selectedRole.name}".`,
-                    severity: 'info'
+                    severity: willBeAdmin ? 'warning' : 'info'
                 });
                 addToast(`Novo usuário @${cleanUsername} criado com sucesso!`, 'success');
             }
@@ -3333,18 +3397,19 @@ const Settings = () => {
         }
 
         if (user.username?.toLowerCase() === 'admin') {
-            addToast('O usuário raiz "@admin" é protegido pelo sistema e não pode ser excluído.', 'error');
+            addToast('A conta raiz "@admin" é protegida pelo sistema e não pode ser excluída.', 'error');
             return;
         }
 
-        if (isUserAdmin(user, roles)) {
-            const otherAdmins = users.filter(u => u.id !== user.id && u.status === 'Ativo' && isUserAdmin(u, roles));
-            if (otherAdmins.length === 0) {
-                addToast('Operação negada: Não é possível excluir o único administrador ativo do sistema.', 'error');
-                return;
-            }
+        const isTargetAdmin = isUserAdmin(user, roles);
+        if (isTargetAdmin) {
             if (!isSuperAdmin) {
                 addToast('Apenas outro Administrador pode excluir um usuário administrador.', 'error');
+                return;
+            }
+            const otherAdmins = users.filter(u => u.id !== user.id && u.status === 'Ativo' && isUserAdmin(u, roles));
+            if (otherAdmins.length === 0) {
+                addToast('Operação negada pela governança: Não é possível excluir o único administrador ativo do sistema.', 'error');
                 return;
             }
         }
@@ -3358,8 +3423,8 @@ const Settings = () => {
                     userName: currentUser?.name || 'Sistema',
                     module: 'Segurança',
                     action: 'Exclusão de Usuário',
-                    details: `Usuário @${user.username} (${user.name}) removido permanentemente.`,
-                    severity: 'warning'
+                    details: `Usuário @${user.username} (${user.name}) removido permanentemente.${isTargetAdmin ? ' [CONTA ADMINISTRADORA REMOVIDA]' : ''}`,
+                    severity: isTargetAdmin ? 'critical' : 'warning'
                 });
                 addToast(`Usuário @${user.username} removido com sucesso.`, 'info');
             }
@@ -3392,13 +3457,34 @@ const Settings = () => {
 
         const isEditingAdmin = isSuperAdminRole(originalRole) || isSuperAdminRole(editingRole);
         if (isEditingAdmin && !isSuperAdmin) {
-            addToast('Apenas administradores podem modificar o perfil de Administrador.', 'error');
+            addToast('Apenas administradores podem modificar ou criar perfis com privilégios de Administrador.', 'error');
             return;
         }
 
+        // Governança: Prevenção de representação de Administrador por não-administradores
+        if (!isSuperAdmin) {
+            if (/^(adm|admin|administrador|super\s*admin)/i.test(roleName)) {
+                addToast('Apenas administradores podem criar ou nomear perfis com denominação de Administrador.', 'error');
+                return;
+            }
+        }
+
+        // Governança: Inviolabilidade do perfil raiz de Administrador
+        if (originalRole?.id === 'admin') {
+            if (!/^(adm|admin|administrador|super\s*admin)/i.test(roleName)) {
+                addToast('O perfil raiz do sistema deve manter a denominação de Administrador.', 'error');
+                return;
+            }
+        }
+
         let finalPermissions = [...editingRole.permissions];
-        if (isEditingAdmin && !finalPermissions.includes('all')) {
-            finalPermissions = ['all', ...finalPermissions];
+        if (isEditingAdmin) {
+            if (!finalPermissions.includes('all')) {
+                finalPermissions = ['all', ...finalPermissions];
+            }
+        } else {
+            // Se não for admin, garante a remoção de 'all' ou '*'
+            finalPermissions = finalPermissions.filter(p => p !== 'all' && p !== '*');
         }
 
         try {
@@ -3415,7 +3501,7 @@ const Settings = () => {
                     userName: currentUser?.name || 'Sistema',
                     module: 'Segurança',
                     action: 'Atualização de Perfil (Role)',
-                    details: `Perfil "${roleName}" atualizado com ${finalPermissions.length} permissões.`,
+                    details: `Perfil "${roleName}" atualizado com ${finalPermissions.length} permissões.${isEditingAdmin ? ' [PERFIL ADMINISTRADOR]' : ''}`,
                     severity: isEditingAdmin ? 'warning' : 'info'
                 });
                 addToast(`Perfil "${roleName}" atualizado com sucesso!`, 'success');
@@ -3433,8 +3519,8 @@ const Settings = () => {
                     userName: currentUser?.name || 'Sistema',
                     module: 'Segurança',
                     action: 'Criação de Perfil (Role)',
-                    details: `Novo perfil "${roleName}" criado com ${finalPermissions.length} permissões.`,
-                    severity: 'info'
+                    details: `Novo perfil "${roleName}" criado com ${finalPermissions.length} permissões.${isEditingAdmin ? ' [PERFIL ADMINISTRADOR]' : ''}`,
+                    severity: isEditingAdmin ? 'warning' : 'info'
                 });
                 addToast(`Novo perfil "${roleName}" criado com sucesso!`, 'success');
             }
@@ -3454,7 +3540,7 @@ const Settings = () => {
         }
 
         if (isSuperAdminRole(role)) {
-            addToast('O perfil de Administrador é essencial para a segurança do sistema e não pode ser excluído.', 'error');
+            addToast('O perfil de Administrador é essencial para a governança e segurança do sistema e não pode ser excluído.', 'error');
             return;
         }
 
@@ -3473,7 +3559,7 @@ const Settings = () => {
                     userName: currentUser?.name || 'Sistema',
                     module: 'Segurança',
                     action: 'Exclusão de Perfil (Role)',
-                    details: `Perfil de acesso "${role.name}" removido permanentemente.`,
+                    details: `Perfil de acesso "${role.name}" (ID: ${role.id}) removido permanentemente.`,
                     severity: 'warning'
                 });
                 addToast(`Perfil "${role.name}" removido com sucesso!`, 'info');
@@ -5147,34 +5233,41 @@ const Settings = () => {
                                     <button
                                         type="button"
                                         onClick={() => setShowAuditReportModal(true)}
-                                        className="w-full py-2 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all"
+                                        className="w-full py-2 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all group"
+                                        title="Dica: Gerar relatório executivo com cabeçalho institucional formatado para impressão e PDF"
                                     >
-                                        <FileText size={14} /> Relatório Rápido
+                                        <FileText size={14} />
+                                        <span>Relatório Executivo</span>
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] bg-white/25 uppercase font-black tracking-wider">PDF</span>
                                     </button>
                                     <div className="grid grid-cols-2 gap-2">
                                         <button
                                             type="button"
                                             onClick={() => exportAuditToCSV(filteredAuditLogs)}
-                                            className="py-1.5 px-2 bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-[10px] font-bold flex items-center justify-center gap-1.5 transition-colors"
-                                            title="Exportar registros filtrados em planilha CSV (compatível com Excel)"
+                                            className="py-1.5 px-2 bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-[10px] font-bold flex items-center justify-center gap-1.5 transition-colors group"
+                                            title="Dica: Exportar registros filtrados em planilha CSV com delimitador ponto e vírgula e UTF-8 BOM para Excel"
                                         >
-                                            <FileSpreadsheet size={12} /> CSV
+                                            <FileSpreadsheet size={12} className="text-emerald-400" />
+                                            <span>CSV</span>
+                                            <span className="text-[8px] font-black text-emerald-300 bg-emerald-500/20 px-1 py-0.2 rounded">EXCEL</span>
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => exportAuditToJSON(filteredAuditLogs)}
-                                            className="py-1.5 px-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1.5 transition-colors"
-                                            title="Exportar histórico filtrado em JSON completo para análise técnica"
+                                            className="py-1.5 px-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1.5 transition-colors group"
+                                            title="Dica: Exportar histórico filtrado em JSON completo com indentação estruturada para ingestão em SIEM / SOC"
                                         >
-                                            <FileJson size={12} /> JSON
+                                            <FileJson size={12} className="text-indigo-400" />
+                                            <span>JSON</span>
+                                            <span className="text-[8px] font-black text-indigo-400 bg-indigo-500/20 px-1 py-0.2 rounded">SIEM</span>
                                         </button>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Filters and Toolbar */}
+                            {/* Filters and Toolbar with Progressive Disclosure */}
                             <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm">
-                                {/* Linha 1: Busca e Atalhos de Período */}
+                                {/* Linha Principal: Busca, Presets de Período e Botão de Filtros Avançados */}
                                 <div className="flex flex-col xl:flex-row gap-3 justify-between items-stretch xl:items-center">
                                     <div className="flex-1 relative">
                                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -5193,6 +5286,7 @@ const Settings = () => {
                                                 type="button"
                                                 onClick={() => setAuditSearch('')}
                                                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                                                title="Limpar texto de busca"
                                             >
                                                 <X size={14} />
                                             </button>
@@ -5201,7 +5295,7 @@ const Settings = () => {
 
                                     {/* Presets Rápidos de Período */}
                                     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
-                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider hidden sm:inline mr-1">
+                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider hidden sm:inline mr-1" title="Dica: Filtrar eventos pela janela temporal">
                                             Período:
                                         </span>
                                         {[
@@ -5220,44 +5314,53 @@ const Settings = () => {
                                                     ? 'bg-slate-900 text-white border-slate-900 dark:bg-cyan-500 dark:text-slate-950 dark:border-cyan-500 shadow-sm'
                                                     : 'bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
                                                     }`}
+                                                title={`Dica: Filtrar eventos ocorridos em: ${preset.label}`}
                                             >
                                                 {preset.label}
                                             </button>
                                         ))}
                                     </div>
 
-                                    {/* Range Personalizado De / Até */}
-                                    <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 rounded-2xl px-3 py-2 border border-slate-200 dark:border-slate-700 shrink-0">
-                                        <Calendar size={14} className="text-slate-400 shrink-0" />
-                                        <input
-                                            type="date"
-                                            value={auditStartDate}
-                                            onChange={e => {
-                                                setAuditStartDate(e.target.value);
-                                                setAuditPeriodPreset('custom');
-                                                setAuditPage(1);
-                                            }}
-                                            className="bg-transparent border-none text-xs font-bold text-slate-700 dark:text-slate-200 outline-none w-28"
-                                        />
-                                        <span className="text-slate-400 text-xs font-bold">até</span>
-                                        <input
-                                            type="date"
-                                            value={auditEndDate}
-                                            onChange={e => {
-                                                setAuditEndDate(e.target.value);
-                                                setAuditPeriodPreset('custom');
-                                                setAuditPage(1);
-                                            }}
-                                            className="bg-transparent border-none text-xs font-bold text-slate-700 dark:text-slate-200 outline-none w-28"
-                                        />
+                                    {/* Botão de Expansão de Filtros Avançados */}
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAdvancedAuditFilters(prev => !prev)}
+                                            className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 border ${showAdvancedAuditFilters || activeAdvancedFilterCount > 0
+                                                ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700 shadow-sm'
+                                                : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                                }`}
+                                            title="Dica: Clique para abrir/recolher filtros avançados por Módulo, Usuário e Datas Personalizadas"
+                                        >
+                                            <SlidersHorizontal size={14} className={activeAdvancedFilterCount > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'} />
+                                            <span>Filtros Avançados</span>
+                                            {activeAdvancedFilterCount > 0 && (
+                                                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-indigo-600 text-white">
+                                                    {activeAdvancedFilterCount}
+                                                </span>
+                                            )}
+                                            <ChevronDown size={14} className={`transition-transform duration-200 ${showAdvancedAuditFilters ? 'rotate-180' : ''}`} />
+                                        </button>
+
+                                        {/* Botão Limpar Filtros Geral */}
+                                        {(auditSearch || auditModuleFilter !== 'Todos' || auditUserFilter !== 'Todos' || auditSeverityFilter !== 'all' || auditPeriodPreset !== '30days') && (
+                                            <button
+                                                type="button"
+                                                onClick={handleResetAuditFilters}
+                                                className="px-3 py-2 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-2xl text-xs font-bold hover:bg-rose-100 flex items-center gap-1.5 transition-colors"
+                                                title="Dica: Redefinir todos os filtros de busca, severidade, período e módulos para o padrão"
+                                            >
+                                                <RotateCcw size={13} />
+                                                <span className="hidden sm:inline">Limpar</span>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
 
-                                {/* Linha 2: Filtros de Severidade, Usuário e Módulo */}
+                                {/* Linha 2: Filtros de Severidade */}
                                 <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-700/60">
-                                    {/* Severidades */}
                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider mr-1">
+                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider mr-1" title="Dica: Classificação de risco e criticidade técnica do log">
                                             Severidade:
                                         </span>
                                         <button
@@ -5267,6 +5370,7 @@ const Settings = () => {
                                                 ? 'bg-slate-800 text-white border-slate-800 dark:bg-white dark:text-slate-900'
                                                 : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
                                                 }`}
+                                            title="Dica: Exibir todos os níveis de severidade"
                                         >
                                             Todas ({auditSeverityCounts.all})
                                         </button>
@@ -5277,6 +5381,7 @@ const Settings = () => {
                                                 ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                                                 : 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900/50 hover:bg-blue-100'
                                                 }`}
+                                            title="Dica: Eventos operacionais de rotina sem desvios (info)"
                                         >
                                             <Info size={11} /> Informativo ({auditSeverityCounts.info})
                                         </button>
@@ -5287,6 +5392,7 @@ const Settings = () => {
                                                 ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
                                                 : 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-900/50 hover:bg-amber-100'
                                                 }`}
+                                            title="Dica: Avisos operacionais, alterações sensíveis ou tentativas suspeitas (warning)"
                                         >
                                             <AlertTriangle size={11} /> Avisos ({auditSeverityCounts.warning})
                                         </button>
@@ -5297,90 +5403,131 @@ const Settings = () => {
                                                 ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
                                                 : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-900/50 hover:bg-rose-100'
                                                 }`}
+                                            title="Dica: Falhas críticas de segurança, exclusões massivas ou bloqueios do sistema (critical)"
                                         >
                                             <AlertTriangle size={11} /> Críticos ({auditSeverityCounts.critical})
                                         </button>
                                     </div>
 
-                                    {/* Dropdowns de Usuário e Módulo + Reset */}
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        {/* Usuário */}
-                                        <div className="relative">
-                                            <select
-                                                value={auditUserFilter}
-                                                onChange={e => {
-                                                    setAuditUserFilter(e.target.value);
-                                                    setAuditPage(1);
-                                                }}
-                                                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer pr-8"
-                                            >
-                                                <option value="Todos">👤 Todos os Usuários ({auditAvailableUsers.length})</option>
-                                                {auditAvailableUsers.map(u => (
-                                                    <option key={u.id} value={u.id}>{u.name} (ID: {u.id})</option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        {/* Módulo */}
-                                        <div className="relative">
-                                            <select
-                                                value={auditModuleFilter}
-                                                onChange={e => {
-                                                    setAuditModuleFilter(e.target.value);
-                                                    setAuditPage(1);
-                                                }}
-                                                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer pr-8"
-                                            >
-                                                {auditAvailableModules.map(m => (
-                                                    <option key={m} value={m}>
-                                                        📂 Módulo: {m} ({auditModuleCounts[m] ?? 0})
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        {/* Botão Limpar Filtros */}
-                                        {(auditSearch || auditModuleFilter !== 'Todos' || auditUserFilter !== 'Todos' || auditSeverityFilter !== 'all' || auditPeriodPreset !== '30days') && (
-                                            <button
-                                                type="button"
-                                                onClick={handleResetAuditFilters}
-                                                className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold hover:bg-rose-100 flex items-center gap-1.5 transition-colors"
-                                            >
-                                                <RotateCcw size={12} /> Limpar Filtros
-                                            </button>
-                                        )}
+                                    <div className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
+                                        <Clock size={12} className="text-slate-400" />
+                                        <span>Exibindo <strong>{filteredAuditLogs.length}</strong> registros</span>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* Module Horizontal Chips */}
-                            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                                {auditAvailableModules.map(m => {
-                                    const count = auditModuleCounts[m] ?? 0;
-                                    const isActive = auditModuleFilter === m;
-                                    return (
-                                        <button
-                                            key={m}
-                                            type="button"
-                                            onClick={() => {
-                                                setAuditModuleFilter(m);
-                                                setAuditPage(1);
-                                            }}
-                                            className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wide whitespace-nowrap transition-all border flex items-center gap-2 ${isActive
-                                                ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 shadow-sm'
-                                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
-                                                }`}
-                                        >
-                                            <span>{m}</span>
-                                            <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-mono ${isActive
-                                                ? 'bg-white/20 text-white dark:bg-slate-900/20 dark:text-slate-900'
-                                                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
-                                                }`}>
-                                                {count}
+                                {/* PAINEL EXPANSÍVEL: FILTROS AVANÇADOS (Divulgação Progressiva) */}
+                                {showAdvancedAuditFilters && (
+                                    <div className="pt-4 border-t border-slate-100 dark:border-slate-700/60 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                                        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/80">
+                                            {/* Range Personalizado De / Até */}
+                                            <div className="flex items-center gap-2">
+                                                <Calendar size={14} className="text-indigo-500 shrink-0" />
+                                                <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">
+                                                    Intervalo Específico:
+                                                </span>
+                                                <input
+                                                    type="date"
+                                                    value={auditStartDate}
+                                                    onChange={e => {
+                                                        setAuditStartDate(e.target.value);
+                                                        setAuditPeriodPreset('custom');
+                                                        setAuditPage(1);
+                                                    }}
+                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none w-32"
+                                                    title="Data inicial do filtro"
+                                                />
+                                                <span className="text-slate-400 text-xs font-bold">até</span>
+                                                <input
+                                                    type="date"
+                                                    value={auditEndDate}
+                                                    onChange={e => {
+                                                        setAuditEndDate(e.target.value);
+                                                        setAuditPeriodPreset('custom');
+                                                        setAuditPage(1);
+                                                    }}
+                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none w-32"
+                                                    title="Data final do filtro"
+                                                />
+                                            </div>
+
+                                            {/* Dropdowns de Usuário e Módulo */}
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                {/* Usuário */}
+                                                <div className="relative">
+                                                    <select
+                                                        value={auditUserFilter}
+                                                        onChange={e => {
+                                                            setAuditUserFilter(e.target.value);
+                                                            setAuditPage(1);
+                                                        }}
+                                                        className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer pr-8"
+                                                        title="Dica: Filtrar por operador ou usuário responsável"
+                                                    >
+                                                        <option value="Todos">👤 Todos os Usuários ({auditAvailableUsers.length})</option>
+                                                        {auditAvailableUsers.map(u => (
+                                                            <option key={u.id} value={u.id}>{u.name} (ID: {u.id})</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                {/* Módulo */}
+                                                <div className="relative">
+                                                    <select
+                                                        value={auditModuleFilter}
+                                                        onChange={e => {
+                                                            setAuditModuleFilter(e.target.value);
+                                                            setAuditPage(1);
+                                                        }}
+                                                        className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer pr-8"
+                                                        title="Dica: Filtrar por módulo do sistema"
+                                                    >
+                                                        {auditAvailableModules.map(m => (
+                                                            <option key={m} value={m}>
+                                                                📂 Módulo: {m} ({auditModuleCounts[m] ?? 0})
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Module Horizontal Chips */}
+                                        <div className="space-y-1.5">
+                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                                                Atalhos de Módulo (Clique para isolar):
                                             </span>
-                                        </button>
-                                    );
-                                })}
+                                            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                                                {auditAvailableModules.map(m => {
+                                                    const count = auditModuleCounts[m] ?? 0;
+                                                    const isActive = auditModuleFilter === m;
+                                                    return (
+                                                        <button
+                                                            key={m}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setAuditModuleFilter(m);
+                                                                setAuditPage(1);
+                                                            }}
+                                                            className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wide whitespace-nowrap transition-all border flex items-center gap-1.5 ${isActive
+                                                                ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 shadow-sm'
+                                                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                                                                }`}
+                                                            title={`Dica: Filtrar logs exclusivamente do módulo ${m}`}
+                                                        >
+                                                            <span>{m}</span>
+                                                            <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${isActive
+                                                                ? 'bg-white/20 text-white dark:bg-slate-900/20 dark:text-slate-900'
+                                                                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                                                                }`}>
+                                                                {count}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Data Table */}
@@ -5389,13 +5536,13 @@ const Settings = () => {
                                     <table className="w-full text-left border-collapse">
                                         <thead className="bg-slate-50 dark:bg-slate-900 sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
                                             <tr>
-                                                <th className="py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-44">Data / Hora</th>
-                                                <th className="py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-28">Severidade</th>
-                                                <th className="py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-48">Operador / Usuário</th>
-                                                <th className="py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-44">Módulo / Ação</th>
-                                                <th className="py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest">Detalhes Forenses</th>
-                                                <th className="py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-28 text-center">Origem / IP</th>
-                                                <th className="py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-28 text-right">Ações</th>
+                                                <th className="py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-44" title="Dica: Data, hora precisa e tempo relativo decorrido do evento">Data / Hora</th>
+                                                <th className="py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-28" title="Dica: Classificação de risco operacional (Informativo, Aviso ou Crítico)">Severidade</th>
+                                                <th className="py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-48" title="Dica: Operador autenticado ou agente executor">Operador / Usuário</th>
+                                                <th className="py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-44" title="Dica: Módulo afetado e método técnico acionado">Módulo / Ação</th>
+                                                <th className="py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest" title="Dica: Detalhamento forense e parâmetros técnicos da transação">Detalhes Forenses</th>
+                                                <th className="py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-28 text-center" title="Dica: Endereço IP e identificador de origem do cliente">Origem / IP</th>
+                                                <th className="py-4 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-28 text-right" title="Dica: Abrir painel forense com visualizador JSON">Ações</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700">

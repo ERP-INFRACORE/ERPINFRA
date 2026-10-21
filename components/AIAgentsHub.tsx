@@ -29,6 +29,7 @@ import {
     GitPullRequest,
     Copy,
     Send,
+    Play,
     RefreshCw,
     Radio,
     ShieldAlert,
@@ -51,11 +52,14 @@ import {
 import {
     AI_AGENT_CATALOG,
     AIAgentDefinition,
+    AIAgentPromptCategory,
     AGENT_TEST_TEMPLATES,
-    AgentTestTemplate,
     CODE_AGENT_GUARDRAILS,
     CODE_AGENT_PROTECTED_PATHS,
     CODE_AGENT_SYSTEM_PROMPT,
+    CODE_PROPOSAL_TEMPLATES,
+    CodeProposalTemplate,
+    ERP_PROMPT_VARIABLES,
     findUserRole,
     formatPhone,
     formatPhoneInput,
@@ -64,6 +68,7 @@ import {
     getPermissionName,
     getPhoneValidationMessage,
     getUserEligibility,
+    interpolatePromptVariables,
     isProtectedPath,
     isUserAdmin,
     isValidPhone,
@@ -108,6 +113,32 @@ const PROPOSAL_STATUS: Record<AICodeProposalStatus, { label: string; className: 
     aprovada: { label: 'Aprovada', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' },
     rejeitada: { label: 'Rejeitada', className: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' },
     aplicada: { label: 'Aplicada', className: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300' }
+};
+
+const PRESET_CATEGORY_STYLES: Record<
+    AIAgentPromptCategory,
+    { label: string; badgeClass: string; icon: React.ComponentType<{ size?: number; className?: string }> }
+> = {
+    seguranca: {
+        label: 'Segurança & LGPD',
+        badgeClass: 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800',
+        icon: ShieldCheck
+    },
+    alcada: {
+        label: 'Alçada & Limites',
+        badgeClass: 'bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border-sky-200 dark:border-sky-800',
+        icon: Lock
+    },
+    tom: {
+        label: 'Tom de Voz',
+        badgeClass: 'bg-violet-50 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300 border-violet-200 dark:border-violet-800',
+        icon: Sparkles
+    },
+    formato: {
+        label: 'Formato',
+        badgeClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+        icon: FileText
+    }
 };
 
 const INPUT_CLASS =
@@ -254,6 +285,22 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         );
     };
 
+    const applyCodeProposalTemplate = (tpl: CodeProposalTemplate) => {
+        setReqTitle(tpl.title);
+        setReqChangeType(tpl.changeType);
+        setReqPriority(tpl.priority);
+        setReqSelectedFiles(tpl.files);
+        setReqDescription(tpl.description);
+        addToast(`Modelo de solicitação "${tpl.title}" aplicado!`, 'info');
+    };
+
+    const testCodeGuardrailSimulation = () => {
+        addToast(
+            '🛡️ [Guardrail Acionado] Tentativa simulada de acesso a arquivo sensível (.env) bloqueada pelos guardrails de segurança!',
+            'error'
+        );
+    };
+
     /** Gera resposta ao vivo conectada aos dados reais do InfraCore ERP para os 10 agentes e Agente de Código */
     const generateAgentLiveReply = (agentId: string, promptText: string): string => {
         const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
@@ -323,20 +370,29 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         }
     };
 
-    const handleSendSimulatedMessage = (def: AIAgentDefinition) => {
-        const text = chatInput.trim();
+    const handleSendSimulatedMessageWithText = (def: AIAgentDefinition, customText?: string) => {
+        const text = (customText !== undefined ? customText : chatInput).trim();
         if (!text) return;
         const base = chatMessages[def.id] || def.example;
         let reply = generateAgentLiveReply(def.id, text);
         const s = getAgentSettings(config, def.id);
         if (s.customSystemPrompt?.trim()) {
-            reply += `\n\n📌 [Regra Customizada Aplicada]: "${s.customSystemPrompt.trim().slice(0, 80)}${s.customSystemPrompt.length > 80 ? '...' : ''}"`;
+            const interpolated = interpolatePromptVariables(s.customSystemPrompt, {
+                companyName: settings.tradeName || settings.companyName || 'InfraCore Soluções',
+                userName: currentUser?.name || 'Administrador',
+                alertLimit: 'R$ 5.000,00',
+                costCenter: 'Geral / Matriz',
+                scheduleMode: config.gateway.scheduleMode
+            });
+            reply += `\n\n📌 [Regra Customizada Aplicada]: "${interpolated.trim().slice(0, 90)}${interpolated.length > 90 ? '...' : ''}"`;
         }
         setChatMessages(prev => ({
             ...prev,
             [def.id]: [...base, { from: 'user', text }, { from: 'agent', text: reply }]
         }));
-        setChatInput('');
+        if (customText === undefined) {
+            setChatInput('');
+        }
     };
 
     const handleTestWebhook = async () => {
@@ -1005,7 +1061,15 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                 </p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                            <button
+                                type="button"
+                                onClick={testCodeGuardrailSimulation}
+                                className="px-3 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-rose-800 transition-colors"
+                                title="Executa simulação de tentativa de leitura de arquivos .env para comprovar o bloqueio ativo"
+                            >
+                                <ShieldAlert size={12} /> Testar Bloqueio (.env)
+                            </button>
                             <button
                                 type="button"
                                 onClick={() => setShowCodeSystemPromptModal(true)}
@@ -1148,9 +1212,24 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
 
                     {/* Fila de Solicitações e Propostas de Código */}
                     <div className="space-y-4 pt-4 border-t border-slate-700">
-                        <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                            <GitPullRequest size={14} className="text-amber-400" /> Fila de Solicitações e Propostas Supervisionadas
-                        </h4>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                                <GitPullRequest size={14} className="text-amber-400" /> Fila de Solicitações e Propostas Supervisionadas
+                            </h4>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[9px] font-black uppercase text-slate-400">Modelos Rápidos:</span>
+                                {CODE_PROPOSAL_TEMPLATES.map(tpl => (
+                                    <button
+                                        key={tpl.id}
+                                        type="button"
+                                        onClick={() => applyCodeProposalTemplate(tpl)}
+                                        className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-[9px] font-bold transition-all"
+                                    >
+                                        + {tpl.title.split(' ')[0]} {tpl.title.split(' ')[1] || ''}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
 
                         {/* Seletor Multi-Arquivo Seguro */}
                         <div className="space-y-1.5">
@@ -1281,7 +1360,7 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                                     title="Excluir Solicitação da Fila"
                                                     className="p-1.5 rounded-lg bg-slate-700 hover:bg-rose-600 text-slate-200 hover:text-white transition-colors"
                                                 >
-                                                    <Trash2 size={14} />
+                                                    <Trash2 size={16} />
                                                 </button>
                                             </div>
                                         </div>
@@ -1479,8 +1558,8 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                             )}
                                         </div>
 
-                                        {/* Prompts de Sistema e Regras de Negócio */}
-                                        <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                                        {/* Prompts de Sistema e Regras de Negócio Aprimoradas */}
+                                        <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700">
                                             <div className="flex items-center justify-between">
                                                 <h4 className={LABEL_CLASS}>Instruções Personalizadas (Prompt de Sistema)</h4>
                                                 <button
@@ -1492,41 +1571,72 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                                 </button>
                                             </div>
 
-                                            {/* Presets Rápidos */}
+                                            {/* Badges Compactos de Regras Predefinidas com Tags Coloridas por Categoria */}
                                             {def.promptPresets && def.promptPresets.length > 0 && (
-                                                <div className="space-y-1">
-                                                    <span className="text-[10px] font-bold text-slate-400 block">
-                                                        Clique para aplicar regra predefinida:
+                                                <div className="space-y-1.5">
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
+                                                        Presets por Categoria (clique para inserir no prompt):
                                                     </span>
                                                     <div className="flex flex-wrap gap-1.5">
-                                                        {def.promptPresets.map(preset => (
-                                                            <button
-                                                                key={preset.label}
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    const current = s.customSystemPrompt || '';
-                                                                    const appended = current ? `${current}\n${preset.prompt}` : preset.prompt;
-                                                                    patchAgent(def.id, { customSystemPrompt: appended });
-                                                                    addToast(`Regra "${preset.label}" inserida nas instruções!`, 'success');
-                                                                }}
-                                                                className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold transition-all border border-indigo-200/50 dark:border-indigo-800/50"
-                                                            >
-                                                                + {preset.label}
-                                                            </button>
-                                                        ))}
+                                                        {def.promptPresets.map(preset => {
+                                                            const catInfo = PRESET_CATEGORY_STYLES[preset.category || 'alcada'];
+                                                            const CatIcon = catInfo.icon;
+                                                            return (
+                                                                <button
+                                                                    key={preset.label}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const current = s.customSystemPrompt || '';
+                                                                        const appended = current ? `${current}\n${preset.prompt}` : preset.prompt;
+                                                                        patchAgent(def.id, { customSystemPrompt: appended });
+                                                                        addToast(`Regra "${preset.label}" (${catInfo.label}) inserida!`, 'success');
+                                                                    }}
+                                                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border flex items-center gap-1 hover:scale-[1.02] shadow-sm ${catInfo.badgeClass}`}
+                                                                    title={preset.prompt}
+                                                                >
+                                                                    <CatIcon size={11} className="shrink-0" />
+                                                                    <span>{preset.label}</span>
+                                                                </button>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             )}
 
+                                            {/* Variáveis Dinâmicas do ERP */}
+                                            <div className="space-y-1.5 pt-1">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
+                                                    Variáveis Dinâmicas do ERP (interpoladas ao vivo):
+                                                </span>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {ERP_PROMPT_VARIABLES.map(v => (
+                                                        <button
+                                                            key={v.tag}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const current = s.customSystemPrompt || '';
+                                                                const separator = current.endsWith(' ') || current === '' ? '' : ' ';
+                                                                patchAgent(def.id, { customSystemPrompt: `${current}${separator}${v.tag}` });
+                                                                addToast(`Variável ${v.tag} inserida!`, 'info');
+                                                            }}
+                                                            className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 font-mono text-[9px] font-bold border border-slate-200 dark:border-slate-600 transition-colors"
+                                                            title={v.description}
+                                                        >
+                                                            {v.tag}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
                                             <textarea
                                                 rows={3}
                                                 className={INPUT_CLASS}
-                                                placeholder={`Ex.: Sempre confirme o centro de custo antes de lançar; ou "Exigir aprovação gerencial para orçamentos acima de R$ 10.000"...`}
+                                                placeholder={`Ex.: Para a {{EMPRESA}}, confirme o centro de custo antes de lançar despesas acima de {{LIMITE_ALERTA}}...`}
                                                 value={s.customSystemPrompt || ''}
                                                 onChange={e => patchAgent(def.id, { customSystemPrompt: e.target.value })}
                                             />
                                             <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold ml-1">
-                                                <span>Regras específicas de negócio e tom de voz aplicadas ao {def.name}.</span>
+                                                <span>Regras de negócio específicas e diretrizes aplicadas ao {def.name}.</span>
                                                 {s.customSystemPrompt && (
                                                     <button
                                                         type="button"
@@ -1640,7 +1750,7 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                             </div>
                                         </div>
 
-                                        {/* Simulador Interativo Ao Vivo */}
+                                        {/* Simulador Interativo Ao Vivo com Chips de Envio Direto e Edição */}
                                         <div className="space-y-3">
                                             <div className="flex items-center justify-between">
                                                 <h4 className={LABEL_CLASS}>Simulador de Conversa Ao Vivo (Conectado ao ERP)</h4>
@@ -1658,7 +1768,7 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                                     </button>
                                                 )}
                                             </div>
-                                            <div className="rounded-2xl bg-[#efeae2] dark:bg-slate-900 p-4 space-y-2 max-h-56 overflow-y-auto border border-slate-200 dark:border-slate-800">
+                                            <div className="rounded-2xl bg-[#efeae2] dark:bg-slate-900 p-4 space-y-2 max-h-52 overflow-y-auto border border-slate-200 dark:border-slate-800">
                                                 {(chatMessages[def.id] || def.example).map((m, i) => (
                                                     <div key={i} className={`flex ${m.from === 'user' ? 'justify-end' : 'justify-start'}`}>
                                                         <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs font-medium shadow-sm whitespace-pre-wrap ${
@@ -1671,6 +1781,42 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                                     </div>
                                                 ))}
                                             </div>
+
+                                            {/* Perguntas Rápidas de Campo com Envio Direto (Play) e Preenchimento */}
+                                            {def.simulatorQuestions && def.simulatorQuestions.length > 0 && (
+                                                <div className="space-y-1">
+                                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex items-center justify-between">
+                                                        <span>Sugestões Rápidas de Campo:</span>
+                                                        <span className="text-[8px] font-normal lowercase text-slate-500">clique no texto para editar ou ▶ para enviar</span>
+                                                    </span>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {def.simulatorQuestions.map((q, idx) => (
+                                                            <div
+                                                                key={idx}
+                                                                className="inline-flex items-center rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 overflow-hidden text-[10px] font-bold text-emerald-800 dark:text-emerald-200 shadow-sm"
+                                                            >
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setChatInput(q)}
+                                                                    className="px-2 py-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-left truncate max-w-[210px] transition-colors"
+                                                                    title="Clique para preencher no campo de digitação"
+                                                                >
+                                                                    {q}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleSendSimulatedMessageWithText(def, q)}
+                                                                    className="px-1.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white transition-colors border-l border-emerald-500 flex items-center justify-center"
+                                                                    title="Disparar imediatamente esta pergunta no simulador"
+                                                                >
+                                                                    <Play size={10} className="fill-current" />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             <div className="flex gap-2">
                                                 <input
                                                     className={INPUT_CLASS}
@@ -1680,13 +1826,13 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                                     onKeyDown={e => {
                                                         if (e.key === 'Enter') {
                                                             e.preventDefault();
-                                                            handleSendSimulatedMessage(def);
+                                                            handleSendSimulatedMessageWithText(def);
                                                         }
                                                     }}
                                                 />
                                                 <button
                                                     type="button"
-                                                    onClick={() => handleSendSimulatedMessage(def)}
+                                                    onClick={() => handleSendSimulatedMessageWithText(def)}
                                                     className="px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] uppercase tracking-widest shrink-0 transition-all shadow-md shadow-emerald-600/20"
                                                 >
                                                     Enviar

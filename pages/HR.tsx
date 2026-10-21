@@ -595,6 +595,8 @@ const HR = () => {
             };
             addPayroll(record);
 
+            const targetAccountId = selectedAccount || accounts[0]?.id || 'acc-1';
+
             // Create ODP (Purchase Order) for Authorization in Purchases Module
             const odp: PurchaseOrder = {
                 id: `ODP-FOLHA-${record.id}`,
@@ -615,10 +617,28 @@ const HR = () => {
                 paymentTerms: 'Transferência Bancária / PIX',
                 shippingCost: 0,
                 ledgerName: 'Salários e Ordenados',
-                targetAccountId: selectedAccount,
+                targetAccountId,
                 ledgerCode: '2.03.01'
             };
             addPurchaseOrder(odp);
+
+            // Create Pending Financial Transaction for accounts payable visibility
+            const txId = `tx-pay-${record.id}`;
+            if (!transactions.some(t => t.id === txId)) {
+                addTransaction({
+                    id: txId,
+                    date: new Date().toLocaleDateString('pt-BR'),
+                    description: `Provisão Folha Pagamento (${month}) - ${emp.name}`,
+                    category: 'Folha de Pagamento',
+                    type: 'Despesa',
+                    amount: record.totalNet,
+                    status: 'Pendente',
+                    account: accounts.find(a => a.id === targetAccountId)?.name || accounts[0]?.name || 'Caixa',
+                    accountId: targetAccountId,
+                    ledgerCode: '2.03.01',
+                    ledgerName: 'Salários e Ordenados'
+                });
+            }
 
             count++;
         });
@@ -999,11 +1019,133 @@ const HR = () => {
         addToast(`Ponto de ${type === 'In' ? 'Entrada' : 'Saída'} registrado às ${now.toLocaleTimeString()}`, 'success');
     };
 
-    // --- Clock Kiosk Logic ---
-    const [clockMethod, setClockMethod] = useState<'pin' | 'bio'>('pin');
+    // --- Quick Direct Payroll Payment Handler ---
+    const handleDirectPayPayroll = (record: PayrollRecord) => {
+        payPayroll(record.id);
+        const txId = `tx-pay-${record.id}`;
+        const existingTx = transactions.find(t => t.id === txId);
+        if (existingTx) {
+            addTransaction({
+                ...existingTx,
+                status: 'Conciliado'
+            });
+        } else {
+            addTransaction({
+                id: txId,
+                date: new Date().toLocaleDateString('pt-BR'),
+                description: `Folha Pagamento (${record.month}) - ${record.employeeName}`,
+                category: 'Folha de Pagamento',
+                type: 'Despesa',
+                amount: record.totalNet,
+                status: 'Conciliado',
+                account: accounts[0]?.name || 'Caixa',
+                accountId: accounts[0]?.id || 'acc-1',
+                ledgerCode: '2.03.01',
+                ledgerName: 'Salários e Ordenados'
+            });
+        }
+        addToast(`Pagamento de ${record.employeeName} confirmado e liquidado com sucesso!`, 'success');
+    };
+
+    // --- Clock Kiosk Expresso Logic ---
+    const [currentTimeStr, setCurrentTimeStr] = useState<string>(() => new Date().toLocaleTimeString('pt-BR'));
+    React.useEffect(() => {
+        const interval = setInterval(() => {
+            setCurrentTimeStr(new Date().toLocaleTimeString('pt-BR'));
+        }, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const todayIsoStr = new Date().toISOString().split('T')[0];
+    const todayBrStr = new Date().toLocaleDateString('pt-BR');
+
+    const [clockMethod, setClockMethod] = useState<'express' | 'pin'>('express');
     const [clockEmpId, setClockEmpId] = useState('');
     const [clockPass, setClockPass] = useState('');
-    const [isBioScanning, setIsBioScanning] = useState(false);
+
+    const selectedClockEmp = useMemo(() => {
+        if (!clockEmpId) return null;
+        return employees.find(e => e.id === clockEmpId) || null;
+    }, [clockEmpId, employees]);
+
+    const selectedClockEmpLog = useMemo(() => {
+        if (!clockEmpId) return null;
+        return timeLogs.find(l => l.employeeId === clockEmpId && (l.date === todayIsoStr || l.date === todayBrStr));
+    }, [clockEmpId, timeLogs, todayIsoStr, todayBrStr]);
+
+    // Registro Expresso 1-Clique com sincronização em tempo real
+    const handleQuickPunch = (punchType: 'checkIn' | 'lunchStart' | 'lunchEnd' | 'checkOut') => {
+        if (!clockEmpId) {
+            addToast("Selecione um colaborador para registrar o ponto.", 'warning');
+            return;
+        }
+        const emp = employees.find(e => e.id === clockEmpId);
+        if (!emp) return;
+
+        const now = new Date();
+        const punchTime = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+        const existingLog = timeLogs.find(l =>
+            l.employeeId === emp.id && (l.date === todayIsoStr || l.date === todayBrStr)
+        );
+
+        const currentIn = punchType === 'checkIn' ? punchTime : (existingLog?.checkIn || '');
+        const currentLs = punchType === 'lunchStart' ? punchTime : (existingLog?.lunchStart || '');
+        const currentLe = punchType === 'lunchEnd' ? punchTime : (existingLog?.lunchEnd || '');
+        const currentOut = punchType === 'checkOut' ? punchTime : (existingLog?.checkOut || '');
+
+        let workedMin = 0;
+        let totalHours = existingLog?.totalHours || '0.00';
+        let status: 'Regular' | 'Extra' | 'Atraso' | 'Presente' | 'Saída' = existingLog?.status || 'Presente';
+
+        if (currentIn && currentOut) {
+            const inMin = parseTimeToMinutes(currentIn);
+            const outMin = parseTimeToMinutes(currentOut);
+            let lunchDuration = 60;
+            if (currentLs && currentLe) {
+                const lsMin = parseTimeToMinutes(currentLs);
+                const leMin = parseTimeToMinutes(currentLe);
+                if (lsMin !== null && leMin !== null && leMin > lsMin) {
+                    lunchDuration = leMin - lsMin;
+                }
+            }
+            if (inMin !== null && outMin !== null && outMin > inMin) {
+                workedMin = Math.max(0, (outMin - inMin) - lunchDuration);
+                totalHours = (workedMin / 60).toFixed(2);
+                if (workedMin > 480) status = 'Extra';
+                else if (workedMin < 480) status = 'Atraso';
+                else status = 'Regular';
+            }
+        } else if (punchType === 'checkOut') {
+            status = 'Saída';
+        } else {
+            status = 'Presente';
+        }
+
+        const logId = existingLog ? existingLog.id : `log-${emp.id}-${todayIsoStr}`;
+        const newLog: TimeLog = {
+            id: logId,
+            employeeId: emp.id,
+            date: todayIsoStr,
+            checkIn: currentIn || punchTime,
+            lunchStart: currentLs || undefined,
+            lunchEnd: currentLe || undefined,
+            checkOut: currentOut || undefined,
+            totalHours,
+            status
+        };
+
+        addTimeLog(newLog);
+
+        const labelMap: Record<string, string> = {
+            checkIn: '1ª Entrada (Início da Jornada)',
+            lunchStart: 'Saída Intervalo / Almoço',
+            lunchEnd: 'Retorno Intervalo / Almoço',
+            checkOut: '2ª Saída (Término da Jornada)'
+        };
+
+        addToast(`Ponto registrado: ${emp.name} — ${labelMap[punchType]} às ${punchTime}!`, 'success');
+    };
 
     const handlePinClock = (type: 'In' | 'Out') => {
         if (!clockEmpId) {
@@ -1013,10 +1155,7 @@ const HR = () => {
         const emp = employees.find(e => e.id === clockEmpId);
         if (!emp) return;
 
-        // Verify password against linked user
         const user = users.find(u => u.employeeId === emp.id);
-
-        // Fallback for verification
         if (!user) {
             if (clockPass !== '1234') {
                 addToast("Senha padrão incorreta (1234).", 'error');
@@ -1029,38 +1168,8 @@ const HR = () => {
             }
         }
 
-        const now = new Date();
-        addTimeLog({
-            id: `log-${Date.now()}`,
-            employeeId: emp.id,
-            date: now.toLocaleDateString('pt-BR'),
-            checkIn: type === 'In' ? now.toLocaleTimeString() : undefined,
-            checkOut: type === 'Out' ? now.toLocaleTimeString() : undefined,
-            status: type === 'In' ? 'Presente' : 'Saída'
-        });
-        addToast(`Ponto Registrado: ${emp.name} - ${type === 'In' ? 'ENTRADA' : 'SAÍDA'} às ${now.toLocaleTimeString()}`, 'success');
+        handleQuickPunch(type === 'In' ? 'checkIn' : 'checkOut');
         setClockPass('');
-        setClockEmpId('');
-    };
-
-    const handleBioSimulation = () => {
-        setIsBioScanning(true);
-        setTimeout(() => {
-            setIsBioScanning(false);
-            if (employees.length === 0) return;
-            // Simulate recognizing the first active employee
-            const emp = employees[0];
-            const now = new Date();
-
-            addTimeLog({
-                id: `log-${Date.now()}`,
-                employeeId: emp.id,
-                date: now.toLocaleDateString('pt-BR'),
-                checkIn: now.toLocaleTimeString(),
-                status: 'Presente'
-            });
-            addToast(`BIOMETRIA RECONHECIDA: ${emp.name} - Entrada às ${now.toLocaleTimeString()}`, 'success');
-        }, 2000);
     };
 
     return (
@@ -1406,15 +1515,24 @@ const HR = () => {
                                                             </span>
                                                         </td>
                                                         <td className="px-6 py-5 text-right">
-                                                            {p.status === 'Pendente' && (
-                                                                <span className="text-[10px] text-slate-400 font-bold italic">Aguardando Autorização (Central de Compras)</span>
-                                                            )
-                                                            }
-                                                            {p.status === 'Pago' && (
-                                                                <button onClick={() => handlePrintReceipt(p)} className="px-4 py-1.5 bg-white border border-slate-200 text-slate-600 font-bold text-[10px] rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-1 uppercase">
-                                                                    <FileText size={12} /> Recibo
+                                                            <div className="flex items-center justify-end gap-2">
+                                                                <button
+                                                                    onClick={() => handlePrintReceipt(p)}
+                                                                    className="px-3 py-1.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-200 font-bold text-[10px] rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-1 uppercase"
+                                                                    title="Visualizar ou imprimir comprovante"
+                                                                >
+                                                                    <FileText size={12} /> {p.status === 'Pago' ? 'Holerite' : 'Prévia'}
                                                                 </button>
-                                                            )}
+                                                                {p.status === 'Pendente' && (
+                                                                    <button
+                                                                        onClick={() => handleDirectPayPayroll(p)}
+                                                                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] rounded-lg shadow-sm transition-all flex items-center gap-1 uppercase"
+                                                                        title="Confirmar pagamento e liquidar despesa no financeiro"
+                                                                    >
+                                                                        <Check size={12} /> Pagar
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -1653,87 +1771,157 @@ const HR = () => {
 
                                 {timeViewMode === 'kiosk' && (
                                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                                        {/* Kiosk Panel */}
+                                        {/* Kiosk Panel - Ponto Expresso 1-Clique */}
                                         <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col">
-                                            <div className="p-6 border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-center">
-                                                <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-2">Relógio de Ponto</h3>
-                                                <p className="text-xs font-bold text-slate-400 uppercase">Selecione o método de identificação</p>
+                                            {/* Cabeçalho com Relógio ao Vivo e Data de Hoje */}
+                                            <div className="p-6 border-b dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                                <div>
+                                                    <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                                                        <Clock className="text-cyan-600" size={22} /> Ponto Expresso 1-Clique
+                                                    </h3>
+                                                    <p className="text-xs font-bold text-slate-400 capitalize">
+                                                        {new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                                    </p>
+                                                </div>
+                                                <div className="bg-slate-900 dark:bg-black text-cyan-400 px-5 py-2.5 rounded-2xl font-mono text-2xl font-black shadow-inner tracking-widest border border-cyan-500/30">
+                                                    {currentTimeStr}
+                                                </div>
                                             </div>
 
-                                            <div className="flex border-b dark:border-slate-700">
-                                                <button
-                                                    onClick={() => setClockMethod('pin')}
-                                                    className={`flex-1 py-4 text-xs font-black uppercase tracking-widest transition-colors ${clockMethod === 'pin' ? 'bg-white dark:bg-slate-800 text-cyan-600 border-b-2 border-cyan-600' : 'bg-slate-50 dark:bg-slate-900 text-slate-400'}`}
-                                                >
-                                                    Senha / PIN
-                                                </button>
-                                                <button
-                                                    onClick={() => setClockMethod('bio')}
-                                                    className={`flex-1 py-4 text-xs font-black uppercase tracking-widest transition-colors ${clockMethod === 'bio' ? 'bg-white dark:bg-slate-800 text-cyan-600 border-b-2 border-cyan-600' : 'bg-slate-50 dark:bg-slate-900 text-slate-400'}`}
-                                                >
-                                                    Biometria (Serial)
-                                                </button>
-                                            </div>
+                                            <div className="p-6 space-y-6 flex-1 flex flex-col justify-between">
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">
+                                                            Colaborador
+                                                        </label>
+                                                        <select
+                                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl py-3.5 px-4 font-bold text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-cyan-500 transition-all"
+                                                            value={clockEmpId}
+                                                            onChange={e => setClockEmpId(e.target.value)}
+                                                        >
+                                                            <option value="">Selecione seu nome na lista...</option>
+                                                            {employees.filter(e => e.status === 'Ativo').map(e => (
+                                                                <option key={e.id} value={e.id}>{e.name} — {e.role} ({e.department})</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
 
-                                            <div className="p-8 flex-1 flex flex-col justify-center">
-                                                {clockMethod === 'pin' ? (
-                                                    <div className="space-y-6 max-w-sm mx-auto w-full">
-                                                        <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Colaborador</label>
-                                                            <select
-                                                                className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                                                                value={clockEmpId}
-                                                                onChange={e => setClockEmpId(e.target.value)}
+                                                    {clockEmpId && selectedClockEmp ? (
+                                                        <div className="space-y-5 animate-in fade-in duration-300">
+                                                            {/* Mini Card de Status de Hoje */}
+                                                            <div className="p-4 bg-slate-50 dark:bg-slate-900/80 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+                                                                <div className="flex items-center justify-between">
+                                                                    <div>
+                                                                        <p className="font-black text-slate-900 dark:text-white text-base">{selectedClockEmp.name}</p>
+                                                                        <p className="text-[11px] text-slate-400 font-bold">{selectedClockEmp.role} • {selectedClockEmp.department}</p>
+                                                                    </div>
+                                                                    <span className="px-3 py-1 bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300 rounded-full text-[10px] font-black uppercase">
+                                                                        Hoje ({todayBrStr})
+                                                                    </span>
+                                                                </div>
+
+                                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t dark:border-slate-700 text-center">
+                                                                    <div className={`p-2.5 rounded-xl border ${selectedClockEmpLog?.checkIn ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400'}`}>
+                                                                        <span className="text-[9px] font-black uppercase block tracking-wider">1ª Entrada</span>
+                                                                        <span className="text-sm font-mono font-black">{selectedClockEmpLog?.checkIn || '--:--'}</span>
+                                                                    </div>
+                                                                    <div className={`p-2.5 rounded-xl border ${selectedClockEmpLog?.lunchStart ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400'}`}>
+                                                                        <span className="text-[9px] font-black uppercase block tracking-wider">Início Almoço</span>
+                                                                        <span className="text-sm font-mono font-black">{selectedClockEmpLog?.lunchStart || '--:--'}</span>
+                                                                    </div>
+                                                                    <div className={`p-2.5 rounded-xl border ${selectedClockEmpLog?.lunchEnd ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400'}`}>
+                                                                        <span className="text-[9px] font-black uppercase block tracking-wider">Fim Almoço</span>
+                                                                        <span className="text-sm font-mono font-black">{selectedClockEmpLog?.lunchEnd || '--:--'}</span>
+                                                                    </div>
+                                                                    <div className={`p-2.5 rounded-xl border ${selectedClockEmpLog?.checkOut ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400'}`}>
+                                                                        <span className="text-[9px] font-black uppercase block tracking-wider">2ª Saída</span>
+                                                                        <span className="text-sm font-mono font-black">{selectedClockEmpLog?.checkOut || '--:--'}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* 4 Botões 1-Clique */}
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                                                <button
+                                                                    onClick={() => handleQuickPunch('checkIn')}
+                                                                    className="p-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-600/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                                                                >
+                                                                    <Play size={16} /> 1ª Entrada ({currentTimeStr.slice(0, 5)})
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleQuickPunch('lunchStart')}
+                                                                    className="p-4 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-amber-600/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                                                                >
+                                                                    <Clock size={16} /> Início Almoço ({currentTimeStr.slice(0, 5)})
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleQuickPunch('lunchEnd')}
+                                                                    className="p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-blue-600/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                                                                >
+                                                                    <CheckCircle size={16} /> Fim Almoço ({currentTimeStr.slice(0, 5)})
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleQuickPunch('checkOut')}
+                                                                    className="p-4 bg-rose-600 hover:bg-rose-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-600/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                                                                >
+                                                                    <StopCircle size={16} /> 2ª Saída ({currentTimeStr.slice(0, 5)})
+                                                                </button>
+                                                            </div>
+
+                                                            <button
+                                                                onClick={() => {
+                                                                    setSelectedEspelhoEmpId(clockEmpId);
+                                                                    setTimeViewMode('timesheet');
+                                                                }}
+                                                                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors"
                                                             >
-                                                                <option value="">Selecione seu nome...</option>
-                                                                {employees.filter(e => e.status === 'Ativo').map(e => (
-                                                                    <option key={e.id} value={e.id}>{e.name}</option>
-                                                                ))}
-                                                            </select>
+                                                                <Calendar size={14} /> Ver Espelho Completo (Portaria 671)
+                                                            </button>
                                                         </div>
-                                                        <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Senha / PIN</label>
+                                                    ) : (
+                                                        <div className="py-12 text-center text-slate-400 space-y-3">
+                                                            <Clock size={48} className="mx-auto opacity-20 text-cyan-600 animate-pulse" />
+                                                            <p className="font-bold text-sm text-slate-600 dark:text-slate-300">Selecione seu nome acima para bater o ponto em 1 clique</p>
+                                                            <p className="text-xs text-slate-400 max-w-xs mx-auto">O horário atual será registrado com validade legal e sincronizado imediatamente com o espelho de ponto.</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Modo PIN Opcional */}
+                                                <div className="pt-4 border-t dark:border-slate-700/50">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Opção com Senha / PIN</span>
+                                                        <button
+                                                            onClick={() => setClockMethod(clockMethod === 'pin' ? 'express' : 'pin')}
+                                                            className="text-[10px] font-bold text-cyan-600 hover:underline uppercase"
+                                                        >
+                                                            {clockMethod === 'pin' ? 'Ocultar PIN' : 'Usar Senha/PIN'}
+                                                        </button>
+                                                    </div>
+                                                    {clockMethod === 'pin' && (
+                                                        <div className="mt-3 flex gap-2">
                                                             <input
                                                                 type="password"
-                                                                className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-center text-2xl tracking-widest"
-                                                                placeholder="••••"
+                                                                className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2 px-3 font-bold text-center text-base tracking-widest"
+                                                                placeholder="PIN (1234)"
                                                                 value={clockPass}
                                                                 onChange={e => setClockPass(e.target.value)}
                                                             />
-                                                        </div>
-                                                        <div className="grid grid-cols-2 gap-4 pt-4">
                                                             <button
                                                                 onClick={() => handlePinClock('In')}
-                                                                className="py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase shadow-lg shadow-emerald-600/20 hover:scale-105 transition-transform"
+                                                                className="px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase"
                                                             >
                                                                 Entrada
                                                             </button>
                                                             <button
                                                                 onClick={() => handlePinClock('Out')}
-                                                                className="py-4 bg-rose-600 text-white rounded-2xl font-black uppercase shadow-lg shadow-rose-600/20 hover:scale-105 transition-transform"
+                                                                className="px-4 py-2 bg-rose-600 text-white rounded-xl font-bold text-xs uppercase"
                                                             >
                                                                 Saída
                                                             </button>
                                                         </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="text-center space-y-8">
-                                                        <div className={`w-32 h-32 mx-auto rounded-full border-4 flex items-center justify-center transition-all ${isBioScanning ? 'border-cyan-400 bg-cyan-50 animate-pulse' : 'border-slate-100 bg-slate-50'}`}>
-                                                            <Fingerprint size={64} className={isBioScanning ? 'text-cyan-600' : 'text-slate-300'} />
-                                                        </div>
-                                                        <div>
-                                                            <h4 className="font-black text-slate-900 dark:text-white uppercase mb-2">Leitor Biométrico (COM3)</h4>
-                                                            <p className="text-sm text-slate-500">{isBioScanning ? 'Lendo impressão digital...' : 'Posicione o dedo no leitor'}</p>
-                                                        </div>
-                                                        <button
-                                                            onClick={handleBioSimulation}
-                                                            disabled={isBioScanning}
-                                                            className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold uppercase text-xs tracking-widest disabled:opacity-50"
-                                                        >
-                                                            {isBioScanning ? 'Processando...' : 'Iniciar Leitura Manual'}
-                                                        </button>
-                                                    </div>
-                                                )}
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
 
