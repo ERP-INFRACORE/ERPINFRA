@@ -47,7 +47,8 @@ import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGri
 import { useApp } from '../context/AppContext';
 import { Transaction, Sale } from '../types';
 import { printDocument } from '../utils/exportUtils';
-import { toDeterministicUUID } from '../src/services/api';
+import { toDeterministicUUID, updateItem } from '../src/services/api';
+import { isSupabaseConfigured } from '../src/lib/supabase';
 
 type FinanceTab = 'overview' | 'cashflow' | 'ledger' | 'receivables' | 'payables' | 'accounts' | 'planning';
 
@@ -73,7 +74,7 @@ const Finance = () => {
       transactions, financials, addTransaction, deleteTransaction, importTransactions, updateTransactionStatus, updateTransaction,
       accounts, addAccount, deleteAccount,
       planOfAccounts, addPlanAccount, deletePlanAccount, updatePlanAccount, hasPermission, currentUser, settings,
-      sales
+      sales, addAuditLog
    } = useApp();
    const { addToast } = useToast();
 
@@ -718,8 +719,44 @@ const Finance = () => {
    }, [transactions, accounts, cashflowPeriod, cashflowAccountFilter]);
 
    // =========================================================================
-   // VALIDAÇÕES RIGOROSAS DE BAIXA FINANCEIRA (LIQUIDAÇÃO)
+   // VALIDAÇÕES RIGOROSAS DE BAIXA FINANCEIRA & CONCILIAÇÃO EM LOTE
    // =========================================================================
+
+   // Helper de Proteção contra Dupla Baixa (tx.status === 'Pago' || tx.status === 'Conciliado')
+   const isAlreadySettled = (tx: Transaction): boolean => {
+      const status = (tx.status as string) || '';
+      return status === 'Pago' || status === 'Conciliado';
+   };
+
+   // Helper para Atualização Sincronizada do Saldo em financial_accounts
+   const syncAccountBalance = async (accountId: string, delta: number): Promise<number | undefined> => {
+      const targetAcc = accounts.find(a => a.id === accountId);
+      if (!targetAcc) return undefined;
+
+      const currentBalance = Number(targetAcc.balance || 0);
+      const newBalance = Number((currentBalance + delta).toFixed(2));
+
+      const updatedAcc = {
+         ...targetAcc,
+         balance: newBalance,
+         updated_at: new Date().toISOString()
+      };
+
+      // 1. Atualiza o estado do AppContext e propaga cross-tab via syncAdd
+      addAccount(updatedAcc);
+
+      // 2. Sincronização persistente na tabela financial_accounts no Supabase
+      if (isSupabaseConfigured()) {
+         try {
+            await updateItem('financial_accounts', targetAcc.id, { balance: newBalance });
+         } catch (dbErr) {
+            console.warn(`Erro ao sincronizar saldo da conta "${targetAcc.name}" em financial_accounts:`, dbErr);
+         }
+      }
+
+      return newBalance;
+   };
+
    const openSettlementModal = (txs: Transaction[]) => {
       if (!txs || txs.length === 0) {
          addToast("Nenhuma transação selecionada para liquidação.", 'warning');
@@ -732,14 +769,51 @@ const Finance = () => {
          return;
       }
 
-      // Default account: first account or matching account
-      const firstAccId = txs[0]?.accountId || accounts[0]?.id || '';
+      // Proteção contra Dupla Baixa: verificar se algum título já possui status 'Pago' ou 'Conciliado'
+      const alreadyPaidTxs = txs.filter(t => isAlreadySettled(t));
+      if (alreadyPaidTxs.length === txs.length) {
+         addToast(
+            `🚫 Proteção contra Dupla Baixa: O(s) ${alreadyPaidTxs.length} título(s) selecionado(s) já constam como baixados (status: 'Pago' / 'Conciliado'). Nenhuma operação duplicada foi permitida.`,
+            'error',
+            6000
+         );
+         addAuditLog({
+            userId: currentUser?.id || 'system',
+            userName: currentUser?.name || 'Administrador',
+            action: 'Bloqueio de Dupla Baixa',
+            module: 'Financeiro',
+            details: `Abertura de baixa bloqueada. Todos os ${alreadyPaidTxs.length} títulos já possuem status 'Pago' ou 'Conciliado': ${alreadyPaidTxs.map(t => t.documentNumber || t.id.slice(-6)).join(', ')}.`,
+            severity: 'warning'
+         });
+         return;
+      }
 
-      setSettlementTargetTxs(txs);
+      let eligibleTxs = txs;
+      if (alreadyPaidTxs.length > 0) {
+         addToast(
+            `⚠️ Proteção contra Dupla Baixa: ${alreadyPaidTxs.length} título(s) já estavam quitados ('Pago'/'Conciliado') e foram removidos do lote para evitar duplicidade.`,
+            'warning',
+            5000
+         );
+         addAuditLog({
+            userId: currentUser?.id || 'system',
+            userName: currentUser?.name || 'Administrador',
+            action: 'Filtro de Dupla Baixa',
+            module: 'Financeiro',
+            details: `Títulos já quitados ignorados na abertura do lote: ${alreadyPaidTxs.map(t => t.documentNumber || t.id.slice(-6)).join(', ')}.`,
+            severity: 'warning'
+         });
+         eligibleTxs = txs.filter(t => !isAlreadySettled(t));
+      }
+
+      // Default account: first account or matching account
+      const firstAccId = eligibleTxs[0]?.accountId || accounts[0]?.id || '';
+
+      setSettlementTargetTxs(eligibleTxs);
       setSettlementForm({
          date: new Date().toLocaleDateString('pt-BR'),
          accountId: firstAccId,
-         paymentMethod: txs[0]?.paymentMethod || 'PIX',
+         paymentMethod: eligibleTxs[0]?.paymentMethod || 'PIX',
          interest: 0,
          discount: 0,
          authCode: '',
@@ -798,6 +872,53 @@ const Finance = () => {
          return;
       }
 
+      // Proteção rigorosa contra Dupla Baixa revalidando com o estado mais atual de transactions
+      const alreadyPaidTxs = settlementTargetTxs.filter(target => {
+         const live = transactions.find(t => t.id === target.id) || target;
+         return isAlreadySettled(live);
+      });
+
+      if (alreadyPaidTxs.length > 0) {
+         if (alreadyPaidTxs.length === settlementTargetTxs.length) {
+            addToast(
+               `🚫 Proteção contra Dupla Baixa: Todos os ${alreadyPaidTxs.length} títulos já constam como baixados (status: 'Pago' / 'Conciliado'). Operação cancelada.`,
+               'error',
+               6000
+            );
+            addAuditLog({
+               userId: currentUser?.id || 'system',
+               userName: currentUser?.name || 'Administrador',
+               action: 'Bloqueio de Dupla Baixa em Confirmação',
+               module: 'Financeiro',
+               details: `Tentativa de liquidação duplicada impedida para os títulos: ${alreadyPaidTxs.map(t => t.documentNumber || t.id.slice(-6)).join(', ')}.`,
+               severity: 'warning'
+            });
+            setIsSettlementModalOpen(false);
+            setSettlementTargetTxs([]);
+            setSelectedTxIds([]);
+            return;
+         }
+
+         addToast(
+            `⚠️ Proteção contra Dupla Baixa: ${alreadyPaidTxs.length} título(s) já estavam baixados ('Pago'/'Conciliado') e foram desconsiderados.`,
+            'warning',
+            5000
+         );
+      }
+
+      const validTxsToSettle = settlementTargetTxs.filter(target => {
+         const live = transactions.find(t => t.id === target.id) || target;
+         return !isAlreadySettled(live) && live.status !== 'Cancelado';
+      });
+
+      if (validTxsToSettle.length === 0) {
+         addToast("Nenhum título pendente elegível para baixa financeira.", 'info');
+         setIsSettlementModalOpen(false);
+         setSettlementTargetTxs([]);
+         setSelectedTxIds([]);
+         return;
+      }
+
       // Overdraft / Insufficient balance guard
       if (settlementTotals.hasNegativeBalanceRisk) {
          const isAdmin = currentUser?.username === 'admin' || hasPermission('all') || hasPermission('finance.admin');
@@ -815,11 +936,11 @@ const Finance = () => {
       await new Promise(resolve => setTimeout(resolve, 600));
 
       const selectedAcc = settlementTotals.targetAccount;
-      const count = settlementTargetTxs.length;
+      const count = validTxsToSettle.length;
 
       try {
-         settlementTargetTxs.forEach((tx, index) => {
-            // If single transaction, adjust amount if interest or discount was added
+         // Atualizar transações com carimbo de auditoria
+         validTxsToSettle.forEach((tx) => {
             const adjustedAmount = count === 1
                ? settlementTotals.finalTotal
                : tx.amount;
@@ -840,6 +961,26 @@ const Finance = () => {
             updateTransaction(updatedTx);
          });
 
+         // 2. Atualização Sincronizada do Saldo em financial_accounts
+         const rawBaseSum = validTxsToSettle.reduce((sum, t) => sum + t.amount, 0);
+         const adjustedSum = count === 1 ? settlementTotals.finalTotal : (rawBaseSum + settlementForm.interest - settlementForm.discount);
+         const netBalanceDelta = settlementTotals.isExpense ? -adjustedSum : +adjustedSum;
+
+         let newAccBalance = selectedAcc?.balance;
+         if (selectedAcc) {
+            newAccBalance = await syncAccountBalance(selectedAcc.id, netBalanceDelta);
+         }
+
+         // 3. Registro em audit_logs
+         addAuditLog({
+            userId: currentUser?.id || 'system',
+            userName: currentUser?.name || 'Administrador',
+            action: count > 1 ? 'Conciliação em Lote' : 'Baixa de Título',
+            module: 'Financeiro',
+            details: `Liquidação de ${count} título(s). Valor líquido movimentado: ${formatMoney(Math.abs(netBalanceDelta))}. Conta ${netBalanceDelta >= 0 ? 'creditada' : 'debitada'}: ${selectedAcc?.name || 'Caixa Geral'}. Forma: ${settlementForm.paymentMethod}${settlementForm.interest > 0 ? ` | Juros: ${formatMoney(settlementForm.interest)}` : ''}${settlementForm.discount > 0 ? ` | Desconto: ${formatMoney(settlementForm.discount)}` : ''}. Saldo atualizado da conta: ${formatMoney(newAccBalance ?? 0)}. Títulos: ${validTxsToSettle.map(t => `${t.documentNumber || t.id.slice(-6)} (${t.type})`).join(', ')}.`,
+            severity: 'info'
+         });
+
          addToast(`Liquidação concluída! ${count} título(s) baixado(s) com sucesso na conta ${selectedAcc?.name}.`, 'success', 5000);
          setIsSettlementModalOpen(false);
          setSettlementTargetTxs([]);
@@ -853,7 +994,121 @@ const Finance = () => {
    };
 
    // =========================================================================
-   // ESTORNO DE BAIXA (REVERSÃO PARA PENDENTE)
+   // CONCILIAÇÃO RÁPIDA DIRETA EM LOTE (BATCH RECONCILIATION)
+   // =========================================================================
+   const handleDirectBatchReconciliation = async () => {
+      const selectedTxs = transactions.filter(t => selectedTxIds.includes(t.id));
+      if (selectedTxs.length === 0) {
+         addToast("Nenhum título selecionado para conciliação em lote.", 'warning');
+         return;
+      }
+
+      // 1. Proteção contra Dupla Baixa (tx.status === 'Pago' || tx.status === 'Conciliado')
+      const alreadyPaidTxs = selectedTxs.filter(t => isAlreadySettled(t));
+      if (alreadyPaidTxs.length === selectedTxs.length) {
+         addToast(
+            `🚫 Proteção contra Dupla Baixa: Todos os ${alreadyPaidTxs.length} títulos selecionados já possuem status 'Pago' ou 'Conciliado'.`,
+            'error',
+            6000
+         );
+         addAuditLog({
+            userId: currentUser?.id || 'system',
+            userName: currentUser?.name || 'Administrador',
+            action: 'Bloqueio de Dupla Baixa em Lote',
+            module: 'Financeiro',
+            details: `Tentativa de conciliação direta em lote bloqueada. Todos os ${alreadyPaidTxs.length} títulos já estavam quitados (status 'Pago'/'Conciliado'): ${alreadyPaidTxs.map(t => t.documentNumber || t.id.slice(-6)).join(', ')}.`,
+            severity: 'warning'
+         });
+         setSelectedTxIds([]);
+         return;
+      }
+
+      const pendingTxs = selectedTxs.filter(t => !isAlreadySettled(t) && t.status !== 'Cancelado');
+      if (pendingTxs.length === 0) {
+         addToast("Nenhum título pendente elegível para conciliação.", 'info');
+         setSelectedTxIds([]);
+         return;
+      }
+
+      if (alreadyPaidTxs.length > 0) {
+         addToast(
+            `⚠️ Proteção contra Dupla Baixa: ${alreadyPaidTxs.length} título(s) já estavam quitados ('Pago'/'Conciliado') e foram ignorados.`,
+            'warning',
+            5000
+         );
+      }
+
+      const defaultAccount = accounts[0] || { id: 'acc-1', name: 'Caixa Geral', balance: 0 };
+      const currentDateStr = new Date().toLocaleDateString('pt-BR');
+
+      setIsSubmitting(true);
+      try {
+         // Agrupar deltas por conta bancária de destino
+         const accountDeltas: Record<string, { delta: number, accountName: string, count: number }> = {};
+
+         pendingTxs.forEach(tx => {
+            const accId = tx.accountId || defaultAccount.id;
+            const accObj = accounts.find(a => a.id === accId) || defaultAccount;
+            const accName = accObj.name || tx.account || defaultAccount.name;
+
+            if (!accountDeltas[accId]) {
+               accountDeltas[accId] = { delta: 0, accountName: accName, count: 0 };
+            }
+
+            const impact = tx.type === 'Receita' ? tx.amount : -tx.amount;
+            accountDeltas[accId].delta += impact;
+            accountDeltas[accId].count += 1;
+
+            const auditStamp = `[CONCILIAÇÃO EM LOTE em ${currentDateStr} por ${currentUser?.name || 'Administrador'}]: Status alterado para Conciliado | Conta: ${accName}`;
+
+            const updatedTx: Transaction = {
+               ...tx,
+               status: 'Conciliado',
+               date: tx.date || currentDateStr,
+               accountId: accId,
+               account: accName,
+               notes: tx.notes ? `${tx.notes}\n${auditStamp}` : auditStamp
+            };
+
+            updateTransaction(updatedTx);
+         });
+
+         // 2. Atualização Sincronizada do Saldo em financial_accounts para cada conta afetada
+         const updatedBalancesSummary: string[] = [];
+         for (const [accId, data] of Object.entries(accountDeltas)) {
+            const newBal = await syncAccountBalance(accId, data.delta);
+            if (newBal !== undefined) {
+               updatedBalancesSummary.push(`${data.accountName}: ${formatMoney(newBal)}`);
+            }
+         }
+
+         // 3. Registro em audit_logs
+         const totalVal = pendingTxs.reduce((sum, t) => sum + t.amount, 0);
+         addAuditLog({
+            userId: currentUser?.id || 'system',
+            userName: currentUser?.name || 'Administrador',
+            action: 'Conciliação em Lote Direta',
+            module: 'Financeiro',
+            details: `Conciliação em lote executada para ${pendingTxs.length} título(s). Total movimentado: ${formatMoney(totalVal)}. Contas sincronizadas: ${updatedBalancesSummary.join('; ')}. Títulos: ${pendingTxs.map(t => `${t.documentNumber || t.id.slice(-6)} (${t.type})`).join(', ')}. ${alreadyPaidTxs.length > 0 ? `Proteção contra dupla baixa impediu a re-baixa de ${alreadyPaidTxs.length} título(s).` : ''}`,
+            severity: 'info'
+         });
+
+         addToast(
+            `Conciliação em lote concluída! ${pendingTxs.length} título(s) baixados e saldos bancários atualizados com sucesso.`,
+            'success',
+            5000
+         );
+         setSelectedTxIds([]);
+      } catch (err) {
+         console.error("Erro na conciliação em lote:", err);
+         addToast("Erro ao processar conciliação em lote.", 'error');
+      } finally {
+         setIsSubmitting(false);
+      }
+   };
+
+   // =========================================================================
+   // ESTORNO DE BAIXA (REVERSÃO PARA PENDENTE COM RESTITUIÇÃO DE SALDO & AUDITORIA)
    // =========================================================================
    const openReversalModal = (tx: Transaction) => {
       setReversalTargetTx(tx);
@@ -861,7 +1116,7 @@ const Finance = () => {
       setIsReversalModalOpen(true);
    };
 
-   const handleConfirmReversal = (e: React.FormEvent) => {
+   const handleConfirmReversal = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!reversalTargetTx) return;
 
@@ -879,7 +1134,26 @@ const Finance = () => {
       };
 
       updateTransaction(updatedTx);
-      addToast(`Baixa estornada com sucesso! O título #${reversalTargetTx.id?.slice(-6).toUpperCase()} retornou ao status Pendente.`, 'info');
+
+      // Reverter o saldo na conta bancária correspondente
+      const reversalDelta = reversalTargetTx.type === 'Receita' ? -reversalTargetTx.amount : +reversalTargetTx.amount;
+      const targetAccId = reversalTargetTx.accountId || accounts[0]?.id;
+      let newBal: number | undefined = undefined;
+      if (targetAccId) {
+         newBal = await syncAccountBalance(targetAccId, reversalDelta);
+      }
+
+      // Registro do estorno em audit_logs
+      addAuditLog({
+         userId: currentUser?.id || 'system',
+         userName: currentUser?.name || 'Administrador',
+         action: 'Estorno de Baixa Financeira',
+         module: 'Financeiro',
+         details: `Estorno de baixa efetuado para o título #${reversalTargetTx.documentNumber || reversalTargetTx.id.slice(-6)} (${reversalTargetTx.description}). Valor: ${formatMoney(reversalTargetTx.amount)}. Motivo: ${reversalReason.trim()}. Saldo recalculado da conta: ${newBal !== undefined ? formatMoney(newBal) : 'N/A'}.`,
+         severity: 'warning'
+      });
+
+      addToast(`Baixa estornada com sucesso! O título #${reversalTargetTx.id?.slice(-6).toUpperCase()} retornou ao status Pendente e o saldo bancário foi ajustado.`, 'info');
       setIsReversalModalOpen(false);
       setReversalTargetTx(null);
       setReversalReason('');
@@ -1255,21 +1529,30 @@ const Finance = () => {
                   </div>
                </div>
 
-               <div className="flex items-center gap-2">
+               <div className="flex flex-wrap items-center gap-2">
                   <button
                      onClick={() => setSelectedTxIds([])}
-                     className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition-all"
+                     className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition-all cursor-pointer"
                   >
                      Desmarcar Todos
+                  </button>
+                  <button
+                     onClick={handleDirectBatchReconciliation}
+                     disabled={isSubmitting}
+                     className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                     title="Conciliar títulos pendentes selecionados diretamente com proteção contra dupla baixa e atualização sincronizada do saldo"
+                  >
+                     <ShieldCheck size={16} /> Conciliação Direta em Lote
                   </button>
                   <button
                      onClick={() => {
                         const targetTxs = transactions.filter(t => selectedTxIds.includes(t.id));
                         openSettlementModal(targetTxs);
                      }}
-                     className="px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-cyan-500/20 flex items-center gap-2 transition-all"
+                     className="px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-cyan-500/20 flex items-center gap-2 transition-all cursor-pointer"
+                     title="Abrir conferência detalhada com juros, descontos e conta bancária específica"
                   >
-                     <CheckCircle size={16} /> Efetuar Baixa / Liquidação em Lote
+                     <CheckCircle size={16} /> Liquidação Detalhada
                   </button>
                </div>
             </div>
@@ -2082,7 +2365,7 @@ const Finance = () => {
                      <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
                         {currentTabTransactions.map(tx => {
                            const isSelected = selectedTxIds.includes(tx.id);
-                           const isSettled = tx.status === 'Conciliado';
+                           const isSettled = isAlreadySettled(tx);
 
                            return (
                               <tr
