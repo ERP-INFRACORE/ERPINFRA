@@ -62,7 +62,8 @@ import {
     Link,
     Smartphone,
     Landmark,
-    Bot
+    Bot,
+    MessageCircle
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -70,6 +71,8 @@ import { User, AppRole, AppSettings, AuditLog } from '../types';
 import { APP_PERMISSIONS } from '../permission_constants';
 import { generateCameloData } from '../src/utils/seeder';
 import AIAuditAgent from '../components/AIAuditAgent';
+import AIAgentsHub from '../components/AIAgentsHub';
+import { AI_AGENTS_KEY, getAIConfig, describeAIConfigChange } from '../ai_agents_constants';
 
 // Internal Toast Component
 // Local Toast component removed in favor of global context
@@ -277,7 +280,7 @@ const IntegrationsSection = ({ settings, onUpdate, addToast }: { settings: impor
 
     // Combine default integrations with any custom ones saved in settings.integrations
     const customIntegrations = Object.entries(settings.integrations || {})
-        .filter(([id]) => !defaultIntegrations.some(d => d.id === id))
+        .filter(([id]) => id !== AI_AGENTS_KEY && !defaultIntegrations.some(d => d.id === id))
         .map(([id, item]) => ({
             id,
             name: item.name,
@@ -1814,10 +1817,11 @@ const Settings = () => {
         users, roles, settings, auditLogs, employees,
         addUser, updateUser, deleteUser,
         addRole, updateRole, deleteRole,
-        updateSettings, clearAllData, hasPermission, seedDatabase
+        updateSettings, clearAllData, hasPermission, seedDatabase,
+        currentUser, addAuditLog
     } = useApp();
 
-    const [activeTab, setActiveTab] = useState<'company' | 'security' | 'system' | 'audit' | 'ai_agent'>('company');
+    const [activeTab, setActiveTab] = useState<'company' | 'security' | 'system' | 'audit' | 'ai_agent' | 'ai_agents'>('company');
     const [subTab, setSubTab] = useState<string>('general'); // Generic subtab state
     const [systemCategory, setSystemCategory] = useState<'all' | 'fiscal' | 'operational' | 'appearance' | 'integrations' | 'documents' | 'maintenance'>('all');
     const [showCertDetails, setShowCertDetails] = useState(false);
@@ -1856,6 +1860,15 @@ const Settings = () => {
 
     const handleSaveSettings = (e?: React.FormEvent) => {
         if (e) e.preventDefault();
+        const aiChange = describeAIConfigChange(getAIConfig(settings), getAIConfig(tempSettings));
+        if (aiChange) {
+            addAuditLog({
+                userId: currentUser?.id || '',
+                userName: currentUser?.name || 'Sistema',
+                module: 'Configura\u00e7\u00f5es',
+                ...aiChange
+            });
+        }
         updateSettings(tempSettings);
         addToast('Configurações salvas com sucesso!', 'success');
         setHasChanges(false);
@@ -2006,6 +2019,7 @@ const Settings = () => {
                     <TabButton id="system" label="Parâmetros" icon={Cpu} />
                     <TabButton id="audit" label="Auditoria" icon={History} />
                     <TabButton id="ai_agent" label="Agente IA (Diagnóstico)" icon={Bot} />
+                    {hasPermission('ai.agents.view') && <TabButton id="ai_agents" label="Agentes IA & WhatsApp" icon={MessageCircle} />}
                 </div>
             </div>
 
@@ -3079,6 +3093,13 @@ const Settings = () => {
                     {activeTab === 'ai_agent' && (
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <AIAuditAgent mode="embedded" />
+                        </div>
+                    )}
+
+                    {/* AI AGENTS (WHATSAPP) TAB */}
+                    {activeTab === 'ai_agents' && hasPermission('ai.agents.view') && (
+                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <AIAgentsHub settings={tempSettings} onUpdate={setTempSettings} canManage={hasPermission('ai.agents.manage')} />
                         </div>
                     )}
                 </div>

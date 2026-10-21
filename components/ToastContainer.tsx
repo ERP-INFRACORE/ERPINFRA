@@ -5,80 +5,97 @@ import { AlertCircle, CheckCircle, Info, X, XCircle } from 'lucide-react';
 const ToastIcon = ({ type }: { type: ToastType }) => {
     switch (type) {
         case 'success':
-            return <CheckCircle className="w-5 h-5 text-green-500" />;
+            return <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />;
         case 'error':
-            return <XCircle className="w-5 h-5 text-red-500" />;
+            return <XCircle className="w-5 h-5 text-rose-500 shrink-0" />;
         case 'warning':
-            return <AlertCircle className="w-5 h-5 text-yellow-500" />;
+            return <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />;
         case 'info':
         default:
-            return <Info className="w-5 h-5 text-blue-500" />;
+            return <Info className="w-5 h-5 text-cyan-500 shrink-0" />;
     }
 };
 
-const ToastItem = ({ id, message, type, action, onRemove }: { id: string, message: string, type: ToastType, action?: { label: string, onClick: () => void }, onRemove: (id: string) => void }) => {
+const ToastItem = ({
+    id,
+    message,
+    type,
+    action,
+    onRemove
+}: {
+    id: string;
+    message: string;
+    type: ToastType;
+    action?: { label: string; onClick: () => void };
+    onRemove: (id: string) => void;
+}) => {
     const [isVisible, setIsVisible] = useState(false);
 
     useEffect(() => {
-        // Trigger enter animation
         requestAnimationFrame(() => setIsVisible(true));
     }, []);
 
     const handleClose = () => {
         setIsVisible(false);
-        // Wait for animation to finish before removing
         setTimeout(() => {
             onRemove(id);
-        }, 300);
+        }, 250);
     };
 
     const getBorderColor = () => {
         switch (type) {
-            case 'success': return 'border-l-green-500';
-            case 'error': return 'border-l-red-500';
-            case 'warning': return 'border-l-yellow-500';
-            case 'info': return 'border-l-blue-500';
-            default: return 'border-l-gray-500';
+            case 'success':
+                return 'border-l-emerald-500';
+            case 'error':
+                return 'border-l-rose-500';
+            case 'warning':
+                return 'border-l-amber-500';
+            case 'info':
+            default:
+                return 'border-l-cyan-500';
         }
     };
 
     return (
         <div
             className={`
-        flex items-center w-full max-w-sm p-4 mb-3 bg-white rounded-lg shadow-lg border-l-4 
-        transform transition-all duration-300 ease-in-out
-        ${getBorderColor()}
-        ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
-      `}
+                flex flex-col gap-2 w-full p-4 mb-3 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 border-l-4
+                transform transition-all duration-300 ease-out
+                ${getBorderColor()}
+                ${isVisible ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-full opacity-0 scale-95'}
+            `}
             role="alert"
         >
-            <div className="flex-shrink-0">
-                <ToastIcon type={type} />
+            <div className="flex items-start gap-3 w-full">
+                <div className="mt-0.5">
+                    <ToastIcon type={type} />
+                </div>
+                <div className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex-1 break-words leading-snug pr-1">
+                    {message}
+                </div>
+                <button
+                    type="button"
+                    className="shrink-0 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-lg p-1.5 hover:bg-slate-200 dark:hover:bg-slate-600 inline-flex items-center justify-center transition-colors"
+                    onClick={handleClose}
+                    aria-label="Fechar notificação"
+                >
+                    <X className="w-4 h-4" />
+                </button>
             </div>
-            <div className="ml-3 text-sm font-medium text-gray-700 flex-1">
-                {message}
-                {action && (
+            {action && (
+                <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-700/60">
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
                             action.onClick();
                             handleClose();
                         }}
-                        className="ml-4 px-3 py-1 bg-indigo-600 text-white text-xs font-bold rounded-md hover:bg-indigo-700 transition-colors shadow-sm"
+                        className="px-4 py-1.5 bg-indigo-600 text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-indigo-500 transition-colors shadow-sm"
                     >
                         {action.label}
                     </button>
-                )}
-            </div>
-            <button
-                type="button"
-                className="ml-auto -mx-1.5 -my-1.5 bg-white text-gray-400 hover:text-gray-900 rounded-lg focus:ring-2 focus:ring-gray-300 p-1.5 hover:bg-gray-100 inline-flex items-center justify-center h-8 w-8"
-                onClick={handleClose}
-                aria-label="Close"
-            >
-                <span className="sr-only">Close</span>
-                <X className="w-4 h-4" />
-            </button>
+                </div>
+            )}
         </div>
     );
 };
@@ -86,8 +103,10 @@ const ToastItem = ({ id, message, type, action, onRemove }: { id: string, messag
 export const ToastContainer: React.FC = () => {
     const { toasts, removeToast } = useToast();
 
+    if (toasts.length === 0) return null;
+
     return (
-        <div className="fixed top-5 right-5 z-50 flex flex-col items-end w-full max-w-sm pointer-events-none">
+        <div className="fixed top-20 right-4 sm:right-6 z-[9999] flex flex-col items-end w-[calc(100vw-2rem)] sm:w-full max-w-md max-h-[calc(100vh-6rem)] overflow-y-auto pointer-events-none pr-1">
             <div className="pointer-events-auto w-full">
                 {toasts.map((toast) => (
                     <ToastItem

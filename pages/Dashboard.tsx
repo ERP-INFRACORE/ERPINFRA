@@ -423,72 +423,133 @@ const Dashboard = () => {
 
       {/* --- Alerts Section --- */}
       <div className="w-full">
-        <div className="bg-slate-900 text-white p-8 rounded-[2rem] shadow-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-10 opacity-10">
-            <AlertCircle size={150} />
-          </div>
-
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+        <div className="bg-slate-900 text-white p-6 sm:p-8 rounded-[2rem] shadow-xl relative">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
             <div>
-              <h3 className="text-xl font-black uppercase tracking-tight mb-2 flex items-center gap-3">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                Central de Notificações
+              <h3 className="text-xl font-black uppercase tracking-tight mb-1 flex items-center gap-3">
+                <div className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-pulse"></div>
+                Central de Notificações Completa
               </h3>
-              <p className="text-slate-400 text-sm">Resumo de pendências críticas e alertas do sistema.</p>
+              <p className="text-slate-400 text-sm">
+                Resumo em tempo real de todas as pendências críticas, operacionais e financeiras do sistema.
+              </p>
             </div>
+            <NavLink
+              to="/settings"
+              className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-200 transition-colors self-start md:self-auto"
+            >
+              Configurar Alertas
+            </NavLink>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-8 relative z-10">
-            {/* Low Stock Alert */}
-            {lowStockCount > 0 ? (
-              <NavLink to="/purchases" className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl hover:bg-white/20 transition-all border border-white/5">
-                <div className="p-3 bg-orange-500/20 text-orange-400 rounded-xl">
-                  <Package size={24} />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black text-orange-400 uppercase tracking-wider">Estoque Crítico</p>
-                  <p className="text-lg font-bold">{lowStockCount} itens</p>
-                </div>
-                <ArrowRight size={16} className="ml-auto text-white/30" />
-              </NavLink>
-            ) : (
-              <div className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 opacity-50">
-                <div className="p-3 bg-emerald-500/20 text-emerald-400 rounded-xl"><Package size={24} /></div>
-                <div><p className="text-[10px] font-bold text-emerald-400 uppercase">Estoque</p><p className="text-sm">Tudo certo</p></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6 relative z-10">
+            {/* 1. Low Stock Alert */}
+            <NavLink
+              to="/purchases"
+              className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl hover:bg-white/20 transition-all border border-white/10"
+            >
+              <div className={`p-3 rounded-xl shrink-0 ${lowStockCount > 0 ? 'bg-orange-500/20 text-orange-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                <Package size={24} />
               </div>
-            )}
-
-            {/* Payroll Alert */}
-            {pendingPayrollCount > 0 ? (
-              <NavLink to="/hr" className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl hover:bg-white/20 transition-all border border-white/5">
-                <div className="p-3 bg-rose-500/20 text-rose-400 rounded-xl">
-                  <Users size={24} />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black text-rose-400 uppercase tracking-wider">Folha de Pagamento</p>
-                  <p className="text-lg font-bold">{pendingPayrollCount} pendentes</p>
-                </div>
-                <ArrowRight size={16} className="ml-auto text-white/30" />
-              </NavLink>
-            ) : (
-              <div className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 opacity-50">
-                <div className="p-3 bg-emerald-500/20 text-emerald-400 rounded-xl"><Users size={24} /></div>
-                <div><p className="text-[10px] font-bold text-emerald-400 uppercase">RH</p><p className="text-sm">Em dia</p></div>
+              <div className="min-w-0 flex-1">
+                <p className={`text-[10px] font-black uppercase tracking-wider ${lowStockCount > 0 ? 'text-orange-400' : 'text-emerald-400'}`}>
+                  Estoque & Almoxarifado
+                </p>
+                <p className="text-base font-bold truncate">
+                  {lowStockCount > 0 ? `${lowStockCount} itens em nível crítico` : 'Estoque regularizado'}
+                </p>
               </div>
-            )}
-
-            {/* Fleet Alert (Example) */}
-            <NavLink to="/fleet" className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl hover:bg-white/20 transition-all border border-white/5">
-              <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-xl">
-                <Truck size={24} />
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-wider">Frota Operacional</p>
-                <p className="text-lg font-bold">{fleetAvailability}%</p>
-              </div>
-              <ArrowRight size={16} className="ml-auto text-white/30" />
+              <ArrowRight size={16} className="ml-auto text-white/40 shrink-0" />
             </NavLink>
 
+            {/* 2. Payables Alert */}
+            <NavLink
+              to="/finance"
+              className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl hover:bg-white/20 transition-all border border-white/10"
+            >
+              <div className={`p-3 rounded-xl shrink-0 ${financials.payables > 0 ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                <DollarSign size={24} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={`text-[10px] font-black uppercase tracking-wider ${financials.payables > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                  Contas a Pagar Pendentes
+                </p>
+                <p className="text-base font-bold truncate">
+                  {financials.payables > 0 ? formatMoney(financials.payables) : 'Nenhuma pendência'}
+                </p>
+              </div>
+              <ArrowRight size={16} className="ml-auto text-white/40 shrink-0" />
+            </NavLink>
+
+            {/* 3. Payroll Alert */}
+            <NavLink
+              to="/hr"
+              className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl hover:bg-white/20 transition-all border border-white/10"
+            >
+              <div className={`p-3 rounded-xl shrink-0 ${pendingPayrollCount > 0 ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                <Users size={24} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={`text-[10px] font-black uppercase tracking-wider ${pendingPayrollCount > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  Folha de Pagamento & RH
+                </p>
+                <p className="text-base font-bold truncate">
+                  {pendingPayrollCount > 0 ? `${pendingPayrollCount} folha(s) pendente(s)` : 'Folha em dia'}
+                </p>
+              </div>
+              <ArrowRight size={16} className="ml-auto text-white/40 shrink-0" />
+            </NavLink>
+
+            {/* 4. Fleet Alert */}
+            <NavLink
+              to="/fleet"
+              className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl hover:bg-white/20 transition-all border border-white/10"
+            >
+              <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-xl shrink-0">
+                <Truck size={24} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-wider">Frota Operacional</p>
+                <p className="text-base font-bold truncate">
+                  {activeVehicles}/{fleet.length || 0} ativos ({fleetAvailability}%)
+                </p>
+              </div>
+              <ArrowRight size={16} className="ml-auto text-white/40 shrink-0" />
+            </NavLink>
+
+            {/* 5. Open Budgets Alert */}
+            <NavLink
+              to="/sales"
+              className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl hover:bg-white/20 transition-all border border-white/10"
+            >
+              <div className="p-3 bg-cyan-500/20 text-cyan-400 rounded-xl shrink-0">
+                <ShoppingCart size={24} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-black text-cyan-400 uppercase tracking-wider">Orçamentos em Aberto</p>
+                <p className="text-base font-bold truncate">
+                  {pendingSales > 0 ? `${pendingSales} proposta(s) aberta(s)` : 'Sem propostas pendentes'}
+                </p>
+              </div>
+              <ArrowRight size={16} className="ml-auto text-white/40 shrink-0" />
+            </NavLink>
+
+            {/* 6. Receivables Alert */}
+            <NavLink
+              to="/finance"
+              className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl hover:bg-white/20 transition-all border border-white/10"
+            >
+              <div className="p-3 bg-emerald-500/20 text-emerald-400 rounded-xl shrink-0">
+                <Wallet size={24} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">Contas a Receber</p>
+                <p className="text-base font-bold truncate">
+                  {formatMoney(financials.receivables)}
+                </p>
+              </div>
+              <ArrowRight size={16} className="ml-auto text-white/40 shrink-0" />
+            </NavLink>
           </div>
         </div>
       </div>

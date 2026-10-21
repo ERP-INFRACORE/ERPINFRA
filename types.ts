@@ -570,3 +570,58 @@ export interface AuditLog {
   severity: 'info' | 'warning' | 'critical';
   ip?: string;
 }
+
+// ============================================================================
+// AGENTES DE IA (WhatsApp)
+// Persistidos em settings.integrations['ai_agents_whatsapp'].config
+// ============================================================================
+
+/** Vínculo entre um usuário do sistema e um número de WhatsApp autorizado. */
+export interface AIAgentNumberLink {
+  id: string;
+  userId: string;
+  phone: string; // somente dígitos, com DDI (ex: 5511987654321)
+}
+
+export interface AIAgentSettings {
+  enabled: boolean;
+  links: AIAgentNumberLink[];
+  acceptAudio: boolean;
+  acceptImages: boolean;
+  requireConfirmation: boolean; // pede confirmação antes de gravar no ERP
+  proactiveAlerts: boolean;     // permite mensagens iniciadas pelo agente
+}
+
+export interface AIGatewaySettings {
+  provider: 'evolution' | 'zapi' | 'meta_cloud';
+  instanceName: string;
+  webhookUrl: string;
+}
+
+export type AICodeProposalStatus = 'solicitada' | 'aguardando_aprovacao' | 'aprovada' | 'rejeitada' | 'aplicada';
+
+export interface AICodeProposal {
+  id: string;
+  title: string;
+  description: string;
+  files: string[];
+  requestedBy: string;
+  createdAt: string; // ISO
+  status: AICodeProposalStatus;
+  origin: 'whatsapp' | 'painel';
+  branch?: string;
+}
+
+export interface AICodeAgentSettings {
+  enabled: boolean;
+  links: AIAgentNumberLink[];
+  mode: 'suggest_only' | 'branch_and_pr';
+  proposals: AICodeProposal[];
+}
+
+export interface AIAgentsConfig {
+  gatewayEnabled: boolean;
+  gateway: AIGatewaySettings;
+  agents: Record<string, AIAgentSettings>;
+  codeAgent: AICodeAgentSettings;
+}

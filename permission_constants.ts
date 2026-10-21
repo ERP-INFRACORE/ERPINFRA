@@ -95,6 +95,13 @@ export const APP_PERMISSIONS = [
         ]
     },
     {
+        category: 'Agentes de IA & WhatsApp',
+        permissions: [
+            { id: 'ai.agents.view', name: 'Ver Agentes de IA', description: 'Visualizar agentes e vínculos de WhatsApp' },
+            { id: 'ai.agents.manage', name: 'Gerir Agentes de IA', description: 'Ativar agentes e autorizar números de WhatsApp' },
+        ]
+    },
+    {
         category: 'Dashboard & BI',
         permissions: [
             { id: 'dashboard.view', name: 'Visualizar Dashboard', description: 'Acesso à tela inicial e indicadores gerais' },
