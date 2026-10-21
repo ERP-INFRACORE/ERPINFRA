@@ -26,7 +26,8 @@ import {
     Image as ImageIcon,
     Bell,
     CheckCheck,
-    GitPullRequest
+    GitPullRequest,
+    Copy
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -45,6 +46,7 @@ import {
     CODE_AGENT_PROTECTED_PATHS,
     findUserRole,
     formatPhone,
+    formatPhoneInput,
     getAgentSettings,
     getAIConfig,
     getPermissionName,
@@ -132,6 +134,7 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
     const [department, setDepartment] = useState('Todos');
     const [linkUserId, setLinkUserId] = useState('');
     const [linkPhone, setLinkPhone] = useState('');
+    const [linkLabel, setLinkLabel] = useState('');
     const [chatMessages, setChatMessages] = useState<Record<string, Array<{ from: 'user' | 'agent'; text: string }>>>({});
     const [chatInput, setChatInput] = useState('');
     const [testingWebhook, setTestingWebhook] = useState(false);
@@ -140,6 +143,49 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
     const [reqTitle, setReqTitle] = useState('');
     const [reqDescription, setReqDescription] = useState('');
     const [reqFiles, setReqFiles] = useState('');
+    const [reqSelectedFiles, setReqSelectedFiles] = useState<string[]>([]);
+    const [reqChangeType, setReqChangeType] = useState<NonNullable<AICodeProposal['changeType']>>('Refatoração');
+    const [reqPriority, setReqPriority] = useState<NonNullable<AICodeProposal['priority']>>('Alta');
+
+    const ERP_FILE_CHIPS = [
+        'pages/Sales.tsx',
+        'pages/Finance.tsx',
+        'pages/Production.tsx',
+        'pages/Purchases.tsx',
+        'pages/Clients.tsx',
+        'pages/Fleet.tsx',
+        'pages/HR.tsx',
+        'pages/Reports.tsx',
+        'pages/Settings.tsx',
+        'context/AppContext.tsx',
+        'components/Layout.tsx',
+        'components/AIAuditAgent.tsx'
+    ];
+
+    const handleSelectUserForLink = (uid: string) => {
+        setLinkUserId(uid);
+        if (!uid) return;
+        const u = users.find(x => x.id === uid);
+        if (!u) return;
+        const matchedEmp = (employees || []).find(
+            emp =>
+                (u.email && emp.email && emp.email.toLowerCase() === u.email.toLowerCase()) ||
+                emp.name.toLowerCase() === u.name.toLowerCase()
+        );
+        if (matchedEmp?.phone) {
+            setLinkPhone(formatPhoneInput(matchedEmp.phone));
+        }
+        const roleName = findUserRole(u, roles)?.name;
+        if (roleName && !linkLabel) {
+            setLinkLabel(roleName);
+        }
+    };
+
+    const toggleFileChip = (file: string) => {
+        setReqSelectedFiles(prev =>
+            prev.includes(file) ? prev.filter(f => f !== file) : [...prev, file]
+        );
+    };
 
     const generateAgentLiveReply = (agentId: string, promptText: string): string => {
         const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
@@ -261,6 +307,7 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         setSelectedId(id);
         setLinkUserId('');
         setLinkPhone('');
+        setLinkLabel('');
     };
 
     const addAgentLink = (def: AIAgentDefinition) => {
@@ -278,9 +325,16 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         }
         const { phone, error } = validateLink(linkUserId, linkPhone, current.links);
         if (error || !phone) return addToast(error || 'Número inválido.', 'error');
-        patchAgent(def.id, { links: [...current.links, { id: newId(), userId: linkUserId, phone }] });
+        patchAgent(def.id, {
+            links: [
+                ...current.links,
+                { id: newId(), userId: linkUserId, phone, label: linkLabel.trim() || undefined }
+            ]
+        });
         setLinkUserId('');
         setLinkPhone('');
+        setLinkLabel('');
+        addToast('Número autorizado vinculado com sucesso!', 'success');
     };
 
     const removeAgentLink = (agentId: string, linkId: string) => {
@@ -299,30 +353,60 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         }
         const { phone, error } = validateLink(linkUserId, linkPhone, config.codeAgent.links);
         if (error || !phone) return addToast(error || 'Número inválido.', 'error');
-        patchCode({ links: [...config.codeAgent.links, { id: newId(), userId: linkUserId, phone }] });
+        patchCode({
+            links: [
+                ...config.codeAgent.links,
+                { id: newId(), userId: linkUserId, phone, label: linkLabel.trim() || 'Super Admin' }
+            ]
+        });
         setLinkUserId('');
         setLinkPhone('');
+        setLinkLabel('');
+        addToast('Número de Administrador autorizado no Agente de Código!', 'success');
     };
 
     const addProposalRequest = () => {
         if (!isAdmin) return;
         const title = reqTitle.trim();
         if (!title) return addToast('Informe um título para a solicitação.', 'error');
+        const manualFiles = reqFiles.split(',').map(f => f.trim()).filter(Boolean);
+        const combinedFiles = Array.from(new Set([...reqSelectedFiles, ...manualFiles]));
         const proposal: AICodeProposal = {
             id: newId(),
             title,
             description: reqDescription.trim(),
-            files: reqFiles.split(',').map(f => f.trim()).filter(Boolean),
+            files: combinedFiles,
             requestedBy: currentUser?.name || 'Administrador',
             createdAt: new Date().toISOString(),
             status: 'solicitada',
-            origin: 'painel'
+            origin: 'painel',
+            changeType: reqChangeType,
+            priority: reqPriority
         };
         patchCode({ proposals: [proposal, ...config.codeAgent.proposals] });
         setReqTitle('');
         setReqDescription('');
         setReqFiles('');
+        setReqSelectedFiles([]);
         addToast('Solicitação registrada na fila do agente.', 'success');
+    };
+
+    const deleteProposal = (id: string, title?: string) => {
+        if (!isAdmin) return;
+        patchCode({ proposals: config.codeAgent.proposals.filter(p => p.id !== id) });
+        addToast(title ? `Proposta excluída da fila: "${title}"` : 'Proposta excluída da fila.', 'info');
+    };
+
+    const copyProposalPrompt = (p: AICodeProposal) => {
+        const promptText = [
+            `# Solicitação do Agente de Código (ADM) — ${p.title}`,
+            `- **Tipo:** ${p.changeType || 'Refatoração'} | **Prioridade:** ${p.priority || 'Alta'}`,
+            p.files.length > 0 ? `- **Arquivos Alvo:** ${p.files.map(f => `\`${f}\``).join(', ')}` : '',
+            p.branch ? `- **Branch Sugerida:** \`${p.branch}\`` : '',
+            `\n## Instruções de Implementação\n${p.description || p.title}`
+        ].filter(Boolean).join('\n');
+        navigator.clipboard.writeText(promptText);
+        addToast(`Prompt da proposta "${p.title}" copiado!`, 'success');
     };
 
     const setProposalStatus = (id: string, status: AICodeProposalStatus) => {
@@ -416,11 +500,65 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                             <input className={INPUT_CLASS} value={config.gateway.instanceName} onChange={e => patchGateway({ instanceName: e.target.value })} placeholder="infracore-producao" />
                         </div>
                         <div className="space-y-1">
-                            <label className={LABEL_CLASS}>URL do webhook (servidor)</label>
+                            <div className="flex items-center justify-between">
+                                <label className={LABEL_CLASS}>URL do webhook (servidor)</label>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const inst = (config.gateway.instanceName || 'infracore-producao').trim();
+                                        const suggested = `https://api.infracore.com.br/webhooks/whatsapp/${inst}`;
+                                        patchGateway({ webhookUrl: suggested });
+                                        navigator.clipboard.writeText(suggested);
+                                        addToast('URL sugerida preenchida e copiada!', 'success');
+                                    }}
+                                    className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                                >
+                                    <Copy size={11} /> Copiar URL Sugerida
+                                </button>
+                            </div>
                             <input className={INPUT_CLASS} value={config.gateway.webhookUrl} onChange={e => patchGateway({ webhookUrl: e.target.value })} placeholder="https://api.suaempresa.com/whatsapp/webhook" />
                             {config.gateway.webhookUrl && !config.gateway.webhookUrl.startsWith('https://') && (
                                 <p className="text-[10px] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertTriangle size={12} /> Use HTTPS no webhook.</p>
                             )}
+                            {config.gateway.webhookUrl && config.gateway.webhookUrl.startsWith('https://') && (
+                                <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 ml-1 flex items-center gap-1"><Check size={12} /> Endpoint HTTPS válido</p>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <div className="space-y-1">
+                            <label className={LABEL_CLASS}>Número Remetente (WhatsApp Business)</label>
+                            <input
+                                className={INPUT_CLASS}
+                                inputMode="tel"
+                                value={config.gateway.senderPhone || ''}
+                                onChange={e => patchGateway({ senderPhone: formatPhoneInput(e.target.value) })}
+                                placeholder="(11) 98765-4321"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className={LABEL_CLASS}>Horário de Atendimento Automático</label>
+                            <select
+                                className={INPUT_CLASS}
+                                value={config.gateway.scheduleMode || '24x7'}
+                                onChange={e => patchGateway({ scheduleMode: e.target.value as '24x7' | 'commercial' })}
+                            >
+                                <option value="24x7">24/7 — Tempo Integral (Plantão Contínuo)</option>
+                                <option value="commercial">Comercial — Seg a Sáb (07:00 às 19:00)</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className={LABEL_CLASS}>Expiração de Confirmação SIM/NÃO (min)</label>
+                            <input
+                                type="number"
+                                min={1}
+                                max={120}
+                                className={INPUT_CLASS}
+                                value={config.gateway.confirmationTimeoutMinutes ?? 15}
+                                onChange={e => patchGateway({ confirmationTimeoutMinutes: Math.max(1, Number(e.target.value) || 15) })}
+                                placeholder="15"
+                            />
                         </div>
                     </div>
                 </section>
@@ -549,7 +687,7 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                 <select
                                     className="bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 font-bold text-sm outline-none focus:border-amber-400"
                                     value={linkUserId}
-                                    onChange={e => setLinkUserId(e.target.value)}
+                                    onChange={e => handleSelectUserForLink(e.target.value)}
                                 >
                                     <option value="">Administrador…</option>
                                     {eligibleAdmins.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
@@ -559,7 +697,7 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                     placeholder="(11) 98765-4321"
                                     inputMode="tel"
                                     value={linkPhone}
-                                    onChange={e => setLinkPhone(e.target.value)}
+                                    onChange={e => setLinkPhone(formatPhoneInput(e.target.value))}
                                 />
                                 <button type="button" onClick={addCodeLink} className="px-4 py-2.5 rounded-xl bg-amber-400 text-slate-900 font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all flex items-center justify-center gap-1"><Plus size={14} /> Adicionar</button>
                             </div>
@@ -569,10 +707,62 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                     {/* Solicitações e propostas */}
                     <div className="space-y-4 pt-2 border-t border-slate-700">
                         <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2 pt-4"><GitPullRequest size={14} /> Fila de solicitações e propostas</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                            <input className="bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 font-bold text-sm outline-none focus:border-amber-400" placeholder="Título (ex.: Ajustar filtro do DRE)" value={reqTitle} onChange={e => setReqTitle(e.target.value)} />
-                            <input className="bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 font-bold text-sm outline-none focus:border-amber-400" placeholder="Arquivos (separe por vírgula)" value={reqFiles} onChange={e => setReqFiles(e.target.value)} />
-                            <button type="button" onClick={addProposalRequest} className="px-4 py-2.5 rounded-xl bg-amber-400 text-slate-900 font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all flex items-center justify-center gap-1"><Plus size={14} /> Registrar solicitação</button>
+
+                        {/* Seletor Multi-Arquivo Assistido (Chips) */}
+                        <div className="space-y-1.5">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
+                                Selecione os Arquivos Alvo (clique para marcar/desmarcar):
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                                {ERP_FILE_CHIPS.map(file => {
+                                    const active = reqSelectedFiles.includes(file);
+                                    return (
+                                        <button
+                                            key={file}
+                                            type="button"
+                                            onClick={() => toggleFileChip(file)}
+                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-all border ${
+                                                active
+                                                    ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-sm'
+                                                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500'
+                                            }`}
+                                        >
+                                            {active ? '✓ ' : '+ '}
+                                            {file}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                            <input className="bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 font-bold text-sm outline-none focus:border-amber-400 md:col-span-2" placeholder="Título (ex.: Ajustar filtro do DRE)" value={reqTitle} onChange={e => setReqTitle(e.target.value)} />
+                            <select
+                                className="bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 font-bold text-sm outline-none focus:border-amber-400"
+                                value={reqChangeType}
+                                onChange={e => setReqChangeType(e.target.value as NonNullable<AICodeProposal['changeType']>)}
+                            >
+                                <option value="Bugfix">Tipo: Bugfix</option>
+                                <option value="Refatoração">Tipo: Refatoração</option>
+                                <option value="Nova Funcionalidade">Tipo: Nova Funcionalidade</option>
+                                <option value="Performance">Tipo: Performance</option>
+                                <option value="Segurança">Tipo: Segurança</option>
+                            </select>
+                            <select
+                                className="bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 font-bold text-sm outline-none focus:border-amber-400"
+                                value={reqPriority}
+                                onChange={e => setReqPriority(e.target.value as NonNullable<AICodeProposal['priority']>)}
+                            >
+                                <option value="Baixa">Prioridade: Baixa</option>
+                                <option value="Média">Prioridade: Média</option>
+                                <option value="Alta">Prioridade: Alta</option>
+                                <option value="Urgente">Prioridade: Urgente</option>
+                            </select>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+                            <input className="bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 font-bold text-sm outline-none focus:border-amber-400" placeholder="Arquivos adicionais opcionais (separe por vírgula)" value={reqFiles} onChange={e => setReqFiles(e.target.value)} />
+                            <button type="button" onClick={addProposalRequest} className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-900 font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all flex items-center justify-center gap-1"><Plus size={14} /> Registrar solicitação</button>
                         </div>
                         <textarea className="w-full bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 font-bold text-sm outline-none focus:border-amber-400 min-h-[70px]" placeholder="Descreva o que deve ser sugerido ou alterado" value={reqDescription} onChange={e => setReqDescription(e.target.value)} />
 
@@ -581,13 +771,47 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                         ) : (
                             <ul className="space-y-3">
                                 {config.codeAgent.proposals.map(p => (
-                                    <li key={p.id} className="bg-slate-800 rounded-2xl p-4 space-y-2">
+                                    <li key={p.id} className="bg-slate-800 rounded-2xl p-4 space-y-2 border border-slate-700/70">
                                         <div className="flex flex-wrap items-start justify-between gap-2">
-                                            <div className="min-w-0">
-                                                <p className="font-black text-sm">{p.title}</p>
+                                            <div className="min-w-0 space-y-1">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <p className="font-black text-sm">{p.title}</p>
+                                                    {p.changeType && (
+                                                        <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 text-[9px] font-black uppercase tracking-wider">
+                                                            {p.changeType}
+                                                        </span>
+                                                    )}
+                                                    {p.priority && (
+                                                        <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
+                                                            p.priority === 'Urgente' || p.priority === 'Alta'
+                                                                ? 'bg-rose-500/20 text-rose-300'
+                                                                : 'bg-amber-500/20 text-amber-300'
+                                                        }`}>
+                                                            Prioridade {p.priority}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p className="text-[11px] text-slate-400 font-bold">{p.requestedBy} · {new Date(p.createdAt).toLocaleString('pt-BR')} · via {p.origin === 'whatsapp' ? 'WhatsApp' : 'painel'}</p>
                                             </div>
-                                            <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${PROPOSAL_STATUS[p.status].className}`}>{PROPOSAL_STATUS[p.status].label}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${PROPOSAL_STATUS[p.status].className}`}>{PROPOSAL_STATUS[p.status].label}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => copyProposalPrompt(p)}
+                                                    title="Copiar Prompt desta Proposta"
+                                                    className="p-1.5 rounded-lg bg-slate-700 hover:bg-indigo-600 text-slate-200 hover:text-white transition-colors"
+                                                >
+                                                    <Copy size={14} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => deleteProposal(p.id, p.title)}
+                                                    title="Excluir Solicitação da Fila"
+                                                    className="p-1.5 rounded-lg bg-slate-700 hover:bg-rose-600 text-slate-200 hover:text-white transition-colors"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
                                         </div>
                                         {p.description && <p className="text-xs text-slate-300 font-medium whitespace-pre-wrap">{p.description}</p>}
                                         {p.files.length > 0 && (
@@ -626,6 +850,13 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                             {p.status === 'aprovada' && (
                                                 <button type="button" onClick={() => setProposalStatus(p.id, 'aplicada')} className="px-3 py-1.5 rounded-lg bg-indigo-500 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-1"><CheckCheck size={12} /> Marcar como aplicada</button>
                                             )}
+                                            <button
+                                                type="button"
+                                                onClick={() => copyProposalPrompt(p)}
+                                                className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-black uppercase tracking-widest flex items-center gap-1"
+                                            >
+                                                <Copy size={11} /> Copiar Prompt
+                                            </button>
                                         </div>
                                     </li>
                                 ))}
@@ -700,6 +931,20 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                                 </label>
                                             )}
                                         </div>
+
+                                        <div className="space-y-2">
+                                            <h4 className={LABEL_CLASS}>Instruções Personalizadas (Prompt de Sistema Customizado)</h4>
+                                            <textarea
+                                                rows={3}
+                                                className={INPUT_CLASS}
+                                                placeholder={`Ex.: Sempre confirme o centro de custo antes de lançar; ou "Só liberar cotação acima de R$ 10.000 após confirmar CNPJ"...`}
+                                                value={s.customSystemPrompt || ''}
+                                                onChange={e => patchAgent(def.id, { customSystemPrompt: e.target.value })}
+                                            />
+                                            <p className="text-[10px] text-slate-400 font-bold ml-1">
+                                                Regras extras de negócio ou tom de voz aplicadas especificamente ao {def.name}.
+                                            </p>
+                                        </div>
                                     </div>
 
                                     <div className="space-y-6">
@@ -713,19 +958,32 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                                     return (
                                                         <li key={l.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
                                                             <div className="min-w-0">
-                                                                <p className="text-sm font-black text-slate-800 dark:text-slate-100 truncate">{userLabel(l.userId)} <span className="text-[10px] text-slate-400 font-bold">· {roleLabel(l.userId)}</span></p>
+                                                                <p className="text-sm font-black text-slate-800 dark:text-slate-100 truncate">
+                                                                    {userLabel(l.userId)}{' '}
+                                                                    <span className="text-[10px] text-slate-400 font-bold">· {l.label || roleLabel(l.userId)}</span>
+                                                                </p>
                                                                 <p className="text-xs text-slate-500 font-bold">{formatPhone(l.phone)}</p>
                                                                 {!elig.eligible && (
                                                                     <p className="text-[10px] font-black text-rose-500 flex items-center gap-1"><AlertTriangle size={11} /> {u ? (elig.missing.length ? `Perfil sem: ${elig.missing.map(getPermissionName).join(', ')}` : 'Usuário inativo') : 'Usuário removido'} — será bloqueado</p>
                                                                 )}
                                                             </div>
-                                                            <button type="button" onClick={() => removeAgentLink(def.id, l.id)} className="p-2 text-slate-400 hover:text-rose-500"><Trash2 size={16} /></button>
+                                                            <div className="flex items-center gap-1">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => addToast(`Disparo de teste enviado para ${userLabel(l.userId)} (${formatPhone(l.phone)}) via ${def.name}!`, 'success')}
+                                                                    className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase tracking-wider hover:bg-emerald-100"
+                                                                    title="Simular envio de mensagem de boas-vindas/teste para este número"
+                                                                >
+                                                                    Testar Disparo
+                                                                </button>
+                                                                <button type="button" onClick={() => removeAgentLink(def.id, l.id)} className="p-2 text-slate-400 hover:text-rose-500"><Trash2 size={16} /></button>
+                                                            </div>
                                                         </li>
                                                     );
                                                 })}
                                             </ul>
                                             <div className="space-y-2">
-                                                <select className={INPUT_CLASS} value={linkUserId} onChange={e => setLinkUserId(e.target.value)}>
+                                                <select className={INPUT_CLASS} value={linkUserId} onChange={e => handleSelectUserForLink(e.target.value)}>
                                                     <option value="">Selecione o usuário…</option>
                                                     {users.map(u => {
                                                         const e = getUserEligibility(u, roles, def.minPermissions);
@@ -736,10 +994,22 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                                         );
                                                     })}
                                                 </select>
-                                                <div className="flex gap-2">
-                                                    <input className={INPUT_CLASS} placeholder="WhatsApp: (11) 98765-4321" inputMode="tel" value={linkPhone} onChange={e => setLinkPhone(e.target.value)} />
-                                                    <button type="button" onClick={() => addAgentLink(def)} className="px-4 rounded-xl bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest flex items-center gap-1 hover:scale-105 transition-all"><Plus size={14} /> Adicionar</button>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    <input
+                                                        className={INPUT_CLASS}
+                                                        placeholder="WhatsApp: (11) 98765-4321"
+                                                        inputMode="tel"
+                                                        value={linkPhone}
+                                                        onChange={e => setLinkPhone(formatPhoneInput(e.target.value))}
+                                                    />
+                                                    <input
+                                                        className={INPUT_CLASS}
+                                                        placeholder="Apelido/Cargo (ex: Plantão Usina)"
+                                                        value={linkLabel}
+                                                        onChange={e => setLinkLabel(e.target.value)}
+                                                    />
                                                 </div>
+                                                <button type="button" onClick={() => addAgentLink(def)} className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-1 hover:bg-indigo-500 transition-all"><Plus size={14} /> Adicionar Número Autorizado</button>
                                                 <p className="text-[10px] text-slate-400 font-bold ml-1">Exige no perfil: {def.minPermissions.map(getPermissionName).join(', ')}.</p>
                                             </div>
                                         </div>

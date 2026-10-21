@@ -282,12 +282,20 @@ export const DEFAULT_AGENT_SETTINGS: AIAgentSettings = {
     acceptAudio: true,
     acceptImages: true,
     requireConfirmation: true,
-    proactiveAlerts: true
+    proactiveAlerts: true,
+    customSystemPrompt: ''
 };
 
 export const DEFAULT_AI_CONFIG: AIAgentsConfig = {
     gatewayEnabled: false,
-    gateway: { provider: 'evolution', instanceName: '', webhookUrl: '' },
+    gateway: {
+        provider: 'evolution',
+        instanceName: '',
+        webhookUrl: '',
+        senderPhone: '',
+        scheduleMode: '24x7',
+        confirmationTimeoutMinutes: 15
+    },
     agents: {},
     codeAgent: { enabled: false, links: [], mode: 'suggest_only', proposals: [] }
 };
@@ -343,6 +351,20 @@ export const normalizePhone = (raw: string): string => {
 export const formatPhone = (digits: string): string => {
     const m = /^(\d{2})(\d{2})(\d{4,5})(\d{4})$/.exec(digits || '');
     return m ? `+${m[1]} (${m[2]}) ${m[3]}-${m[4]}` : digits;
+};
+
+/** Formata o número em tempo real enquanto o usuário digita: (DD) 9XXXX-XXXX ou +55 (DD) 9XXXX-XXXX */
+export const formatPhoneInput = (raw: string): string => {
+    let digits = (raw || '').replace(/\D/g, '');
+    if (digits.startsWith('55') && digits.length > 11) {
+        digits = digits.slice(2);
+    }
+    digits = digits.slice(0, 11);
+    if (digits.length === 0) return '';
+    if (digits.length <= 2) return `(${digits}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
 };
 
 // ---------------------------------------------------------------------------

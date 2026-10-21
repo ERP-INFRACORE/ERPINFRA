@@ -26,7 +26,10 @@ import {
   ExternalLink,
   Lock,
   GitPullRequest,
-  Plus
+  Plus,
+  Trash2,
+  Wand2,
+  RotateCcw
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
@@ -696,7 +699,66 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(100);
   const [expandedIssueId, setExpandedIssueId] = useState<string | null>(null);
-  const [customSuggestions, setCustomSuggestions] = useState<CodeReviewSuggestion[]>([]);
+
+  const [customSuggestions, setCustomSuggestions] = useState<CodeReviewSuggestion[]>(() => {
+    try {
+      const saved = localStorage.getItem('infracore_custom_code_suggestions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [deletedSuggestionIds, setDeletedSuggestionIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('infracore_deleted_code_suggestions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [deletedIssueIds, setDeletedIssueIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('infracore_deleted_audit_issues');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [autoGenCounter, setAutoGenCounter] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('infracore_autogen_seq');
+      return saved ? Number(saved) || 9 : 9;
+    } catch {
+      return 9;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('infracore_custom_code_suggestions', JSON.stringify(customSuggestions));
+    } catch {}
+  }, [customSuggestions]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('infracore_deleted_code_suggestions', JSON.stringify(deletedSuggestionIds));
+    } catch {}
+  }, [deletedSuggestionIds]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('infracore_deleted_audit_issues', JSON.stringify(deletedIssueIds));
+    } catch {}
+  }, [deletedIssueIds]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('infracore_autogen_seq', String(autoGenCounter));
+    } catch {}
+  }, [autoGenCounter]);
 
   // Interactive Studio State (Admin On-Demand Code Review Generator)
   const [studioFile, setStudioFile] = useState<string>('context/AppContext.tsx');
@@ -735,8 +797,11 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
   };
 
   const allCodeSuggestions = useMemo(
-    () => [...customSuggestions, ...CODE_REVIEW_SUGGESTIONS],
-    [customSuggestions]
+    () =>
+      [...customSuggestions, ...CODE_REVIEW_SUGGESTIONS].filter(
+        s => !deletedSuggestionIds.includes(s.id)
+      ),
+    [customSuggestions, deletedSuggestionIds]
   );
 
   const filteredSuggestions = useMemo(() => {
@@ -776,7 +841,7 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
       po => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(po.id)
     );
 
-    return STATIC_AUDIT_ISSUES.map(issue => {
+    return STATIC_AUDIT_ISSUES.filter(i => !deletedIssueIds.includes(i.id)).map(issue => {
       if (issue.id === 'ERR-BACK-01') {
         const count = nonUuidSales.length + nonUuidPOs.length;
         return {
@@ -828,7 +893,7 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
         liveDetected: true
       };
     });
-  }, [users, roles, fleet, sales, purchaseOrders, productionUnits, accounts]);
+  }, [users, roles, fleet, sales, purchaseOrders, productionUnits, accounts, deletedIssueIds]);
 
   const modulesList = useMemo(() => {
     const unique = Array.from(
@@ -891,6 +956,209 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
         return prev + 20;
       });
     }, 140);
+  };
+
+  const handleDeleteSuggestion = (id: string, title?: string) => {
+    const isCustom = customSuggestions.some(s => s.id === id);
+    if (isCustom) {
+      setCustomSuggestions(prev => prev.filter(s => s.id !== id));
+    } else {
+      setDeletedSuggestionIds(prev => (prev.includes(id) ? prev : [...prev, id]));
+    }
+    addToast(
+      title ? `Sugestão excluída: "${title}"` : `Sugestão [${id}] excluída da lista.`,
+      'info'
+    );
+  };
+
+  const handleDeleteIssue = (id: string, title?: string) => {
+    setDeletedIssueIds(prev => (prev.includes(id) ? prev : [...prev, id]));
+    addToast(
+      title ? `Prompt de diagnóstico excluído: "${title}"` : `Diagnóstico [${id}] excluído da lista.`,
+      'info'
+    );
+  };
+
+  const handleDeleteFiltered = () => {
+    if (activeView === 'suggestions') {
+      if (filteredSuggestions.length === 0) return;
+      const idsToDelete = new Set(filteredSuggestions.map(s => s.id));
+      setCustomSuggestions(prev => prev.filter(s => !idsToDelete.has(s.id)));
+      const staticToDelete = CODE_REVIEW_SUGGESTIONS.filter(s => idsToDelete.has(s.id)).map(s => s.id);
+      setDeletedSuggestionIds(prev => Array.from(new Set([...prev, ...staticToDelete])));
+      addToast(`${filteredSuggestions.length} sugestão(ões) de código excluída(s) da visualização.`, 'info');
+      return;
+    }
+    if (activeView === 'audit') {
+      if (filteredIssues.length === 0) return;
+      const idsToDelete = filteredIssues.map(i => i.id);
+      setDeletedIssueIds(prev => Array.from(new Set([...prev, ...idsToDelete])));
+      addToast(`${filteredIssues.length} prompt(s) de diagnóstico excluído(s) da visualização.`, 'info');
+    }
+  };
+
+  const handleRestoreDefaults = () => {
+    const restoredCount = deletedSuggestionIds.length + deletedIssueIds.length;
+    setDeletedSuggestionIds([]);
+    setDeletedIssueIds([]);
+    addToast(
+      restoredCount > 0
+        ? `${restoredCount} prompt(s) padrão restaurado(s) com sucesso!`
+        : 'Todos os prompts padrão já estão visíveis.',
+      'success'
+    );
+  };
+
+  const handleGenerateAutoSuggestions = () => {
+    const lowStockCount = (inventory || []).filter(i => i.quantity <= (i.minStock || 0)).length;
+    const pendingPOs = (purchaseOrders || []).filter(po => po.status === 'Pendente').length;
+    const openBudgets = (budgets || []).filter(b => b.status === 'Aberto').length;
+    const pendingTx = (transactions || []).filter(t => t.status === 'Pendente').length;
+    const maintenanceFleet = (fleet || []).filter(v => v.status === 'Manutenção').length;
+
+    const dynamicPool: Array<Omit<CodeReviewSuggestion, 'id'>> = [
+      {
+        module: 'Dashboard',
+        file: 'pages/Dashboard.tsx',
+        category: 'Performance',
+        impact: 'Alto',
+        title: `Memoização de Agregações Financeiras e Alertas de Estoque (${lowStockCount} itens críticos)`,
+        rationale: `O Dashboard recalcula somatórios de ${transactions.length} transações e ${inventory.length} itens de estoque a cada re-renderização. Envolver os KPIs em useMemo reduz o custo de CPU na troca de filtros.`,
+        codeBefore: `const totalReceivables = transactions.filter(t => t.type === 'Receita' && t.status === 'Pendente').reduce((a, b) => a + b.amount, 0);\nconst criticalStock = inventory.filter(i => i.quantity <= i.minStock);`,
+        codeAfter: `const { totalReceivables, criticalStock } = useMemo(() => ({\n  totalReceivables: transactions.reduce((acc, t) => t.type === 'Receita' && t.status === 'Pendente' ? acc + t.amount : acc, 0),\n  criticalStock: inventory.filter(i => i.quantity <= (i.minStock || 0))\n}), [transactions, inventory]);`,
+        prompt: `Em \`pages/Dashboard.tsx\`, envolva os cálculos de KPIs financeiros (\`transactions\`), alertas de estoque (\`inventory\`) e status de frota (\`fleet\`) em um único \`useMemo\` dependente apenas das coleções utilizadas, evitando múltiplas passagens \`.filter().reduce()\` a cada renderização.`
+      },
+      {
+        module: 'Custos e Despesas (Compras)',
+        file: 'pages/Purchases.tsx',
+        category: 'Regra de Negócio',
+        impact: 'Alto',
+        title: `Alçada Dupla de Aprovação para Ordens de Compra (${pendingPOs} O.C. pendentes)`,
+        rationale: `Existem ${pendingPOs} ordens de compra pendentes. Os parâmetros purchaseApprovalLevel1 (R$ ${settings.operational?.purchaseApprovalLevel1 ?? 5000}) e purchaseApprovalLevel2 (R$ ${settings.operational?.purchaseApprovalLevel2 ?? 20000}) devem validar automaticamente a aprovação por faixa de valor.`,
+        codeBefore: `const handleApproveOrder = (po: PurchaseOrder) => {\n  updatePurchaseOrder({ ...po, status: 'Aprovado' });\n};`,
+        codeAfter: `const handleApproveOrder = (po: PurchaseOrder) => {\n  const limitL2 = Number(settings.operational?.purchaseApprovalLevel2 ?? 20000);\n  if (po.total > limitL2 && !isUserAdmin(currentUser, roles)) {\n    return addToast(\`Acima de R$ \${limitL2}: aprovação exclusiva da Diretoria/ADM!\`, 'error');\n  }\n  updatePurchaseOrder({ ...po, status: 'Aprovado' });\n};`,
+        prompt: `Em \`pages/Purchases.tsx\`, implemente a validação de alçada escalonada ao aprovar uma Ordem de Compra usando \`settings.operational.purchaseApprovalLevel1\` e \`purchaseApprovalLevel2\`, exigindo perfil Administrador para compras acima do Nível 2.`
+      },
+      {
+        module: 'Produção',
+        file: 'pages/Production.tsx',
+        category: 'Regra de Negócio',
+        impact: 'Alto',
+        title: `Validação Prévia de Insumos na Fórmula Antes de Iniciar O.P. (${productionUnits.length} usinas)`,
+        rationale: `Ao iniciar uma Ordem de Produção nas ${productionUnits.length} unidades industriais, o sistema deve checar se todos os agregados/cimento/CAP da fórmula possuem saldo suficiente antes de mudar o status para "Em Produção".`,
+        codeBefore: `updateProductionOrder({ ...order, status: 'Em Produção' });`,
+        codeAfter: `const missing = checkFormulaStockShortage(order, formulas, inventory);\nif (missing.length > 0) {\n  return addToast(\`Saldo insuficiente de insumos: \${missing.join(', ')}\`, 'error');\n}\nupdateProductionOrder({ ...order, status: 'Em Produção' });`,
+        prompt: `Em \`pages/Production.tsx\`, crie uma função auxiliar \`checkFormulaStockShortage\` que multiplica a quantidade planejada da O.P. pelos ingredientes da \`ProductionFormula\` e bloqueia o início da produção caso algum insumo em \`inventory\` não tenha saldo suficiente.`
+      },
+      {
+        module: 'Financeiro',
+        file: 'pages/Finance.tsx',
+        category: 'Banco de Dados (SQL)',
+        impact: 'Alto',
+        title: `Conciliação Atômica de Lançamentos Pendentes (${pendingTx} títulos em aberto)`,
+        rationale: `Com ${pendingTx} lançamentos pendentes e ${accounts.length} contas bancárias, a conciliação em lote precisa atualizar o status da transação e o saldo da conta bancária de forma atômica, registrando trilha na auditoria.`,
+        codeBefore: `selectedIds.forEach(id => {\n  const tx = transactions.find(t => t.id === id);\n  if (tx) updateTransaction({ ...tx, status: 'Pago', reconciled: true });\n});`,
+        codeAfter: `await Promise.all(selectedIds.map(async id => {\n  const tx = transactions.find(t => t.id === id);\n  if (!tx || tx.status === 'Pago') return;\n  await updateTransaction({ ...tx, status: 'Pago', reconciled: true });\n}));\naddAuditLog({ userId: currentUser.id, userName: currentUser.name, module: 'Financeiro', action: 'Conciliação em Lote', details: \`\${selectedIds.length} títulos conciliados\`, severity: 'info' });`,
+        prompt: `Em \`pages/Finance.tsx\`, adicione suporte a conciliação em lote com proteção contra dupla baixa (\`tx.status === 'Pago'\`), atualização sincronizada do saldo em \`financial_accounts\` e registro em \`audit_logs\`.`
+      },
+      {
+        module: 'Frota',
+        file: 'pages/Fleet.tsx',
+        category: 'Regra de Negócio',
+        impact: 'Médio',
+        title: `Bloqueio de Alocação de Veículo em Manutenção (${maintenanceFleet} em oficina)`,
+        rationale: `Há ${maintenanceFleet} veículo(s) com status "Manutenção" de um total de ${fleet.length}. Impedir lançamento de novas viagens ou abastecimentos operacionais sem encerrar a Ordem de Serviço evita inconsistências de horímetro/km.`,
+        codeBefore: `addFuelLog(newFuelEntry);`,
+        codeAfter: `const vehicle = fleet.find(v => v.id === newFuelEntry.vehicleId);\nif (vehicle?.status === 'Manutenção') {\n  return addToast(\`Veículo \${vehicle.plate} está em Manutenção! Conclua a O.S. primeiro.\`, 'warning');\n}\naddFuelLog(newFuelEntry);`,
+        prompt: `Em \`pages/Fleet.tsx\`, valide o status do veículo antes de registrar novo abastecimento ou rota, exibindo alerta caso \`vehicle.status === 'Manutenção'\` ou caso o novo \`km\` informado seja menor que o \`vehicle.km\` atual.`
+      },
+      {
+        module: 'Faturamento (Vendas)',
+        file: 'pages/Sales.tsx',
+        category: 'UX & Arquitetura',
+        impact: 'Médio',
+        title: `Expiração Automática de Orçamentos Vencidos (${openBudgets} orçamentos em aberto)`,
+        rationale: `Existem ${openBudgets} orçamentos em aberto. O parâmetro settings.operational.budgetValidity (${settings.operational?.budgetValidity ?? 7} dias) deve sinalizar visualmente e bloquear aprovação direta de propostas fora da validade sem revalidar preço.`,
+        codeBefore: `const handleConvertBudget = (budget: Budget) => {\n  approveBudgetToSale(budget);\n};`,
+        codeAfter: `const validityDays = Number(settings.operational?.budgetValidity ?? 7);\nif (isBudgetExpired(budget.date, validityDays) && !hasPermission('sales.approve')) {\n  return addToast(\`Orçamento expirado (validade: \${validityDays} dias). Revalide os preços!\`, 'warning');\n}\napproveBudgetToSale(budget);`,
+        prompt: `Em \`pages/Sales.tsx\`, calcule a idade de cada orçamento aberto com base em \`settings.operational.budgetValidity\`, exiba um badge "Vencido" nos orçamentos que ultrapassarem o prazo e exija revalidação antes de converter em venda.`
+      },
+      {
+        module: 'RH',
+        file: 'pages/HR.tsx',
+        category: 'Segurança & RBAC',
+        impact: 'Alto',
+        title: `Mascaramento de Salários e Encargos para Perfis sem Permissão de Folha (${employees.length} colaboradores)`,
+        rationale: `Na listagem de ${employees.length} colaboradores, usuários que possuem apenas permissão de visualização básica (hr.view) não devem visualizar o salário base nem gerar folha sem a permissão hr.payroll.`,
+        codeBefore: `<span>{formatCurrency(emp.salary)}</span>`,
+        codeAfter: `<span>\n  {hasPermission('hr.payroll') ? formatCurrency(emp.salary) : 'R$ ••••••'}\n</span>`,
+        prompt: `Em \`pages/HR.tsx\`, oculte os valores salariais individuais e totais de folha caso \`!hasPermission('hr.payroll')\`, exibindo máscara visual e desabilitando o botão de fechamento mensal.`
+      },
+      {
+        module: 'Relatórios',
+        file: 'pages/Reports.tsx',
+        category: 'UX & Arquitetura',
+        impact: 'Médio',
+        title: `Cabeçalho Corporativo Dinâmico e Hash de Autenticidade na Exportação de Relatórios`,
+        rationale: `Os relatórios gerenciais exportados devem incorporar automaticamente os dados de settings (${settings.companyName}, CNPJ ${settings.document}) e um código de verificação no rodapé quando settings.documents.authSeal estiver ativo.`,
+        codeBefore: `window.print();`,
+        codeAfter: `const sealHash = settings.documents?.authSeal ? \`AUTH-\${Date.now().toString(36).toUpperCase()}\` : null;\npreparePrintHeader({ company: settings.companyName, cnpj: settings.document, sealHash });\nwindow.print();`,
+        prompt: `Em \`pages/Reports.tsx\`, injete dinamicamente o cabeçalho com \`settings.companyName\`, \`settings.document\` e o selo de autenticidade (\`settings.documents.authSeal\`) em todas as impressões e exportações CSV/PDF.`
+      },
+      {
+        module: 'Cadastros',
+        file: 'pages/Clients.tsx',
+        category: 'Banco de Dados (SQL)',
+        impact: 'Médio',
+        title: `Prevenção de Duplicidade de CNPJ/CPF antes do Insert no Supabase`,
+        rationale: `Evita criar dois clientes ou fornecedores com o mesmo documento (formatado ou apenas dígitos), prevenindo conflitos de chave única e fragmentação do histórico comercial.`,
+        codeBefore: `addClient(newClientData);`,
+        codeAfter: `const cleanDoc = newClientData.document.replace(/\\D/g, '');\nif (clients.some(c => c.document.replace(/\\D/g, '') === cleanDoc && c.id !== editingId)) {\n  return addToast('Já existe um cliente cadastrado com este CPF/CNPJ!', 'error');\n}\naddClient(newClientData);`,
+        prompt: `Em \`pages/Clients.tsx\`, normalize o CPF/CNPJ (\`.replace(/\\D/g, '')\`) antes de salvar clientes ou fornecedores e impeça o cadastro duplicado exibindo toast explicativo.`
+      }
+    ];
+
+    const existingTitles = new Set(allCodeSuggestions.map(s => s.title));
+    const available = dynamicPool.filter(item => !existingTitles.has(item.title));
+
+    let nextSeq = autoGenCounter;
+    const batch: CodeReviewSuggestion[] = [];
+
+    if (available.length > 0) {
+      const picked = available.slice(0, 3);
+      for (const item of picked) {
+        const id = `REV-AUTO-${String(nextSeq).padStart(2, '0')}`;
+        nextSeq += 1;
+        batch.push({ id, ...item });
+      }
+    } else {
+      // Infinite contextual synthesis when all preset templates are already in the list
+      const target = erpFilesCatalog[nextSeq % erpFilesCatalog.length];
+      const id = `REV-AUTO-${String(nextSeq).padStart(2, '0')}`;
+      nextSeq += 1;
+      batch.push({
+        id,
+        module: target.module,
+        file: target.file,
+        category: nextSeq % 2 === 0 ? 'Performance' : 'Segurança & RBAC',
+        impact: 'Alto',
+        title: `Auditoria Automatizada #${nextSeq - 8}: Blindagem e Telemetria em ${target.file}`,
+        rationale: `Inspeção gerada dinamicamente para ${target.file} (${target.sampleTarget}) considerando ${sales.length} vendas, ${transactions.length} lançamentos e ${inventory.length} itens de estoque ativos.`,
+        codeBefore: `// Execução direta sem telemetria de latência em ${target.file}\nawait executeAction(data);`,
+        codeAfter: `// Execução com validação de permissão, medição de tempo e log em ${target.file}\nconst t0 = performance.now();\nawait executeActionWithGuard(data, currentUser);\nrecordMetric('${target.file}', performance.now() - t0);`,
+        prompt: `Em \`${target.file}\` (linhas ${target.lines}), adicione validação defensiva de payload, proteção de permissão RBAC e tratamento de erro padronizado com \`addToast\` em torno de \`${target.sampleTarget}\`.`
+      });
+    }
+
+    setAutoGenCounter(nextSeq);
+    setCustomSuggestions(prev => [...batch, ...prev]);
+    setActiveView('suggestions');
+    setSelectedModule('Todos');
+    setSelectedCategory('Todas');
+    addToast(
+      `${batch.length} nova(s) sugestão(ões) de código (${batch.map(b => b.id).join(', ')}) gerada(s) com sucesso!`,
+      'success'
+    );
   };
 
   const handleCopyPrompt = (id: string, promptText: string, title?: string) => {
@@ -1082,6 +1350,15 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
           <div className="flex flex-wrap items-center gap-3 shrink-0">
             <button
               type="button"
+              onClick={handleGenerateAutoSuggestions}
+              className="px-4 py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg shadow-amber-500/25 transition-all flex items-center gap-2"
+            >
+              <Wand2 size={15} />
+              Gerar Novas Sugestões de Prompts
+            </button>
+
+            <button
+              type="button"
               onClick={handleRunScan}
               disabled={isScanning}
               className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white border border-white/15 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2"
@@ -1220,6 +1497,30 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
                   </button>
                 ))}
               </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {filteredSuggestions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteFiltered}
+                    className="px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 text-[11px] font-black uppercase tracking-wider hover:bg-rose-100 transition-all flex items-center gap-1.5"
+                    title="Excluir todas as sugestões visíveis no filtro atual"
+                  >
+                    <Trash2 size={13} />
+                    Excluir Filtrados ({filteredSuggestions.length})
+                  </button>
+                )}
+                {(deletedSuggestionIds.length > 0 || deletedIssueIds.length > 0) && (
+                  <button
+                    type="button"
+                    onClick={handleRestoreDefaults}
+                    className="px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 text-[11px] font-black uppercase tracking-wider hover:bg-amber-100 transition-all flex items-center gap-1.5"
+                  >
+                    <RotateCcw size={13} />
+                    Restaurar Padrões ({deletedSuggestionIds.length + deletedIssueIds.length})
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Module Pills */}
@@ -1329,6 +1630,16 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
                       >
                         {isCopied ? <Check size={14} /> : <Copy size={14} />}
                         {isCopied ? 'Prompt Copiado!' : 'Copiar Prompt de Código'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSuggestion(suggestion.id, suggestion.title)}
+                        title="Excluir este prompt/sugestão da lista"
+                        className="px-3.5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-600 dark:hover:text-white border border-rose-200 dark:border-rose-800/60 text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5"
+                      >
+                        <Trash2 size={14} />
+                        Excluir Prompt
                       </button>
                     </div>
                   </div>
@@ -1561,6 +1872,29 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
                   </button>
                 ))}
               </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {filteredIssues.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteFiltered}
+                    className="px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 text-[11px] font-black uppercase tracking-wider hover:bg-rose-100 transition-all flex items-center gap-1.5"
+                  >
+                    <Trash2 size={13} />
+                    Excluir Filtrados ({filteredIssues.length})
+                  </button>
+                )}
+                {(deletedSuggestionIds.length > 0 || deletedIssueIds.length > 0) && (
+                  <button
+                    type="button"
+                    onClick={handleRestoreDefaults}
+                    className="px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 text-[11px] font-black uppercase tracking-wider hover:bg-amber-100 transition-all flex items-center gap-1.5"
+                  >
+                    <RotateCcw size={13} />
+                    Restaurar Padrões ({deletedSuggestionIds.length + deletedIssueIds.length})
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Module Pills */}
@@ -1670,8 +2004,8 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
                       )}
                     </div>
 
-                    {/* Copy Prompt Action Button */}
-                    <div className="shrink-0 flex items-center gap-2">
+                    {/* Copy & Delete Prompt Action Buttons */}
+                    <div className="shrink-0 flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         onClick={() => handleCopyPrompt(issue.id, issue.prompt, issue.title)}
@@ -1683,6 +2017,16 @@ export const AIAuditAgent: React.FC<AIAuditAgentProps> = ({ mode = 'embedded' })
                       >
                         {isCopied ? <Check size={14} /> : <Copy size={14} />}
                         {isCopied ? 'Prompt Copiado!' : 'Copiar Prompt de Solução'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteIssue(issue.id, issue.title)}
+                        title="Excluir este prompt de diagnóstico"
+                        className="px-3.5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-600 dark:hover:text-white border border-rose-200 dark:border-rose-800/60 text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5"
+                      >
+                        <Trash2 size={14} />
+                        Excluir Prompt
                       </button>
                     </div>
                   </div>

@@ -581,6 +581,7 @@ export interface AIAgentNumberLink {
   id: string;
   userId: string;
   phone: string; // somente dígitos, com DDI (ex: 5511987654321)
+  label?: string; // Apelido / Cargo no WhatsApp (ex: "Plantão Usina")
 }
 
 export interface AIAgentSettings {
@@ -590,12 +591,16 @@ export interface AIAgentSettings {
   acceptImages: boolean;
   requireConfirmation: boolean; // pede confirmação antes de gravar no ERP
   proactiveAlerts: boolean;     // permite mensagens iniciadas pelo agente
+  customSystemPrompt?: string;  // Instruções personalizadas / regras extras para o agente
 }
 
 export interface AIGatewaySettings {
   provider: 'evolution' | 'zapi' | 'meta_cloud';
   instanceName: string;
   webhookUrl: string;
+  senderPhone?: string; // Número remetente WhatsApp Business conectado
+  scheduleMode?: '24x7' | 'commercial'; // 24/7 ou Comercial (07:00 às 19:00)
+  confirmationTimeoutMinutes?: number; // Expiração de confirmação (SIM/NÃO) em minutos
 }
 
 export type AICodeProposalStatus = 'solicitada' | 'aguardando_aprovacao' | 'aprovada' | 'rejeitada' | 'aplicada';
@@ -610,6 +615,8 @@ export interface AICodeProposal {
   status: AICodeProposalStatus;
   origin: 'whatsapp' | 'painel';
   branch?: string;
+  changeType?: 'Bugfix' | 'Refatoração' | 'Nova Funcionalidade' | 'Performance' | 'Segurança';
+  priority?: 'Baixa' | 'Média' | 'Alta' | 'Urgente';
 }
 
 export interface AICodeAgentSettings {
