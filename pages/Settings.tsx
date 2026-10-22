@@ -429,7 +429,7 @@ const OperationalParametersSection = ({ settings, onUpdate, addToast }: { settin
             label: 'Margem Mínima de Lucro',
             min: 0,
             max: 100,
-            defaultVal: 20,
+            defaultVal: 15,
             step: 0.5,
             unit: '%',
             category: 'Vendas',
@@ -447,7 +447,7 @@ const OperationalParametersSection = ({ settings, onUpdate, addToast }: { settin
             label: 'Validade de Orçamentos Comerciais',
             min: 1,
             max: 180,
-            defaultVal: 7,
+            defaultVal: 15,
             step: 1,
             unit: 'dias',
             category: 'Vendas',
@@ -758,8 +758,8 @@ const OperationalParametersSection = ({ settings, onUpdate, addToast }: { settin
     // Valores atuais dos destaques operacionais
     const purchaseValL1 = Number(settings.operational?.purchaseApprovalLevel1 ?? 5000);
     const purchaseValL2 = Number(settings.operational?.purchaseApprovalLevel2 ?? 20000);
-    const minMarginVal = Number(settings.operational?.minMargin ?? 20);
-    const budgetVal = Number(settings.operational?.budgetValidity ?? 7);
+    const minMarginVal = Number(settings.operational?.minMargin ?? 15);
+    const budgetVal = Number(settings.operational?.budgetValidity ?? 15);
 
     return (
         <section className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 p-8 rounded-[32px] border border-amber-100 dark:border-amber-900/30 space-y-6">
@@ -2622,283 +2622,6 @@ const DocumentsPrintingSection = ({ settings, onUpdate, addToast }: {
     );
 };
 
-// 11. PERFORMANCE & OTIMIZAÇÃO
-const PerformanceOptimizationSection = ({ settings, onUpdate, addToast }: {
-    settings: import('../types').AppSettings,
-    onUpdate: (s: import('../types').AppSettings) => void,
-    addToast?: any
-}) => {
-    const [clearingCache, setClearingCache] = useState(false);
-    const [optimizingDb, setOptimizingDb] = useState(false);
-    const [analyzingQueries, setAnalyzingQueries] = useState(false);
-
-    const updatePerfConfig = (key: string, value: any) => {
-        onUpdate({
-            ...settings,
-            performance: {
-                ...settings.performance,
-                [key]: value
-            }
-        });
-    };
-
-    const handleClearCache = async () => {
-        setClearingCache(true);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        updatePerfConfig('cacheSize', 0);
-        setClearingCache(false);
-        addToast?.('Cache do sistema limpo com sucesso!', 'success');
-    };
-
-    const handleOptimizeDb = async () => {
-        setOptimizingDb(true);
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        onUpdate({
-            ...settings,
-            performance: {
-                ...settings.performance,
-                dbOptimizationLastDate: 'Agora mesmo',
-                dbFragmentation: 0
-            }
-        });
-        setOptimizingDb(false);
-        addToast?.('Banco de dados otimizado e índices reconstruídos!', 'success');
-    };
-
-    const handleAnalyzeQueries = async () => {
-        setAnalyzingQueries(true);
-        await new Promise(resolve => setTimeout(resolve, 1200));
-        setAnalyzingQueries(false);
-        addToast?.('Análise concluída: todas as 47 consultas indexadas operando abaixo de 50ms!', 'success');
-    };
-
-    const optimizations = [
-        { id: 'gzip', label: 'Compressão GZIP de Dados (Modo Econômico)', impact: 'Alto' },
-        { id: 'preloading', label: 'Pré-carregamento Inteligente', impact: 'Médio' },
-        { id: 'lazyLoading', label: 'Lazy Loading de Imagens e Listas', impact: 'Alto' },
-        { id: 'queryCache', label: 'Cache de Consultas Frequentes', impact: 'Muito Alto' },
-        { id: 'autoIndexing', label: 'Indexação Automática de Tabelas', impact: 'Alto' },
-        { id: 'minifyAssets', label: 'Minificação de Recursos', impact: 'Médio' },
-        { id: 'cdn', label: 'Aceleração via CDN Global', impact: 'Alto' },
-        { id: 'dbPooling', label: 'Pool de Conexões do Banco', impact: 'Muito Alto' }
-    ];
-
-    const currentCacheSize = settings.performance?.cacheSize ?? 245;
-    const cachePercent = Math.min(100, Math.round((currentCacheSize / 1024) * 100));
-    const currentImageQuality = settings.performance?.imageQuality ?? 85;
-    const isAutoCompression = settings.performance?.autoCompression ?? true;
-    const dbFragmentation = settings.performance?.dbFragmentation ?? 12;
-
-    return (
-        <section className="bg-gradient-to-br from-lime-50 to-green-50 dark:from-lime-950/20 dark:to-green-950/20 p-8 rounded-[32px] border border-lime-100 dark:border-lime-900/30">
-            <div className="flex items-center gap-3 mb-6">
-                <div className="p-2.5 bg-lime-500 rounded-xl text-white">
-                    <Zap size={20} />
-                </div>
-                <div>
-                    <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Performance, Otimização & Manutenção</h3>
-                    <p className="text-[10px] text-slate-500 font-medium">Ajustes avançados de velocidade, cache e uso de recursos</p>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {/* Cache do Sistema */}
-                <div className="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-lime-100 dark:border-lime-900/30">
-                    <div className="flex items-center gap-2 mb-4">
-                        <HardDrive size={20} className="text-lime-600" />
-                        <h4 className="font-black text-sm text-slate-900 dark:text-white">Cache do Sistema</h4>
-                    </div>
-                    <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs text-slate-600 dark:text-slate-400">Tamanho Atual</span>
-                            <span className="text-xs font-black text-lime-600">{currentCacheSize} MB</span>
-                        </div>
-                        <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2.5">
-                            <div className="bg-lime-500 h-2.5 rounded-full transition-all duration-500" style={{ width: `${cachePercent}%` }}></div>
-                        </div>
-                        <div className="text-[10px] text-slate-500">
-                            <p>Limite: 1 GB</p>
-                            <p>Status: {currentCacheSize === 0 ? 'Limpo recentemente' : 'Operacional'}</p>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={handleClearCache}
-                            disabled={clearingCache || currentCacheSize === 0}
-                            className="w-full py-2 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-lime-50 hover:text-lime-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-                        >
-                            <RefreshCw size={12} className={clearingCache ? 'animate-spin' : ''} />
-                            {clearingCache ? 'Limpando...' : currentCacheSize === 0 ? 'Cache Limpo' : 'Limpar Cache'}
-                        </button>
-                    </div>
-                </div>
-
-                {/* Banco de Dados */}
-                <div className="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-lime-100 dark:border-lime-900/30">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Database size={20} className="text-lime-600" />
-                        <h4 className="font-black text-sm text-slate-900 dark:text-white">Banco de Dados</h4>
-                    </div>
-                    <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs text-slate-600 dark:text-slate-400">Tamanho Total</span>
-                            <span className="text-xs font-black text-blue-600">3.8 GB</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs text-slate-600 dark:text-slate-400">Fragmentação</span>
-                            <span className={`text-xs font-black ${dbFragmentation === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>{dbFragmentation}%</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs text-slate-600 dark:text-slate-400">Última Otimização</span>
-                            <span className="text-xs font-black text-slate-500">{settings.performance?.dbOptimizationLastDate || 'Há 3 dias'}</span>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={handleOptimizeDb}
-                            disabled={optimizingDb}
-                            className="w-full py-2 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-lime-50 hover:text-lime-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-                        >
-                            {optimizingDb ? (
-                                <><RefreshCw size={12} className="animate-spin" /> Otimizando...</>
-                            ) : (
-                                'Otimizar Agora'
-                            )}
-                        </button>
-                    </div>
-                </div>
-
-                {/* Compressão de Imagens */}
-                <div className="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-lime-100 dark:border-lime-900/30">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Package size={20} className="text-lime-600" />
-                        <h4 className="font-black text-sm text-slate-900 dark:text-white">Compressão</h4>
-                    </div>
-                    <div className="space-y-3">
-                        <div>
-                            <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Qualidade de Imagens</label>
-                            <input
-                                type="range"
-                                min="50"
-                                max="100"
-                                value={currentImageQuality}
-                                onChange={(e) => updatePerfConfig('imageQuality', Number(e.target.value))}
-                                className="w-full accent-lime-500 cursor-pointer"
-                            />
-                            <div className="flex justify-between text-[9px] text-slate-400 mt-1">
-                                <span>Menor</span>
-                                <span className="font-black text-lime-600">{currentImageQuality}%</span>
-                                <span>Máxima</span>
-                            </div>
-                        </div>
-                        <div
-                            onClick={() => updatePerfConfig('autoCompression', !isAutoCompression)}
-                            className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-900 rounded-lg cursor-pointer"
-                        >
-                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Auto-compressão</span>
-                            <div className={`w-10 h-5 rounded-full relative transition-colors ${isAutoCompression ? 'bg-lime-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${isAutoCompression ? 'right-0.5' : 'left-0.5'}`}></div>
-                            </div>
-                        </div>
-                        <p className="text-[10px] text-slate-500">Economia estimada: ~{Math.max(10, 100 - currentImageQuality + 25)}% de espaço</p>
-                    </div>
-                </div>
-
-                {/* Índices e Consultas */}
-                <div className="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-lime-100 dark:border-lime-900/30">
-                    <div className="flex items-center gap-2 mb-4">
-                        <TrendingUp size={20} className="text-lime-600" />
-                        <h4 className="font-black text-sm text-slate-900 dark:text-white">Consultas SQL</h4>
-                    </div>
-                    <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs text-slate-600 dark:text-slate-400">Tempo Médio</span>
-                            <span className="text-xs font-black text-emerald-600">45ms</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs text-slate-600 dark:text-slate-400">Consultas Lentas</span>
-                            <span className="text-xs font-black text-amber-600">0</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs text-slate-600 dark:text-slate-400">Índices Ativos</span>
-                            <span className="text-xs font-black text-blue-600">47</span>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={handleAnalyzeQueries}
-                            disabled={analyzingQueries}
-                            className="w-full py-2 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-lime-50 hover:text-lime-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-                        >
-                            {analyzingQueries ? (
-                                <><RefreshCw size={12} className="animate-spin" /> Analisando...</>
-                            ) : (
-                                'Analisar Consultas'
-                            )}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Opções Avançadas de Performance */}
-            <div className="mt-6 pt-6 border-t border-lime-200 dark:border-lime-900/30">
-                <h4 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase mb-4">Otimizações Avançadas</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {optimizations.map(opt => {
-                        const isEnabled = settings.performance?.[opt.id] === true;
-                        return (
-                            <div
-                                key={opt.id}
-                                onClick={() => updatePerfConfig(opt.id, !isEnabled)}
-                                className="p-4 bg-white dark:bg-slate-800 rounded-xl border border-lime-100 dark:border-lime-900/30 cursor-pointer hover:border-lime-300 transition-all"
-                            >
-                                <div className="flex items-start justify-between mb-2">
-                                    <div className="flex-1">
-                                        <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight mb-1">{opt.label}</p>
-                                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-md ${opt.impact === 'Muito Alto' ? 'bg-emerald-100 text-emerald-700' :
-                                            opt.impact === 'Alto' ? 'bg-blue-100 text-blue-700' :
-                                                'bg-amber-100 text-amber-700'
-                                            }`}>
-                                            Impacto: {opt.impact}
-                                        </span>
-                                    </div>
-                                    <div
-                                        className={`w-10 h-5 rounded-full relative transition-colors ml-2 shrink-0 ${isEnabled ? 'bg-lime-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${isEnabled ? 'right-0.5' : 'left-0.5'}`}></div>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* Monitoramento de Performance */}
-            <div className="mt-6 pt-6 border-t border-lime-200 dark:border-lime-900/30">
-                <h4 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase mb-4">Métricas de Performance em Tempo Real</h4>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                    {[
-                        { label: 'Tempo de Resposta', value: '120ms', status: 'good', icon: 'Clock' },
-                        { label: 'Requisições/seg', value: '45', status: 'good', icon: 'Activity' },
-                        { label: 'Taxa de Erro', value: '0.02%', status: 'good', icon: 'AlertTriangle' },
-                        { label: 'Uptime', value: '99.98%', status: 'excellent', icon: 'CheckCircle' },
-                        { label: 'Usuários Online', value: '23', status: 'normal', icon: 'Users' },
-                    ].map(metric => (
-                        <div key={metric.label} className="p-4 bg-white dark:bg-slate-800 rounded-xl border border-lime-100 dark:border-lime-900/30 text-center">
-                            <p className="text-[10px] font-black text-slate-400 uppercase mb-2">{metric.label}</p>
-                            <p className={`text-2xl font-black mb-1 ${metric.status === 'excellent' ? 'text-emerald-600' :
-                                metric.status === 'good' ? 'text-blue-600' :
-                                    'text-slate-600'
-                                }`}>{metric.value}</p>
-                            <div className={`w-2 h-2 rounded-full mx-auto ${metric.status === 'excellent' ? 'bg-emerald-500' :
-                                metric.status === 'good' ? 'bg-blue-500' :
-                                    'bg-amber-500'
-                                } animate-pulse`}></div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </section>
-    );
-};
-
 // ---------------------------------------------------------------------------
 // Helpers de Segurança & RBAC (Compatibilidade com Supabase UUIDs e Senhas Fortes)
 // ---------------------------------------------------------------------------
@@ -3829,12 +3552,9 @@ const Settings = () => {
 
                     {/* COMPANY SETTINGS */}
                     {activeTab === 'company' && (
-                        <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                                {/* Left Column: Identity & Bank */}
-                                <div className="xl:col-span-2 space-y-8">
-                                    {/* Identidade Corporativa */}
-                                    <div className="bg-slate-50 dark:bg-slate-900/50 p-8 rounded-[32px] border border-slate-100 dark:border-slate-700/50">
+                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-5xl">
+                            {/* Identidade Corporativa */}
+                            <div className="bg-slate-50 dark:bg-slate-900/50 p-8 rounded-[32px] border border-slate-100 dark:border-slate-700/50">
                                         <div className="flex items-center justify-between mb-6">
                                             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                                 <Building size={16} className="text-indigo-500" /> Identidade Corporativa & Registro Fiscal
@@ -4277,65 +3997,6 @@ const Settings = () => {
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-
-                                {/* Right Column: Plan & Info */}
-                                <div className="space-y-6">
-                                    <div className="p-8 bg-slate-900 text-white rounded-[40px] shadow-2xl relative overflow-hidden group">
-                                        <Zap size={140} className="absolute -right-8 -bottom-8 text-white/5 group-hover:scale-110 transition-transform duration-700 rotate-12" />
-                                        <div className="relative z-10">
-                                            <div className="flex items-center gap-3 mb-6">
-                                                <div className="p-2 bg-indigo-500 rounded-lg">
-                                                    <Cloud size={20} className="text-white" />
-                                                </div>
-                                                <span className="font-black text-sm text-indigo-300 uppercase tracking-widest">Plano Atual</span>
-                                            </div>
-                                            <h4 className="text-3xl font-black italic tracking-tighter mb-2">ENTERPRISE</h4>
-                                            <p className="text-slate-400 text-xs font-medium mb-8 max-w-[200px]">Acesso ilimitado a todos os módulos e recursos avançados.</p>
-
-                                            <div className="space-y-4 mb-8">
-                                                <div>
-                                                    <div className="flex justify-between text-[10px] font-bold uppercase text-slate-400 mb-1">
-                                                        <span>Armazenamento</span>
-                                                        <span>25% Uso</span>
-                                                    </div>
-                                                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-indigo-500 w-[25%] rounded-full"></div>
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <div className="flex justify-between text-[10px] font-bold uppercase text-slate-400 mb-1">
-                                                        <span>Usuários</span>
-                                                        <span>{users.length} Ativos</span>
-                                                    </div>
-                                                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-emerald-500 w-[12%] rounded-full"></div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <button
-                                                type="button"
-                                                onClick={() => addToast('Plano Enterprise ativo: Licenças ilimitadas, SLA 99.9% e Suporte Prioritário 24/7.', 'success')}
-                                                className="w-full py-4 bg-white text-slate-900 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-100 transition-colors"
-                                            >
-                                                Gerenciar Assinatura
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div className="p-6 border-2 border-dashed border-slate-200 dark:border-slate-700/50 rounded-3xl text-center">
-                                        <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                            <Server size={24} />
-                                        </div>
-                                        <h4 className="font-black text-slate-900 dark:text-white text-sm mb-1">Backup na Nuvem</h4>
-                                        <p className="text-xs text-slate-400 mb-4">Seus dados estão seguros e sincronizados.</p>
-                                        <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full text-[10px] font-bold uppercase tracking-wide">
-                                            <CheckCircle size={10} /> Ativo e Protegido
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     )}
 
@@ -4806,7 +4467,7 @@ const Settings = () => {
                                         { id: 'appearance', label: 'Interface & Alertas', icon: Palette },
                                         { id: 'integrations', label: 'Integrações & E-mail', icon: Link },
                                         { id: 'documents', label: 'Impressão & Docs', icon: Printer },
-                                        { id: 'maintenance', label: 'Performance & Segurança', icon: ShieldCheck },
+                                        { id: 'maintenance', label: 'Manutenção & Segurança', icon: ShieldCheck },
                                     ].map(cat => {
                                         const IconComp = cat.icon;
                                         const isSelected = systemCategory === cat.id;
@@ -5275,11 +4936,10 @@ const Settings = () => {
                                 <DocumentsPrintingSection settings={tempSettings} onUpdate={setTempSettings} addToast={addToast} />
                             )}
 
-                            {/* Performance, Data Security & Danger Zone */}
+                            {/* Data Security & Danger Zone */}
                             {(systemCategory === 'all' || systemCategory === 'maintenance') && (
                                 <>
-                                    <PerformanceOptimizationSection settings={tempSettings} onUpdate={setTempSettings} addToast={addToast} />
-                                    <DataSecuritySection settings={tempSettings} onUpdate={setTempSettings} addToast={addToast} />
+                                                                        <DataSecuritySection settings={tempSettings} onUpdate={setTempSettings} addToast={addToast} />
 
                             {/* Danger Zone */}
                             <section className="mt-8 pt-8 border-t-2 border-dashed border-slate-200 dark:border-slate-700">

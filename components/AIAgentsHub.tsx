@@ -51,7 +51,8 @@ import {
     MousePointerClick,
     ListFilter,
     Menu,
-    Layers
+    Layers,
+    Search
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -540,6 +541,14 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
     } | null>(null);
     const [interactivePayloadModal, setInteractivePayloadModal] = useState<{ title: string; json: string } | null>(null);
     const [testDispatchMode, setTestDispatchMode] = useState<'text' | 'interactive'>('text');
+
+    // Sub-Navegação Interna do Hub (Gateway | 10 Agentes | Código ADM)
+    type HubSubTab = 'agents' | 'gateway' | 'code_agent';
+    const [hubSubTab, setHubSubTab] = useState<HubSubTab>('agents');
+
+    // Filtros e Ordenação da Fila de Propostas de Código
+    const [codeProposalSearch, setCodeProposalSearch] = useState('');
+    const [codeProposalSort, setCodeProposalSort] = useState<'priority' | 'recent'>('priority');
 
     // Visualização de Prompt Base / Padrão
     const [showBasePromptModal, setShowBasePromptModal] = useState(false);
@@ -1061,6 +1070,41 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
     const numbersCount = AI_AGENT_CATALOG.reduce((sum, a) => sum + getAgentSettings(config, a.id).links.length, 0);
     const eligibleAdmins = users.filter(u => u.status === 'Ativo' && isUserAdmin(u, roles));
 
+    const PRIORITY_WEIGHT: Record<string, number> = {
+        'Urgente': 4,
+        'Alta': 3,
+        'Média': 2,
+        'Baixa': 1
+    };
+
+    const filteredProposals = useMemo(() => {
+        let list = [...config.codeAgent.proposals];
+        if (codeProposalSearch.trim()) {
+            const query = codeProposalSearch.toLowerCase();
+            list = list.filter(p =>
+                p.title.toLowerCase().includes(query) ||
+                (p.description && p.description.toLowerCase().includes(query)) ||
+                p.files.some(f => f.toLowerCase().includes(query)) ||
+                (p.changeType && p.changeType.toLowerCase().includes(query))
+            );
+        }
+        if (codeProposalSort === 'priority') {
+            list.sort((a, b) => {
+                const wa = PRIORITY_WEIGHT[a.priority || 'Média'] || 2;
+                const wb = PRIORITY_WEIGHT[b.priority || 'Média'] || 2;
+                if (wb !== wa) return wb - wa;
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            });
+        } else {
+            list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        }
+        return list;
+    }, [config.codeAgent.proposals, codeProposalSearch, codeProposalSort]);
+
+    const pendingCodeProposalsCount = config.codeAgent.proposals.filter(
+        p => p.status === 'solicitada' || p.status === 'aguardando_aprovacao'
+    ).length;
+
     const userLabel = (userId: string) => users.find(u => u.id === userId)?.name || 'Usuário removido';
     const roleLabel = (userId: string) => {
         const u = users.find(x => x.id === userId);
@@ -1120,8 +1164,73 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                 </div>
             )}
 
+            {/* Barra de Sub-Navegação por Segmentos com Badges em Tempo Real */}
+            <div className="p-1.5 bg-slate-100 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-1.5">
+                <button
+                    type="button"
+                    onClick={() => setHubSubTab('agents')}
+                    className={`flex-1 min-w-[200px] py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                        hubSubTab === 'agents'
+                            ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md'
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                >
+                    <Bot size={16} className={hubSubTab === 'agents' ? 'text-indigo-600 dark:text-indigo-400' : ''} />
+                    <span>Agentes Especializados</span>
+                    <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 text-[10px] font-black">
+                        {activeCount}/10 Ativos
+                    </span>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => setHubSubTab('gateway')}
+                    className={`flex-1 min-w-[200px] py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                        hubSubTab === 'gateway'
+                            ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md'
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                >
+                    <Smartphone size={16} className={hubSubTab === 'gateway' ? 'text-emerald-500' : ''} />
+                    <span>Gateway WhatsApp</span>
+                    {sessionStatus === 'connected' ? (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-black flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Online ({lastWebhookTest?.latencyMs || pingHistory[0]?.latencyMs || 124}ms)
+                        </span>
+                    ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300 text-[10px] font-black">
+                            Offline
+                        </span>
+                    )}
+                </button>
+
+                {isAdmin && (
+                    <button
+                        type="button"
+                        onClick={() => setHubSubTab('code_agent')}
+                        className={`flex-1 min-w-[200px] py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                            hubSubTab === 'code_agent'
+                                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
+                    >
+                        <Code2 size={16} className={hubSubTab === 'code_agent' ? 'text-slate-950' : 'text-amber-500'} />
+                        <span>Agente de Código (ADM)</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                            hubSubTab === 'code_agent'
+                                ? 'bg-slate-900 text-amber-300'
+                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                        }`}>
+                            {config.codeAgent.proposals.length} propostas{pendingCodeProposalsCount > 0 ? ` (${pendingCodeProposalsCount} pendentes)` : ''}
+                        </span>
+                    </button>
+                )}
+            </div>
+
             <fieldset disabled={!canManage} className="min-w-0 border-0 p-0 m-0 space-y-8">
                 {/* Gateway do WhatsApp */}
+                {hubSubTab === 'gateway' && (
                 <section className="rounded-3xl border border-slate-200 dark:border-slate-700 p-6 space-y-6 bg-white dark:bg-slate-800 shadow-sm">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-700">
                         <div className="flex items-center gap-3">
@@ -1516,8 +1625,10 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                         </div>
                     </div>
                 </section>
+                )}
 
                 {/* Catálogo dos 10 Agentes Especializados */}
+                {hubSubTab === 'agents' && (
                 <section className="space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="flex flex-wrap gap-2">
@@ -1578,9 +1689,29 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                     <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-700">
                                         <p className="text-[11px] text-slate-400 font-bold truncate">Para: {def.audience}</p>
                                         <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider">
-                                            <span className={s.links.length ? 'text-slate-600 dark:text-slate-300' : 'text-amber-500'}>
-                                                {s.links.length ? `${s.links.length} número(s) vinculado(s)` : 'Nenhum número'}
-                                            </span>
+                                            {/* Indicador Visual Compacto de Prontidão Operacional */}
+                                            {s.enabled && config.gatewayEnabled && sessionStatus === 'connected' && s.links.length > 0 ? (
+                                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                                    <Smartphone size={10} />
+                                                    Operacional ({s.links.length})
+                                                </span>
+                                            ) : s.enabled && s.links.length === 0 ? (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
+                                                    <AlertTriangle size={10} />
+                                                    Sem Vínculos
+                                                </span>
+                                            ) : s.enabled && (!config.gatewayEnabled || sessionStatus !== 'connected') ? (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                                                    <WifiOff size={10} />
+                                                    Gateway Off
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                                                    Inativo
+                                                </span>
+                                            )}
+
                                             {s.customSystemPrompt?.trim() && (
                                                 <span className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 font-black flex items-center gap-1">
                                                     <Sparkles size={10} /> Prompt Ativo
@@ -1611,10 +1742,11 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                         })}
                     </div>
                 </section>
+                )}
             </fieldset>
 
             {/* Agente de Código (ADM) — Somente Super Administrador com Guardrails Rigorosos */}
-            {isAdmin && (
+            {isAdmin && hubSubTab === 'code_agent' && (
                 <section className="rounded-3xl bg-slate-900 text-white p-6 md:p-8 space-y-6 border border-slate-700 shadow-xl">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
@@ -1883,13 +2015,67 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                             onChange={e => setReqDescription(e.target.value)}
                         />
 
+                        {/* Barra de Filtro e Ordenação Rápida por Prioridade (Urgente Primeiro) */}
+                        {config.codeAgent.proposals.length > 0 && (
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                                <div className="relative flex-1 max-w-sm">
+                                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        className="w-full bg-slate-800/90 border border-slate-700 rounded-xl py-1.5 pl-8 pr-7 text-xs text-white placeholder-slate-400 outline-none focus:border-amber-400 transition-all font-medium"
+                                        placeholder="Buscar por título, arquivo ou tipo..."
+                                        value={codeProposalSearch}
+                                        onChange={e => setCodeProposalSearch(e.target.value)}
+                                    />
+                                    {codeProposalSearch && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setCodeProposalSearch('')}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                                        >
+                                            <X size={12} />
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-1.5 text-[10px] font-bold">
+                                    <span className="text-slate-400 uppercase tracking-wider text-[9px]">Ordenar:</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setCodeProposalSort('priority')}
+                                        className={`px-2.5 py-1 rounded-lg transition-all ${
+                                            codeProposalSort === 'priority'
+                                                ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                                                : 'bg-slate-800 text-slate-400 hover:text-white border border-slate-700'
+                                        }`}
+                                    >
+                                        ⚡ Prioridade (Urgente 1º)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setCodeProposalSort('recent')}
+                                        className={`px-2.5 py-1 rounded-lg transition-all ${
+                                            codeProposalSort === 'recent'
+                                                ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                                                : 'bg-slate-800 text-slate-400 hover:text-white border border-slate-700'
+                                        }`}
+                                    >
+                                        🕒 Mais Recentes
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         {config.codeAgent.proposals.length === 0 ? (
                             <p className="text-xs font-bold text-slate-500">
                                 Nenhuma solicitação na fila. Propostas enviadas pelo WhatsApp ou painel aparecerão aqui.
                             </p>
+                        ) : filteredProposals.length === 0 ? (
+                            <p className="text-xs font-bold text-slate-400 py-2">
+                                Nenhuma proposta encontrada para &ldquo;{codeProposalSearch}&rdquo;.
+                            </p>
                         ) : (
                             <ul className="space-y-3">
-                                {config.codeAgent.proposals.map(p => (
+                                {filteredProposals.map(p => (
                                     <li key={p.id} className="bg-slate-800 rounded-2xl p-4 space-y-2 border border-slate-700/70">
                                         <div className="flex flex-wrap items-start justify-between gap-2">
                                             <div className="min-w-0 space-y-1">

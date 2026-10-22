@@ -35,10 +35,27 @@ import {
   ChevronRight,
   Activity,
   TrendingUp,
+  TrendingDown,
   Target,
   RotateCcw,
-  UserPlus
+  UserPlus,
+  Percent,
+  Settings,
+  Sparkles,
+  Filter
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+  CartesianGrid
+} from 'recharts';
 import { SalesItem, Client, Budget, Sale, AppSettings } from '../types';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -149,6 +166,25 @@ const getPaymentMethodLabel = (method: string | undefined | null) => {
   return map[method] || method.toUpperCase();
 };
 
+const parseSafeDate = (dateStr?: string | null): Date | null => {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const trimmed = dateStr.trim();
+  if (trimmed.includes('/')) {
+    const parts = trimmed.split('/').map(p => parseInt(p, 10));
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      return new Date(parts[2], parts[1] - 1, parts[0]);
+    }
+  }
+  if (trimmed.includes('-')) {
+    const parts = trimmed.split('-').map(p => parseInt(p, 10));
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+  }
+  const d = new Date(trimmed);
+  return isNaN(d.getTime()) ? null : d;
+};
+
 const Sales = () => {
   const {
     sales,
@@ -189,47 +225,423 @@ const Sales = () => {
     });
   }, [budgets]);
 
-  // Dashboard Calculations (Safe Mode)
-  const dashboardStats = useMemo(() => {
+  // ==========================================
+  // PAINEL GERENCIAL (METAS, KPIS, RECHARTS E CURVA ABC)
+  // ==========================================
+
+  // Metas Segmentadas (Salvas em LocalStorage)
+  const [commercialTargets, setCommercialTargets] = useState<{ minimum: number; target: number; super: number }>(() => {
     try {
-      const today = new Date().toLocaleDateString('pt-BR');
-      const totalToday = validSales
-        .filter(s => s.date === today)
-        .reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
-
-      const now = new Date();
-      const currentMonth = now.getMonth();
-      const currentYear = now.getFullYear();
-
-      const monthlyData = validSales.filter(s => {
-        if (!s.date || typeof s.date !== 'string') return false;
-        const parts = s.date.split('/');
-        if (parts.length !== 3) return false;
-        const month = parseInt(parts[1], 10) - 1;
-        const year = parseInt(parts[2], 10);
-        return month === currentMonth && year === currentYear;
-      });
-
-      const monthlyCount = monthlyData.length;
-      const monthlyTotal = monthlyData.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
-      const averageTicket = monthlyCount > 0 ? monthlyTotal / monthlyCount : 0;
-
-      const monthlyTarget = 100000;
-      const targetPercent = Math.min(Math.round((monthlyTotal / monthlyTarget) * 100), 100);
-
-      return {
-        totalToday,
-        monthlyTotal,
-        averageTicket,
-        monthlyTarget,
-        targetPercent,
-        pendingBudgets: validBudgets.filter(b => b.status === 'Aberto').length
-      };
-    } catch (error) {
-      console.error("Dashboard Calc Error:", error);
-      return { totalToday: 0, monthlyTotal: 0, averageTicket: 0, monthlyTarget: 100000, targetPercent: 0, pendingBudgets: 0 };
+      const saved = localStorage.getItem('infracore_sales_commercial_targets');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (
+          parsed &&
+          typeof parsed.minimum === 'number' &&
+          typeof parsed.target === 'number' &&
+          typeof parsed.super === 'number'
+        ) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Error loading commercial targets:', e);
     }
-  }, [validSales, validBudgets]);
+    return { minimum: 70000, target: 100000, super: 130000 };
+  });
+
+  const [showTargetModal, setShowTargetModal] = useState(false);
+  const [tempTargets, setTempTargets] = useState(commercialTargets);
+
+  const handleOpenTargetModal = () => {
+    setTempTargets({ ...commercialTargets });
+    setShowTargetModal(true);
+  };
+
+  const handleSaveTargets = () => {
+    if (tempTargets.minimum <= 0 || tempTargets.target <= 0 || tempTargets.super <= 0) {
+      addToast('Os valores das metas devem ser maiores que zero.', 'warning');
+      return;
+    }
+    if (tempTargets.minimum >= tempTargets.target || tempTargets.target >= tempTargets.super) {
+      addToast('A hierarquia deve respeitar: Meta Mínima < Meta Alvo < Supermeta.', 'warning');
+      return;
+    }
+    setCommercialTargets(tempTargets);
+    try {
+      localStorage.setItem('infracore_sales_commercial_targets', JSON.stringify(tempTargets));
+      addToast('Metas comerciais atualizadas com sucesso!', 'success');
+      setShowTargetModal(false);
+    } catch (e) {
+      addToast('Erro ao salvar configurações de metas.', 'error');
+    }
+  };
+
+  // Filtros de Período do Painel Gerencial
+  type PeriodFilterType = 'today' | '7days' | 'thisMonth' | 'lastMonth' | 'custom';
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilterType>('thisMonth');
+  const [customStartDate, setCustomStartDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().split('T')[0];
+  });
+  const [customEndDate, setCustomEndDate] = useState<string>(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+
+  const { currentRange, previousRange, periodLabel } = useMemo(() => {
+    const now = new Date();
+    let cStart: Date;
+    let cEnd: Date;
+    let pStart: Date;
+    let pEnd: Date;
+    let label = 'Mês Atual';
+
+    if (periodFilter === 'today') {
+      cStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      cEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      pStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0);
+      pEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+      label = 'Hoje';
+    } else if (periodFilter === '7days') {
+      cStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+      cEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      pStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13, 0, 0, 0, 0);
+      pEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7, 23, 59, 59, 999);
+      label = 'Últimos 7 Dias';
+    } else if (periodFilter === 'lastMonth') {
+      cStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      cEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      pStart = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0);
+      pEnd = new Date(now.getFullYear(), now.getMonth() - 1, 0, 23, 59, 59, 999);
+      label = 'Mês Anterior';
+    } else if (periodFilter === 'custom') {
+      const s = parseSafeDate(customStartDate);
+      const e = parseSafeDate(customEndDate);
+      cStart = s ? new Date(s.getFullYear(), s.getMonth(), s.getDate(), 0, 0, 0, 0) : new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      cEnd = e ? new Date(e.getFullYear(), e.getMonth(), e.getDate(), 23, 59, 59, 999) : new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      const diff = Math.max(1000 * 60 * 60 * 24, cEnd.getTime() - cStart.getTime());
+      pEnd = new Date(cStart.getTime() - 1);
+      pStart = new Date(pEnd.getTime() - diff);
+      label = 'Personalizado';
+    } else {
+      // thisMonth
+      cStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      cEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      pStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      pEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      label = 'Mês Atual';
+    }
+
+    return {
+      currentRange: { start: cStart, end: cEnd },
+      previousRange: { start: pStart, end: pEnd },
+      periodLabel: label
+    };
+  }, [periodFilter, customStartDate, customEndDate]);
+
+  const isWithinDateRange = (dateStr?: string, range?: { start: Date; end: Date }) => {
+    if (!dateStr || !range) return false;
+    const d = parseSafeDate(dateStr);
+    if (!d) return false;
+    return d.getTime() >= range.start.getTime() && d.getTime() <= range.end.getTime();
+  };
+
+  const periodSales = useMemo(() => {
+    return (validSales || []).filter(s => isWithinDateRange(s.date, currentRange));
+  }, [validSales, currentRange]);
+
+  const prevPeriodSales = useMemo(() => {
+    return (validSales || []).filter(s => isWithinDateRange(s.date, previousRange));
+  }, [validSales, previousRange]);
+
+  const periodBudgets = useMemo(() => {
+    return (validBudgets || []).filter(b => isWithinDateRange(b.date, currentRange));
+  }, [validBudgets, currentRange]);
+
+  // 4 KPIs Superiores Sincronizados
+  const dashboardKpis = useMemo(() => {
+    const currentRevenue = periodSales.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
+    const prevRevenue = prevPeriodSales.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
+    const revenueDelta = prevRevenue > 0
+      ? ((currentRevenue - prevRevenue) / prevRevenue) * 100
+      : (currentRevenue > 0 ? 100 : 0);
+
+    const currentCount = periodSales.length;
+    const prevCount = prevPeriodSales.length;
+    const countDelta = prevCount > 0
+      ? ((currentCount - prevCount) / prevCount) * 100
+      : (currentCount > 0 ? 100 : 0);
+
+    const currentTicket = currentCount > 0 ? currentRevenue / currentCount : 0;
+    const prevTicket = prevCount > 0 ? prevRevenue / prevCount : 0;
+    const ticketDelta = prevTicket > 0
+      ? ((currentTicket - prevTicket) / prevTicket) * 100
+      : (currentTicket > 0 ? 100 : 0);
+
+    const totalBudgets = periodBudgets.length;
+    const convertedBudgets = periodBudgets.filter(b => b.status === 'Convertido').length;
+    const pendingBudgets = periodBudgets.filter(b => b.status === 'Aberto').length;
+    const conversionRate = totalBudgets > 0 ? Math.round((convertedBudgets / totalBudgets) * 100) : 0;
+
+    return {
+      currentRevenue,
+      prevRevenue,
+      revenueDelta,
+      currentCount,
+      prevCount,
+      countDelta,
+      currentTicket,
+      prevTicket,
+      ticketDelta,
+      totalBudgets,
+      convertedBudgets,
+      pendingBudgets,
+      conversionRate
+    };
+  }, [periodSales, prevPeriodSales, periodBudgets]);
+
+  // Velocidade Comercial e Projeção Mensal
+  const commercialVelocity = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const currentDay = now.getDate();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const daysElapsed = Math.max(1, currentDay);
+    const daysRemaining = Math.max(0, daysInMonth - currentDay);
+
+    const monthSales = (validSales || []).filter(s => {
+      const d = parseSafeDate(s.date);
+      return d && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+    const monthTotal = monthSales.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
+
+    const dailyAvg = monthTotal / daysElapsed;
+    const projectedTotal = dailyAvg * daysInMonth;
+
+    const remainingToMin = Math.max(0, commercialTargets.minimum - monthTotal);
+    const neededRateMin = daysRemaining > 0 ? remainingToMin / daysRemaining : 0;
+
+    const remainingToTarget = Math.max(0, commercialTargets.target - monthTotal);
+    const neededRateTarget = daysRemaining > 0 ? remainingToTarget / daysRemaining : 0;
+
+    const remainingToSuper = Math.max(0, commercialTargets.super - monthTotal);
+    const neededRateSuper = daysRemaining > 0 ? remainingToSuper / daysRemaining : 0;
+
+    const pctMin = Math.min(100, Math.round((monthTotal / Math.max(commercialTargets.minimum, 1)) * 100));
+    const pctTarget = Math.min(100, Math.round((monthTotal / Math.max(commercialTargets.target, 1)) * 100));
+    const pctSuper = Math.min(100, Math.round((monthTotal / Math.max(commercialTargets.super, 1)) * 100));
+
+    return {
+      monthTotal,
+      daysElapsed,
+      daysRemaining,
+      daysInMonth,
+      dailyAvg,
+      projectedTotal,
+      neededRateMin,
+      neededRateTarget,
+      neededRateSuper,
+      pctMin,
+      pctTarget,
+      pctSuper
+    };
+  }, [validSales, commercialTargets]);
+
+  // Gráfico de Evolução Temporal
+  const salesEvolutionData = useMemo(() => {
+    const dayMap: Record<string, { dateLabel: string; faturamento: number; pedidos: number; rawDate: Date }> = {};
+    const start = new Date(currentRange.start);
+    const end = new Date(currentRange.end);
+    const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays <= 62) {
+      const cur = new Date(start);
+      while (cur <= end) {
+        const key = `${String(cur.getDate()).padStart(2, '0')}/${String(cur.getMonth() + 1).padStart(2, '0')}`;
+        dayMap[key] = {
+          dateLabel: key,
+          faturamento: 0,
+          pedidos: 0,
+          rawDate: new Date(cur)
+        };
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
+
+    periodSales.forEach(s => {
+      const d = parseSafeDate(s.date);
+      if (!d) return;
+      const key = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!dayMap[key]) {
+        dayMap[key] = {
+          dateLabel: key,
+          faturamento: 0,
+          pedidos: 0,
+          rawDate: d
+        };
+      }
+      dayMap[key].faturamento += Number(s.amount) || 0;
+      dayMap[key].pedidos += 1;
+    });
+
+    return Object.values(dayMap).sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime());
+  }, [periodSales, currentRange]);
+
+  // Gráfico de Distribuição por Forma de Pagamento
+  const paymentDistributionData = useMemo(() => {
+    const methodMap: Record<string, { name: string; value: number; count: number; color: string }> = {
+      pix: { name: 'PIX', value: 0, count: 0, color: '#06b6d4' },
+      prazo: { name: 'A Prazo', value: 0, count: 0, color: '#10b981' },
+      credit: { name: 'Cartão', value: 0, count: 0, color: '#8b5cf6' },
+      boleto: { name: 'Boleto', value: 0, count: 0, color: '#f59e0b' },
+      money: { name: 'Dinheiro', value: 0, count: 0, color: '#3b82f6' },
+      transfer: { name: 'Transferência', value: 0, count: 0, color: '#ec4899' },
+      other: { name: 'Outros', value: 0, count: 0, color: '#64748b' }
+    };
+
+    let totalRevenue = 0;
+    periodSales.forEach(s => {
+      const methodKey = (s.paymentMethod || '').toLowerCase();
+      const target = methodMap[methodKey] || methodMap['other'];
+      const amt = Number(s.amount) || 0;
+      target.value += amt;
+      target.count += 1;
+      totalRevenue += amt;
+    });
+
+    return Object.values(methodMap)
+      .filter(m => m.value > 0)
+      .map(m => ({
+        ...m,
+        percent: totalRevenue > 0 ? (m.value / totalRevenue) * 100 : 0
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [periodSales]);
+
+  // Curva ABC de Produtos e Clientes
+  const [abcTab, setAbcTab] = useState<'products' | 'clients'>('products');
+  const [abcSearch, setAbcSearch] = useState('');
+
+  const abcProducts = useMemo(() => {
+    const productMap: Record<string, { name: string; quantity: number; revenue: number; unit?: string }> = {};
+    (periodSales || []).forEach(s => {
+      (s.items || []).forEach(item => {
+        if (!item || !item.name) return;
+        const key = item.name.trim();
+        if (!productMap[key]) {
+          productMap[key] = {
+            name: key,
+            quantity: 0,
+            revenue: 0,
+            unit: item.unit || 'UN'
+          };
+        }
+        const q = Number(item.quantity) || 0;
+        const rev = Number((item as any).total) || (q * (Number(item.price) || 0));
+        productMap[key].quantity += q;
+        productMap[key].revenue += rev;
+      });
+    });
+
+    const sorted = Object.values(productMap).sort((a, b) => b.revenue - a.revenue);
+    const totalRev = sorted.reduce((sum, p) => sum + p.revenue, 0);
+
+    let cumulative = 0;
+    return sorted.map((p, idx) => {
+      const share = totalRev > 0 ? (p.revenue / totalRev) * 100 : 0;
+      cumulative += share;
+      let classification: 'A' | 'B' | 'C' = 'C';
+      if (cumulative <= 80 || idx === 0) {
+        classification = 'A';
+      } else if (cumulative <= 95) {
+        classification = 'B';
+      } else {
+        classification = 'C';
+      }
+      return {
+        ...p,
+        rank: idx + 1,
+        share,
+        cumulative,
+        classification
+      };
+    });
+  }, [periodSales]);
+
+  const abcClients = useMemo(() => {
+    const clientMap: Record<string, { name: string; orders: number; revenue: number }> = {};
+    (periodSales || []).forEach(s => {
+      const name = (s.clientName || 'Cliente Avulso').trim();
+      if (!clientMap[name]) {
+        clientMap[name] = { name, orders: 0, revenue: 0 };
+      }
+      clientMap[name].orders += 1;
+      clientMap[name].revenue += Number(s.amount) || 0;
+    });
+
+    const sorted = Object.values(clientMap).sort((a, b) => b.revenue - a.revenue);
+    const totalRev = sorted.reduce((sum, c) => sum + c.revenue, 0);
+
+    let cumulative = 0;
+    return sorted.map((c, idx) => {
+      const share = totalRev > 0 ? (c.revenue / totalRev) * 100 : 0;
+      cumulative += share;
+      let classification: 'A' | 'B' | 'C' = 'C';
+      if (cumulative <= 80 || idx === 0) {
+        classification = 'A';
+      } else if (cumulative <= 95) {
+        classification = 'B';
+      } else {
+        classification = 'C';
+      }
+      return {
+        ...c,
+        rank: idx + 1,
+        share,
+        cumulative,
+        classification
+      };
+    });
+  }, [periodSales]);
+
+  const filteredAbcProducts = useMemo(() => {
+    if (!abcSearch.trim()) return abcProducts;
+    const term = abcSearch.toLowerCase();
+    return abcProducts.filter(p => p.name.toLowerCase().includes(term));
+  }, [abcProducts, abcSearch]);
+
+  const filteredAbcClients = useMemo(() => {
+    if (!abcSearch.trim()) return abcClients;
+    const term = abcSearch.toLowerCase();
+    return abcClients.filter(c => c.name.toLowerCase().includes(term));
+  }, [abcClients, abcSearch]);
+
+  const abcSummary = useMemo(() => {
+    const currentList = abcTab === 'products' ? abcProducts : abcClients;
+    const faixaA = currentList.filter(i => i.classification === 'A');
+    const faixaB = currentList.filter(i => i.classification === 'B');
+    const faixaC = currentList.filter(i => i.classification === 'C');
+
+    const revA = faixaA.reduce((sum, i) => sum + i.revenue, 0);
+    const revB = faixaB.reduce((sum, i) => sum + i.revenue, 0);
+    const revC = faixaC.reduce((sum, i) => sum + i.revenue, 0);
+    const totalRev = revA + revB + revC;
+
+    return {
+      countA: faixaA.length,
+      revA,
+      pctA: totalRev > 0 ? (revA / totalRev) * 100 : 0,
+      countB: faixaB.length,
+      revB,
+      pctB: totalRev > 0 ? (revB / totalRev) * 100 : 0,
+      countC: faixaC.length,
+      revC,
+      pctC: totalRev > 0 ? (revC / totalRev) * 100 : 0,
+      totalRev
+    };
+  }, [abcTab, abcProducts, abcClients]);
 
   const [activeTab, setActiveTab] = useState<'new' | 'history' | 'budgets' | 'dashboard'>('dashboard');
   const [mobileTab, setMobileTab] = useState<'catalog' | 'checkout'>('catalog');
@@ -1841,55 +2253,198 @@ const Sales = () => {
       </div>
 
       {activeTab === 'dashboard' ? (
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {/* HERO: Meta Mensal */}
-          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-[2rem] shadow-2xl p-8 text-white relative overflow-hidden">
-            <div className="relative z-10">
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
-                <div className="flex-1">
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="p-4 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-2xl text-white shadow-lg shadow-cyan-500/30">
-                      <Target size={32} />
-                    </div>
-                    <div>
-                      <h4 className="text-3xl font-black uppercase tracking-tight">Meta Mensal</h4>
-                      <p className="text-cyan-300/70 text-sm font-medium">Acompanhamento Comercial em Tempo Real</p>
-                    </div>
-                  </div>
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {/* BARRA DE FILTROS TEMPORAIS */}
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5 mr-1">
+                <Filter size={14} className="text-cyan-600" /> Período:
+              </span>
+              {(
+                [
+                  { id: 'today', label: 'Hoje' },
+                  { id: '7days', label: 'Últimos 7 Dias' },
+                  { id: 'thisMonth', label: 'Mês Atual' },
+                  { id: 'lastMonth', label: 'Mês Anterior' },
+                  { id: 'custom', label: 'Personalizado' }
+                ] as const
+              ).map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => setPeriodFilter(opt.id)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    periodFilter === opt.id
+                      ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30 font-black'
+                      : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
 
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-end text-sm">
-                      <span className="text-slate-400 font-bold">Progresso</span>
-                      <span className="text-white font-black text-lg">{dashboardStats.targetPercent}% concluído</span>
+            {periodFilter === 'custom' && (
+              <div className="flex items-center gap-2 flex-wrap bg-slate-50 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-slate-400">De:</span>
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={e => setCustomStartDate(e.target.value)}
+                    className="text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-slate-400">Até:</span>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={e => setCustomEndDate(e.target.value)}
+                    className="text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="text-right flex items-center md:justify-end gap-2 text-xs font-bold text-slate-400">
+              <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-700/50 px-2.5 py-1 rounded-lg text-slate-600 dark:text-slate-300 text-[11px]">
+                <Calendar size={12} className="text-cyan-600" />
+                {periodLabel}
+              </span>
+              <span className="text-[11px] text-slate-400 hidden sm:inline">
+                • Variação Δ% calculada vs. período anterior
+              </span>
+            </div>
+          </div>
+
+          {/* HERO: Metas Segmentadas e Velocidade Comercial */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-[2rem] shadow-2xl p-6 md:p-8 text-white relative overflow-hidden">
+            <div className="relative z-10 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="p-3.5 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-2xl text-white shadow-lg shadow-cyan-500/30">
+                    <Target size={28} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-2xl font-black uppercase tracking-tight">Metas Comerciais</h4>
+                      <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-black uppercase rounded-full">
+                        Mês Vigente
+                      </span>
                     </div>
-                    <div className="w-full bg-slate-700/50 rounded-full h-6 overflow-hidden border border-slate-600 shadow-inner">
-                      <div
-                        className="bg-gradient-to-r from-cyan-500 via-cyan-400 to-emerald-400 h-full transition-all duration-1000 relative flex items-center justify-end pr-2"
-                        style={{ width: `${Math.max(dashboardStats.targetPercent, 5)}%` }}
-                      >
-                        <span className="text-[10px] font-black text-white drop-shadow-md">{dashboardStats.targetPercent}%</span>
-                      </div>
-                    </div>
-                    <div className="flex justify-between text-xs font-bold text-slate-500">
-                      <span>R$ 0</span>
-                      <span>{formatMoney(dashboardStats.monthlyTarget)}</span>
-                    </div>
+                    <p className="text-cyan-300/70 text-xs font-medium">Metas Segmentadas & Velocidade Comercial em Tempo Real</p>
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row lg:flex-col gap-4 lg:w-72">
-                  <div className="flex-1 bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 backdrop-blur-sm p-5 rounded-2xl border border-cyan-500/20">
-                    <p className="text-[11px] font-black text-cyan-300 uppercase tracking-widest mb-2 flex items-center gap-2">
-                      <TrendingUp size={14} /> Realizado
-                    </p>
-                    <p className="text-3xl font-black text-white">{formatMoney(dashboardStats.monthlyTotal)}</p>
+                <button
+                  onClick={handleOpenTargetModal}
+                  className="self-start sm:self-auto px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs flex items-center gap-2 border border-white/15 backdrop-blur-sm transition-all hover:scale-105 active:scale-95"
+                >
+                  <Settings size={14} className="text-cyan-400" />
+                  Ajustar Metas
+                </button>
+              </div>
+
+              {/* Barra de Progresso Multi-Estágio */}
+              <div className="space-y-2 bg-white/5 p-4 md:p-5 rounded-2xl border border-white/10 backdrop-blur-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs font-bold text-slate-300">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-400 uppercase text-[10px] tracking-wider">Faturado no Mês:</span>
+                    <span className="text-white text-lg font-black">{formatMoney(commercialVelocity.monthTotal)}</span>
                   </div>
-                  <div className="flex-1 bg-white/5 backdrop-blur-sm p-5 rounded-2xl border border-white/10">
-                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                      <Target size={14} /> Objetivo
-                    </p>
-                    <p className="text-3xl font-black text-white">{formatMoney(dashboardStats.monthlyTarget)}</p>
+                  <div className="flex items-center gap-3 text-[11px] font-bold">
+                    <span className={commercialVelocity.pctMin >= 100 ? 'text-emerald-400' : 'text-slate-400'}>
+                      Mín: {commercialVelocity.pctMin}%
+                    </span>
+                    <span className="text-slate-600">•</span>
+                    <span className={commercialVelocity.pctTarget >= 100 ? 'text-cyan-400' : 'text-slate-300'}>
+                      Alvo: {commercialVelocity.pctTarget}%
+                    </span>
+                    <span className="text-slate-600">•</span>
+                    <span className={commercialVelocity.pctSuper >= 100 ? 'text-purple-400' : 'text-slate-400'}>
+                      Super: {commercialVelocity.pctSuper}%
+                    </span>
                   </div>
+                </div>
+
+                {/* Trilho da Barra com Marcadores */}
+                <div className="relative w-full bg-slate-700/60 rounded-full h-5 overflow-hidden border border-slate-600 shadow-inner">
+                  <div
+                    className="bg-gradient-to-r from-cyan-500 via-emerald-400 to-purple-500 h-full transition-all duration-1000 flex items-center justify-end pr-2 rounded-full"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.max(5, (commercialVelocity.monthTotal / Math.max(commercialTargets.super, 1)) * 100)
+                      )}%`
+                    }}
+                  >
+                    <span className="text-[10px] font-black text-slate-900 drop-shadow px-1 bg-white/80 rounded-full">
+                      {Math.round((commercialVelocity.monthTotal / Math.max(commercialTargets.target, 1)) * 100)}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 text-[11px] font-bold text-slate-400 pt-1">
+                  <div>
+                    <span className="text-[9px] uppercase tracking-wider block text-slate-500">1. Mínima</span>
+                    <span className="text-slate-300">{formatMoney(commercialTargets.minimum)}</span>
+                  </div>
+                  <div className="text-center">
+                    <span className="text-[9px] uppercase tracking-wider block text-cyan-400">2. Alvo Principal</span>
+                    <span className="text-white font-black">{formatMoney(commercialTargets.target)}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] uppercase tracking-wider block text-purple-400">3. Supermeta</span>
+                    <span className="text-purple-300 font-bold">{formatMoney(commercialTargets.super)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Indicadores de Velocidade Comercial */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 backdrop-blur-sm p-4 rounded-2xl border border-cyan-500/25">
+                  <p className="text-[10px] font-black text-cyan-300 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                    <Sparkles size={13} /> Projeção de Fechamento
+                  </p>
+                  <p className="text-2xl font-black text-white">{formatMoney(commercialVelocity.projectedTotal)}</p>
+                  <p className="text-[11px] text-cyan-200/70 font-medium mt-1">
+                    Ritmo atual: {formatMoney(commercialVelocity.dailyAvg)} / dia ({commercialVelocity.daysElapsed} de {commercialVelocity.daysInMonth} dias)
+                  </p>
+                </div>
+
+                <div className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 backdrop-blur-sm p-4 rounded-2xl border border-emerald-500/25">
+                  <p className="text-[10px] font-black text-emerald-300 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                    <TrendingUp size={13} /> Ritmo Diário Restante
+                  </p>
+                  <p className="text-2xl font-black text-white">
+                    {commercialVelocity.monthTotal >= commercialTargets.target
+                      ? commercialVelocity.monthTotal >= commercialTargets.super
+                        ? 'Superada!'
+                        : formatMoney(commercialVelocity.neededRateSuper)
+                      : formatMoney(commercialVelocity.neededRateTarget)}
+                    {commercialVelocity.monthTotal < commercialTargets.super && (
+                      <span className="text-xs font-bold text-slate-300"> / dia</span>
+                    )}
+                  </p>
+                  <p className="text-[11px] text-emerald-200/70 font-medium mt-1">
+                    {commercialVelocity.monthTotal >= commercialTargets.target
+                      ? commercialVelocity.monthTotal >= commercialTargets.super
+                        ? 'Parabéns! Supermeta atingida no mês'
+                        : `Meta Alvo batida! Restante p/ Supermeta (${commercialVelocity.daysRemaining} dias)`
+                      : `Necessário p/ atingir Meta Alvo (${commercialVelocity.daysRemaining} dias restantes)`}
+                  </p>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 backdrop-blur-sm p-4 rounded-2xl border border-purple-500/25">
+                  <p className="text-[10px] font-black text-purple-300 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                    <Target size={13} /> Meta Alvo Principal
+                  </p>
+                  <p className="text-2xl font-black text-white">{formatMoney(commercialTargets.target)}</p>
+                  <p className="text-[11px] text-purple-200/70 font-medium mt-1">
+                    {commercialVelocity.monthTotal >= commercialTargets.target
+                      ? `100% atingida (+${formatMoney(commercialVelocity.monthTotal - commercialTargets.target)})`
+                      : `Faltam ${formatMoney(commercialTargets.target - commercialVelocity.monthTotal)} para atingir`}
+                  </p>
                 </div>
               </div>
             </div>
@@ -1898,178 +2453,566 @@ const Sales = () => {
             <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-purple-600/10 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/4 pointer-events-none"></div>
           </div>
 
-          {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 rounded-2xl shadow-lg shadow-emerald-500/20 text-white relative overflow-hidden group hover:scale-[1.02] transition-transform">
-              <div className="relative z-10">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
-                    <TrendingUp size={24} />
-                  </div>
-                  <span className="bg-white/20 text-white text-[10px] font-black px-2.5 py-1 rounded-lg uppercase">Hoje</span>
-                </div>
-                <p className="text-emerald-100 text-[11px] font-bold uppercase tracking-widest mb-1">Faturamento Diário</p>
-                <h3 className="text-4xl font-black">{formatMoney(dashboardStats.totalToday)}</h3>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-cyan-500 to-cyan-600 p-6 rounded-2xl shadow-lg shadow-cyan-500/20 text-white relative overflow-hidden group hover:scale-[1.02] transition-transform">
-              <div className="relative z-10">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
-                    <Activity size={24} />
-                  </div>
-                  <span className="bg-white/20 text-white text-[10px] font-black px-2.5 py-1 rounded-lg uppercase">Média</span>
-                </div>
-                <p className="text-cyan-100 text-[11px] font-bold uppercase tracking-widest mb-1">Ticket Médio</p>
-                <h3 className="text-4xl font-black">{formatMoney(dashboardStats.averageTicket)}</h3>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-amber-500 to-orange-500 p-6 rounded-2xl shadow-lg shadow-amber-500/20 text-white relative overflow-hidden group hover:scale-[1.02] transition-transform">
-              <div className="relative z-10">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
-                    <FileText size={24} />
-                  </div>
-                  <span className="bg-white/20 text-white text-[10px] font-black px-2.5 py-1 rounded-lg uppercase">Ação</span>
-                </div>
-                <p className="text-amber-100 text-[11px] font-bold uppercase tracking-widest mb-1">Orçamentos Pendentes</p>
-                <h3 className="text-4xl font-black">{dashboardStats.pendingBudgets}</h3>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Ranking Vendas (Produtos) */}
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm col-span-1 lg:col-span-2">
-              <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                <Package className="text-cyan-600" size={18} />
-                Produtos Mais Vendidos
-              </h3>
-              <div className="space-y-4">
-                {(() => {
-                  const productSales: Record<string, number> = {};
-                  (validSales || []).forEach(s => {
-                    (s.items || []).forEach(i => {
-                      if (i && i.name) {
-                        productSales[i.name] = (productSales[i.name] || 0) + (Number(i.quantity) || 0);
-                      }
-                    });
-                  });
-                  const sorted = Object.entries(productSales).sort((a, b) => b[1] - a[1]).slice(0, 5);
-                  if (sorted.length === 0) {
-                    return <p className="text-xs text-slate-400 italic py-4">Nenhum produto faturado no histórico recente.</p>;
-                  }
-                  return sorted.map(([name, qtd], idx) => (
-                    <div key={idx} className="flex items-center gap-4">
-                      <span className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 text-xs font-black flex items-center justify-center">#{idx + 1}</span>
-                      <div className="flex-1">
-                        <div className="flex justify-between mb-1">
-                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">{name}</span>
-                          <span className="text-xs font-bold text-cyan-600">{qtd} un.</span>
-                        </div>
-                        <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
-                          <div className="bg-cyan-500 h-full rounded-full" style={{ width: `${Math.min(100, (qtd / (sorted[0][1] || 1)) * 100)}%` }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  ));
-                })()}
-              </div>
-            </div>
-
-            {/* Ranking Top Clientes */}
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
-              <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                <Users className="text-amber-500" size={18} />
-                Top Clientes
-              </h3>
-              <div className="space-y-3">
-                {(() => {
-                  const clientSales: Record<string, number> = {};
-                  (validSales || []).forEach(s => {
-                    const clientName = s.clientName || 'Cliente Avulso';
-                    clientSales[clientName] = (clientSales[clientName] || 0) + (Number(s.amount) || 0);
-                  });
-                  const sorted = Object.entries(clientSales)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 5);
-                  if (sorted.length === 0) {
-                    return <p className="text-xs text-slate-400 italic py-4">Nenhuma venda registrada ainda.</p>;
-                  }
-                  return sorted.map(([name, val], idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center font-black text-xs shadow-sm">
-                          {name.substring(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-800 dark:text-gray-200">{name}</p>
-                          <p className="text-[10px] text-slate-400 uppercase">Cliente Comercial</p>
-                        </div>
-                      </div>
-                      <span className="text-xs font-black text-slate-900 dark:text-white">{formatMoney(val)}</span>
-                    </div>
-                  ));
-                })()}
-              </div>
-            </div>
-          </div>
-
-          {/* Vendas Recentes */}
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h4 className="font-black text-lg text-slate-800 dark:text-white flex items-center gap-3">
-                <div className="p-2 bg-cyan-50 dark:bg-cyan-900/20 rounded-xl text-cyan-600">
-                  <Activity size={20} />
-                </div>
-                Vendas Recentes
-              </h4>
-              <button
-                onClick={() => setActiveTab('history')}
-                className="text-xs font-bold text-cyan-600 hover:text-cyan-700 uppercase tracking-wide flex items-center gap-1 hover:gap-2 transition-all"
-              >
-                Ver Todas <ChevronRight size={14} />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {validSales.slice(0, 6).map(sale => (
-                <div
-                  key={sale.id}
-                  className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700 hover:border-cyan-300 dark:hover:border-cyan-600 hover:shadow-md transition-all group cursor-pointer"
-                  onClick={() => setSelectedSale(sale)}
+          {/* 4 KPIS DINÂMICOS COM Δ% */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* KPI 1: Faturamento */}
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-cyan-500/40 transition-all">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  Faturamento ({periodLabel})
+                </span>
+                <span
+                  className={`text-[10px] font-black px-2 py-0.5 rounded-lg flex items-center gap-1 ${
+                    dashboardKpis.revenueDelta >= 0
+                      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
+                      : 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400'
+                  }`}
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center text-sm font-black text-white shadow-lg shadow-cyan-500/20 group-hover:scale-110 transition-transform">
-                      {sale.items?.length || 0}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-black text-slate-800 dark:text-white uppercase truncate max-w-[140px]">{sale.clientName}</p>
-                      <p className="text-[11px] text-slate-400 font-bold flex items-center gap-2">
-                        <span>{sale.date}</span>
-                        <span className="w-1 h-1 rounded-full bg-slate-300"></span>
-                        <span className="text-cyan-600">{getPaymentMethodLabel(sale.paymentMethod)}</span>
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-black text-lg text-slate-900 dark:text-white">{formatMoney(sale.amount)}</p>
-                    <p className="text-[10px] text-emerald-600 font-bold uppercase">{sale.status || 'Concluída'}</p>
-                  </div>
-                </div>
-              ))}
+                  {dashboardKpis.revenueDelta >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                  {dashboardKpis.revenueDelta >= 0 ? '+' : ''}
+                  {dashboardKpis.revenueDelta.toFixed(1)}%
+                </span>
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+                {formatMoney(dashboardKpis.currentRevenue)}
+              </h3>
+              <p className="text-[11px] text-slate-400 font-medium mt-1">
+                Período anterior: {formatMoney(dashboardKpis.prevRevenue)}
+              </p>
             </div>
 
-            {validSales.length === 0 && (
-              <div className="text-center py-16 opacity-30 grayscale flex flex-col items-center gap-3">
-                <TrendingUp size={60} strokeWidth={1} />
-                <p className="text-sm font-black uppercase tracking-widest">Nenhuma venda registrada hoje</p>
-                <p className="text-xs text-slate-400">As vendas faturadas aparecerão aqui automaticamente.</p>
+            {/* KPI 2: Ticket Médio */}
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-cyan-500/40 transition-all">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Ticket Médio</span>
+                <span
+                  className={`text-[10px] font-black px-2 py-0.5 rounded-lg flex items-center gap-1 ${
+                    dashboardKpis.ticketDelta >= 0
+                      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
+                      : 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400'
+                  }`}
+                >
+                  {dashboardKpis.ticketDelta >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                  {dashboardKpis.ticketDelta >= 0 ? '+' : ''}
+                  {dashboardKpis.ticketDelta.toFixed(1)}%
+                </span>
               </div>
-            )}
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+                {formatMoney(dashboardKpis.currentTicket)}
+              </h3>
+              <p className="text-[11px] text-slate-400 font-medium mt-1">
+                Período anterior: {formatMoney(dashboardKpis.prevTicket)}
+              </p>
+            </div>
+
+            {/* KPI 3: Vendas Faturadas */}
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-cyan-500/40 transition-all">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Pedidos Faturados</span>
+                <span
+                  className={`text-[10px] font-black px-2 py-0.5 rounded-lg flex items-center gap-1 ${
+                    dashboardKpis.countDelta >= 0
+                      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
+                      : 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400'
+                  }`}
+                >
+                  {dashboardKpis.countDelta >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                  {dashboardKpis.countDelta >= 0 ? '+' : ''}
+                  {dashboardKpis.countDelta.toFixed(1)}%
+                </span>
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+                {dashboardKpis.currentCount} <span className="text-sm font-bold text-slate-400">vendas</span>
+              </h3>
+              <p className="text-[11px] text-slate-400 font-medium mt-1">
+                Período anterior: {dashboardKpis.prevCount} vendas
+              </p>
+            </div>
+
+            {/* KPI 4: Conversão de Orçamentos */}
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-cyan-500/40 transition-all">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Taxa de Conversão</span>
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-cyan-50 text-cyan-600 dark:bg-cyan-950/40 dark:text-cyan-400">
+                  {dashboardKpis.pendingBudgets} abertos
+                </span>
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+                {dashboardKpis.conversionRate}%
+              </h3>
+              <p className="text-[11px] text-slate-400 font-medium mt-1">
+                {dashboardKpis.convertedBudgets} convertidos de {dashboardKpis.totalBudgets} orçamentos
+              </p>
+            </div>
           </div>
+
+          {/* GRÁFICOS ANALÍTICOS (EVOLUÇÃO & FORMAS DE PAGAMENTO) */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Gráfico 1: Evolução Temporal das Vendas */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm col-span-1 lg:col-span-2 flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                    <Activity className="text-cyan-600" size={18} />
+                    Evolução Diária do Faturamento
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Receita faturada por dia no período ({periodLabel})
+                  </p>
+                </div>
+                <span className="text-xs font-black text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 px-3 py-1 rounded-lg">
+                  Total: {formatMoney(dashboardKpis.currentRevenue)}
+                </span>
+              </div>
+
+              {salesEvolutionData.length > 0 ? (
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={salesEvolutionData}>
+                      <defs>
+                        <linearGradient id="salesEvolutionGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.35} />
+                          <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#94a3b8" strokeOpacity={0.15} />
+                      <XAxis
+                        dataKey="dateLabel"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 11, fill: '#94a3b8' }}
+                        dy={6}
+                      />
+                      <YAxis
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 11, fill: '#94a3b8' }}
+                        tickFormatter={(v: any) =>
+                          Number(v) >= 1000 ? `R$ ${(Number(v) / 1000).toFixed(0)}k` : `R$ ${v}`
+                        }
+                      />
+                      <RechartsTooltip
+                        formatter={(val: any) => [formatMoney(Number(val)), 'Faturamento']}
+                        contentStyle={{
+                          backgroundColor: '#0f172a',
+                          border: '1px solid #334155',
+                          borderRadius: '12px',
+                          color: '#fff',
+                          fontSize: '12px'
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="faturamento"
+                        stroke="#06b6d4"
+                        strokeWidth={3}
+                        fill="url(#salesEvolutionGrad)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-64 flex flex-col items-center justify-center text-slate-400 text-xs italic">
+                  <Activity size={36} className="mb-2 opacity-30 text-slate-400" />
+                  Nenhum dado de venda para o período selecionado.
+                </div>
+              )}
+            </div>
+
+            {/* Gráfico 2: Formas de Pagamento (Donut + Legenda) */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+              <div className="mb-4">
+                <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                  <CreditCard className="text-amber-500" size={18} />
+                  Mix por Forma de Pagamento
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">Distribuição da receita gerada</p>
+              </div>
+
+              {paymentDistributionData.length > 0 ? (
+                <div>
+                  <div className="h-44 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={paymentDistributionData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={50}
+                          outerRadius={75}
+                          paddingAngle={4}
+                          dataKey="value"
+                          stroke="none"
+                        >
+                          {paymentDistributionData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip
+                          formatter={(val: any) => [formatMoney(Number(val)), 'Faturado']}
+                          contentStyle={{
+                            backgroundColor: '#0f172a',
+                            border: '1px solid #334155',
+                            borderRadius: '12px',
+                            color: '#fff',
+                            fontSize: '12px'
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Legenda detalhada */}
+                  <div className="space-y-2 mt-2 max-h-40 overflow-y-auto pr-1">
+                    {paymentDistributionData.map((m, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between text-xs p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-750"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: m.color }}></span>
+                          <span className="font-bold text-slate-700 dark:text-slate-300">{m.name}</span>
+                          <span className="text-[10px] text-slate-400">({m.count})</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-slate-800 dark:text-white">{formatMoney(m.value)}</span>
+                          <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                            {m.percent.toFixed(0)}%
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="h-64 flex flex-col items-center justify-center text-slate-400 text-xs italic">
+                  <CreditCard size={36} className="mb-2 opacity-30 text-slate-400" />
+                  Nenhuma forma de pagamento registrada no período.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* CURVA ABC (PRODUTOS & CLIENTES) */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-5">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h4 className="font-black text-lg text-slate-800 dark:text-white flex items-center gap-2">
+                  <Package className="text-cyan-600" size={20} />
+                  Curva ABC (Princípio de Pareto)
+                </h4>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Classificação de relevância sobre o faturamento do período selecionado
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex bg-slate-100 dark:bg-slate-700/60 p-1 rounded-xl">
+                  <button
+                    onClick={() => setAbcTab('products')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      abcTab === 'products'
+                        ? 'bg-white dark:bg-slate-600 text-cyan-600 dark:text-white shadow-sm font-black'
+                        : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Produtos ({abcProducts.length})
+                  </button>
+                  <button
+                    onClick={() => setAbcTab('clients')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      abcTab === 'clients'
+                        ? 'bg-white dark:bg-slate-600 text-cyan-600 dark:text-white shadow-sm font-black'
+                        : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Clientes ({abcClients.length})
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={abcSearch}
+                    onChange={e => setAbcSearch(e.target.value)}
+                    placeholder="Filtrar por nome..."
+                    className="pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Badges de Faixas da Curva ABC */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                    Faixa A (Vital ~80%)
+                  </span>
+                  <span className="text-xs font-black text-emerald-700 dark:text-emerald-400">
+                    {abcSummary.pctA.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-lg font-black text-emerald-900 dark:text-emerald-200">
+                    {formatMoney(abcSummary.revA)}
+                  </span>
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                    {abcSummary.countA} {abcTab === 'products' ? 'itens' : 'clientes'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-cyan-50 dark:bg-cyan-950/20 border border-cyan-200 dark:border-cyan-800/40">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-cyan-700 dark:text-cyan-400">
+                    Faixa B (Intermediário ~15%)
+                  </span>
+                  <span className="text-xs font-black text-cyan-700 dark:text-cyan-400">
+                    {abcSummary.pctB.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-lg font-black text-cyan-900 dark:text-cyan-200">
+                    {formatMoney(abcSummary.revB)}
+                  </span>
+                  <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400">
+                    {abcSummary.countB} {abcTab === 'products' ? 'itens' : 'clientes'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Faixa C (Cauda Longa ~5%)
+                  </span>
+                  <span className="text-xs font-black text-slate-600 dark:text-slate-300">
+                    {abcSummary.pctC.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-lg font-black text-slate-800 dark:text-slate-200">
+                    {formatMoney(abcSummary.revC)}
+                  </span>
+                  <span className="text-xs font-bold text-slate-500">
+                    {abcSummary.countC} {abcTab === 'products' ? 'itens' : 'clientes'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabela de Classificação ABC */}
+            <div className="border border-slate-100 dark:border-slate-700 rounded-xl overflow-hidden">
+              <div className="max-h-96 overflow-y-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-900/60 sticky top-0 z-10 border-b border-slate-100 dark:border-slate-700">
+                    <tr>
+                      <th className="px-4 py-3 font-black text-slate-400 uppercase text-[10px] w-12 text-center">#</th>
+                      <th className="px-4 py-3 font-black text-slate-400 uppercase text-[10px]">
+                        {abcTab === 'products' ? 'Produto' : 'Cliente'}
+                      </th>
+                      <th className="px-4 py-3 font-black text-slate-400 uppercase text-[10px] text-center">
+                        {abcTab === 'products' ? 'Qtd Vendida' : 'Nº Pedidos'}
+                      </th>
+                      <th className="px-4 py-3 font-black text-slate-400 uppercase text-[10px] text-right">
+                        Faturamento
+                      </th>
+                      <th className="px-4 py-3 font-black text-slate-400 uppercase text-[10px] text-right">
+                        % Part.
+                      </th>
+                      <th className="px-4 py-3 font-black text-slate-400 uppercase text-[10px] text-right">
+                        % Acum.
+                      </th>
+                      <th className="px-4 py-3 font-black text-slate-400 uppercase text-[10px] text-center">
+                        Faixa
+                      </th>
+                      {abcTab === 'clients' && (
+                        <th className="px-4 py-3 font-black text-slate-400 uppercase text-[10px] text-center w-20">
+                          Ação
+                        </th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {abcTab === 'products' ? (
+                      filteredAbcProducts.length > 0 ? (
+                        filteredAbcProducts.map(p => (
+                          <tr key={p.rank} className="hover:bg-slate-50/70 dark:hover:bg-slate-900/40 transition-colors">
+                            <td className="px-4 py-3 text-center font-bold text-slate-400">#{p.rank}</td>
+                            <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200 uppercase">{p.name}</td>
+                            <td className="px-4 py-3 text-center font-bold text-cyan-600">
+                              {p.quantity} {p.unit}
+                            </td>
+                            <td className="px-4 py-3 text-right font-black text-slate-900 dark:text-white">
+                              {formatMoney(p.revenue)}
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-slate-600 dark:text-slate-300">
+                              {p.share.toFixed(1)}%
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-slate-400">
+                              {p.cumulative.toFixed(1)}%
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                  p.classification === 'A'
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
+                                    : p.classification === 'B'
+                                    ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-700'
+                                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-300 dark:border-slate-700'
+                                }`}
+                              >
+                                Faixa {p.classification}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={7} className="text-center py-8 text-slate-400 text-xs italic">
+                            Nenhum produto faturado no período selecionado.
+                          </td>
+                        </tr>
+                      )
+                    ) : filteredAbcClients.length > 0 ? (
+                      filteredAbcClients.map(c => (
+                        <tr key={c.rank} className="hover:bg-slate-50/70 dark:hover:bg-slate-900/40 transition-colors">
+                          <td className="px-4 py-3 text-center font-bold text-slate-400">#{c.rank}</td>
+                          <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200 uppercase">{c.name}</td>
+                          <td className="px-4 py-3 text-center font-bold text-cyan-600">{c.orders} pedidos</td>
+                          <td className="px-4 py-3 text-right font-black text-slate-900 dark:text-white">
+                            {formatMoney(c.revenue)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-bold text-slate-600 dark:text-slate-300">
+                            {c.share.toFixed(1)}%
+                          </td>
+                          <td className="px-4 py-3 text-right font-bold text-slate-400">
+                            {c.cumulative.toFixed(1)}%
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                c.classification === 'A'
+                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
+                                  : c.classification === 'B'
+                                  ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-700'
+                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-300 dark:border-slate-700'
+                              }`}
+                            >
+                              Faixa {c.classification}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => {
+                                setHistorySearchTerm(c.name);
+                                setActiveTab('history');
+                              }}
+                              className="px-2 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-cyan-600 hover:text-white text-slate-600 dark:text-slate-300 rounded-md font-bold text-[10px] transition-all"
+                              title="Ver vendas deste cliente no histórico"
+                            >
+                              Filtrar
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="text-center py-8 text-slate-400 text-xs italic">
+                          Nenhum cliente com compras no período selecionado.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* MODAL DE AJUSTE DE METAS COMERCIAIS */}
+          {showTargetModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+              <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full p-6 space-y-6">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 rounded-2xl">
+                      <Target size={24} />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-lg text-slate-900 dark:text-white">Ajustar Metas Comerciais</h3>
+                      <p className="text-xs text-slate-400">Configuração das metas segmentadas do mês</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowTargetModal(false)}
+                    className="p-2 text-slate-400 hover:text-rose-500 rounded-xl transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-black uppercase text-slate-500 mb-1">
+                      1. Meta Mínima (R$)
+                    </label>
+                    <input
+                      type="number"
+                      value={tempTargets.minimum}
+                      onChange={e => setTempTargets({ ...tempTargets, minimum: Number(e.target.value) || 0 })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Patamar de segurança comercial mínimo.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black uppercase text-cyan-600 dark:text-cyan-400 mb-1">
+                      2. Meta Alvo Principal (R$)
+                    </label>
+                    <input
+                      type="number"
+                      value={tempTargets.target}
+                      onChange={e => setTempTargets({ ...tempTargets, target: Number(e.target.value) || 0 })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-cyan-300 dark:border-cyan-700 rounded-xl font-black text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Objetivo comercial padrão para a equipe.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black uppercase text-purple-600 dark:text-purple-400 mb-1">
+                      3. Supermeta Desafiadora (R$)
+                    </label>
+                    <input
+                      type="number"
+                      value={tempTargets.super}
+                      onChange={e => setTempTargets({ ...tempTargets, super: Number(e.target.value) || 0 })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Gatilho de superação e bonificação comercial.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setShowTargetModal(false)}
+                    className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveTargets}
+                    className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl font-black text-xs shadow-lg shadow-cyan-600/30 transition-all hover:scale-105 active:scale-95"
+                  >
+                    Salvar Metas
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       ) : activeTab === 'new' ? (
         <div className="flex flex-col h-full overflow-hidden">

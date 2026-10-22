@@ -51,7 +51,9 @@ import {
    Info,
    Phone,
    Mail,
-   Building2
+   Building2,
+   Disc,
+   MapPin
 } from 'lucide-react';
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, CartesianGrid } from 'recharts';
 import { useApp } from '../context/AppContext';
@@ -69,6 +71,7 @@ const Purchases = () => {
       updateSupplier,
       transactions,
       inventory,
+      tires,
       purchaseOrders,
       addPurchaseOrder,
       updatePurchaseOrder,
@@ -114,11 +117,11 @@ const Purchases = () => {
    const [shippingCost, setShippingCost] = useState<number>(0);
    const [sourceAccount, setSourceAccount] = useState<string>('');
 
-   // Inventory Management States
+   // Inventory Management States (Estoque Geral)
    const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
    const [isStockModalOpen, setIsStockModalOpen] = useState(false);
    const [stockForm, setStockForm] = useState<Partial<InventoryItem>>({
-      name: '', category: 'Insumos', quantity: 0, minStock: 0, unit: 'kg', price: 0
+      name: '', category: 'Insumos', quantity: 0, minStock: 0, unit: 'un', price: 0, location: ''
    });
 
    // Supplier Management States
@@ -139,6 +142,7 @@ const Purchases = () => {
    const [catalogSearch, setCatalogSearch] = useState('');
    const [stockSearch, setStockSearch] = useState('');
    const [stockLevelFilter, setStockLevelFilter] = useState<'Todos' | 'Crítico' | 'Normal' | 'Excedente'>('Todos');
+   const [stockCategoryFilter, setStockCategoryFilter] = useState<string>('Todas');
 
    // OSM States (Maintenance)
    const [isOSMModalOpen, setIsOSMModalOpen] = useState(false);
@@ -392,11 +396,11 @@ const Purchases = () => {
          addToast("Item de estoque atualizado!", 'success');
       } else {
          addStockItem(item);
-         addToast("Novo insumo cadastrado no estoque!", 'success');
+         addToast("Novo item cadastrado no estoque geral!", 'success');
       }
       setIsStockModalOpen(false);
       setEditingItem(null);
-      setStockForm({ name: '', category: 'Insumos', quantity: 0, minStock: 0, unit: 'kg', price: 0 });
+      setStockForm({ name: '', category: 'Insumos', quantity: 0, minStock: 0, unit: 'un', price: 0, location: '' });
    };
 
    const handleSaveSupplier = (e: React.FormEvent) => {
@@ -485,6 +489,85 @@ const Purchases = () => {
       }
       return filteredSuppliers[0] || null;
    }, [suppliers, selectedSupplierDetailId, filteredSuppliers]);
+
+   // Unified General Inventory (Insumos + Peças de Manutenção + Pneus da Frota em Estoque)
+   const unifiedInventory = useMemo(() => {
+      const standardItems = (inventory || []).map(item => ({
+         ...item,
+         sourceType: 'inventory' as const,
+         location: item.location || 'Almoxarifado Central',
+         serials: undefined as string[] | undefined
+      }));
+
+      // Gather fleet tires in warehouse (status 'Estoque' or 'Novo')
+      const existingNames = new Set(standardItems.map(i => i.name.toLowerCase()));
+      const warehouseTires = (tires || []).filter(t => t.status === 'Estoque' || t.status === 'Novo');
+
+      const groupedTires = new Map<string, { tire: typeof warehouseTires[0]; count: number; serials: string[] }>();
+      warehouseTires.forEach(t => {
+         const key = `${t.brand} ${t.model} ${t.size}`.trim();
+         const existing = groupedTires.get(key);
+         if (existing) {
+            existing.count += 1;
+            existing.serials.push(t.serialNumber);
+         } else {
+            groupedTires.set(key, { tire: t, count: 1, serials: [t.serialNumber] });
+         }
+      });
+
+      const synthesizedTires: (InventoryItem & { sourceType: 'tire'; serials?: string[] })[] = [];
+      groupedTires.forEach((grp, key) => {
+         const itemName = `Pneu ${key}`;
+         if (!existingNames.has(itemName.toLowerCase())) {
+            synthesizedTires.push({
+               id: `TIRE-${grp.tire.id}`,
+               name: itemName,
+               category: 'Pneus',
+               quantity: grp.count,
+               unit: 'un',
+               price: 1850,
+               costPrice: 1650,
+               minStock: 2,
+               location: 'Borracharia / Box Frota',
+               sourceType: 'tire',
+               serials: grp.serials
+            });
+         }
+      });
+
+      return [...standardItems, ...synthesizedTires];
+   }, [inventory, tires]);
+
+   const stockCategories = useMemo(() => {
+      const cats = new Set<string>(['Insumos', 'Peças de Manutenção', 'Pneus', 'Consumíveis', 'Matéria Prima', 'Ferramentas']);
+      unifiedInventory.forEach(item => {
+         if (item.category) cats.add(item.category);
+      });
+      return Array.from(cats);
+   }, [unifiedInventory]);
+
+   const filteredStockItems = useMemo(() => {
+      return unifiedInventory.filter(item => {
+         const term = stockSearch.toLowerCase().trim();
+         const matchesSearch = !term ||
+            item.name.toLowerCase().includes(term) ||
+            item.category.toLowerCase().includes(term) ||
+            (item.location && item.location.toLowerCase().includes(term)) ||
+            (item.serials && item.serials.some(s => s.toLowerCase().includes(term)));
+
+         const matchesCategory = stockCategoryFilter === 'Todas' || item.category === stockCategoryFilter;
+
+         const matchesLevel = stockLevelFilter === 'Todos'
+            ? true
+            : stockLevelFilter === 'Crítico'
+            ? item.quantity <= item.minStock
+            : stockLevelFilter === 'Excedente'
+            ? item.quantity > (item.maxStock || item.minStock * 3 || 100)
+            : item.quantity > item.minStock;
+
+         return matchesSearch && matchesCategory && matchesLevel;
+      });
+   }, [unifiedInventory, stockSearch, stockCategoryFilter, stockLevelFilter]);
 
    const handlePrintPurchaseOrder = (order: PurchaseOrder) => {
       const html = `
@@ -850,7 +933,7 @@ const Purchases = () => {
                   { id: 'approval', label: 'Central de Aprovações', icon: ShieldCheck, badge: purchaseOrders.filter(o => o.status === 'Pendente').length },
                   { id: 'new-order', label: 'Nova Compra (OCP)', icon: Plus },
                   { id: 'suppliers', label: 'Fornecedores', icon: Users },
-                  { id: 'inventory', label: 'Estoque de Insumos', icon: Warehouse }
+                  { id: 'inventory', label: 'Estoque Geral', icon: Warehouse }
                ].map(tab => {
                   const Icon = tab.icon;
                   return (
@@ -1044,9 +1127,9 @@ const Purchases = () => {
                            <Warehouse size={18} />
                            <span className="text-[10px] font-black uppercase tracking-wider">Diretriz de Suprimentos</span>
                         </div>
-                        <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Controle e Recebimento de Insumos</h3>
+                        <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Controle de Suprimentos & Estoque Geral</h3>
                         <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                           Toda entrada física de material e lançamento financeiro em contas a pagar ocorre diretamente através da conferência de entrega e recebimento de Ordens de Compra aprovadas.
+                           A entrada física e contábil de insumos, peças de manutenção e pneus ocorre diretamente através da conferência de entrega e recebimento de Ordens de Compra aprovadas.
                         </p>
                      </div>
                      <div className="pt-4 border-t border-slate-100 dark:border-gray-700 mt-4">
@@ -1054,7 +1137,7 @@ const Purchases = () => {
                            onClick={() => setActiveTab('inventory')}
                            className="w-full py-2.5 bg-cyan-50 dark:bg-cyan-900/30 hover:bg-cyan-100 text-cyan-700 dark:text-cyan-300 rounded-xl font-bold uppercase text-xs tracking-wider transition-colors flex items-center justify-center gap-2"
                         >
-                           <Warehouse size={15} /> Consultar Estoque de Insumos
+                           <Warehouse size={15} /> Consultar Estoque Geral
                         </button>
                      </div>
                   </div>
@@ -1883,29 +1966,46 @@ const Purchases = () => {
             </div>
          )}
 
-         {/* TAB 7: ESTOQUE DE INSUMOS */}
+         {/* TAB 7: ESTOQUE GERAL (INSUMOS, PEÇAS E PNEUS) */}
          {activeTab === 'inventory' && (
-            <div className="space-y-6 animate-in fade-in duration-300">
+            <div className="space-y-4 animate-in fade-in duration-300">
                {/* Search and Filters */}
-               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-gray-700">
+               <div className="flex flex-col md:flex-row gap-3 items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700">
                   <div className="relative w-full md:w-96">
-                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                     <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                      <input
                         type="text"
                         value={stockSearch}
                         onChange={e => setStockSearch(e.target.value)}
-                        placeholder="Buscar item, categoria ou código..."
-                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-gray-600 dark:bg-gray-700 text-sm outline-none"
+                        placeholder="Buscar por item, código, categoria ou localização..."
+                        className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-cyan-500"
                      />
                   </div>
 
                   <div className="flex items-center gap-2 overflow-x-auto no-scrollbar w-full md:w-auto">
+                     {/* Category Select Filter */}
+                     <select
+                        value={stockCategoryFilter}
+                        onChange={e => setStockCategoryFilter(e.target.value)}
+                        className="px-3 py-1.5 bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl text-xs font-bold text-slate-600 dark:text-gray-300 outline-none"
+                     >
+                        <option value="Todas">Todas Categorias</option>
+                        {stockCategories.map(cat => (
+                           <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                     </select>
+
+                     {/* Level Filters */}
                      {(['Todos', 'Crítico', 'Normal', 'Excedente'] as const).map(f => (
                         <button
                            type="button"
                            key={f}
                            onClick={() => setStockLevelFilter(f)}
-                           className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${stockLevelFilter === f ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}
+                           className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+                              stockLevelFilter === f
+                                 ? 'bg-slate-900 text-white shadow-sm'
+                                 : 'bg-slate-50 text-slate-500 border border-slate-100 hover:bg-slate-100 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600'
+                           }`}
                         >
                            {f}
                         </button>
@@ -1915,10 +2015,10 @@ const Purchases = () => {
                         <button
                            onClick={() => {
                               setEditingItem(null);
-                              setStockForm({ name: '', category: 'Insumos', quantity: 0, minStock: 0, unit: 'kg', price: 0 });
+                              setStockForm({ name: '', category: 'Insumos', quantity: 0, minStock: 0, unit: 'un', price: 0, location: '' });
                               setIsStockModalOpen(true);
                            }}
-                           className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold uppercase ml-2 flex items-center gap-1 transition-colors shadow-sm"
+                           className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold uppercase ml-2 flex items-center gap-1.5 transition-colors shadow-sm whitespace-nowrap"
                         >
                            <Plus size={14} /> Novo Item
                         </button>
@@ -1937,110 +2037,160 @@ const Purchases = () => {
                   <div className="flex items-center gap-3 p-3.5 bg-blue-50/70 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 rounded-xl text-xs text-blue-800 dark:text-blue-300">
                      <Info size={16} className="text-blue-600 dark:text-blue-400 shrink-0" />
                      <span>
-                        <strong>Política de Suprimentos:</strong> A entrada física e contábil de estoque é realizada <strong>exclusivamente através do recebimento de Ordens de Compra</strong>. Cadastro avulso e ajustes manuais de saldo são restritos a administradores.
+                        <strong>Política de Suprimentos:</strong> A entrada física e contábil de estoque (insumos, peças e pneus) é realizada <strong>exclusivamente através do recebimento de Ordens de Compra</strong>. Cadastros e ajustes avulsos são restritos a administradores.
                      </span>
                   </div>
                )}
 
-               {/* Inventory List */}
-               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 overflow-hidden">
+               {/* Clean General Inventory Table */}
+               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 overflow-hidden">
+                  <div className="p-3.5 border-b border-slate-100 dark:border-gray-700 flex justify-between items-center bg-slate-50/60 dark:bg-gray-800/60">
+                     <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
+                        Itens no Estoque Geral ({filteredStockItems.length})
+                     </span>
+                     <span className="text-[10px] text-slate-400">Insumos Industriais • Peças de Manutenção • Pneus da Frota</span>
+                  </div>
+
                   <div className="overflow-x-auto">
-                     <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50 dark:bg-gray-700/50 text-slate-600 dark:text-gray-300 font-bold text-xs uppercase border-b border-slate-200 dark:border-gray-700">
+                     <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 dark:bg-gray-700/50 text-slate-500 dark:text-gray-300 font-bold text-[10px] uppercase border-b border-slate-200 dark:border-gray-700 tracking-wider">
                            <tr>
-                              <th className="px-6 py-4">Item / Categoria</th>
-                              <th className="px-6 py-4 text-center">Status</th>
-                              <th className="px-6 py-4 text-center">Quantidade</th>
-                              <th className="px-6 py-4 text-right">Preço Médio</th>
-                              <th className="px-6 py-4 text-right">Ações</th>
+                              <th className="px-5 py-3.5">Item / Especificação</th>
+                              <th className="px-5 py-3.5">Localização Física</th>
+                              <th className="px-5 py-3.5 text-center">Status</th>
+                              <th className="px-5 py-3.5 text-center">Saldo / Quantidade</th>
+                              <th className="px-5 py-3.5 text-right">Preço Médio / Custo</th>
+                              <th className="px-5 py-3.5 text-right">Ações</th>
                            </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-50 dark:divide-gray-700">
-                           {inventory
-                              .filter(item => {
-                                 const matchesSearch =
-                                    !stockSearch.trim() ||
-                                    item.name.toLowerCase().includes(stockSearch.toLowerCase()) ||
-                                    item.category.toLowerCase().includes(stockSearch.toLowerCase());
-                                 const matchesLevel =
-                                    stockLevelFilter === 'Todos'
-                                       ? true
-                                       : stockLevelFilter === 'Crítico'
-                                       ? item.quantity <= item.minStock
-                                       : stockLevelFilter === 'Excedente'
-                                       ? item.quantity > (item.maxStock || item.minStock * 3 || 100)
-                                       : item.quantity > item.minStock;
-                                 return matchesSearch && matchesLevel;
-                              })
-                              .map(item => (
-                              <tr key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-gray-700/50 transition-colors group">
-                                 <td className="px-6 py-4">
-                                    <div className="flex items-center gap-3">
-                                       <div className={`p-2 rounded-lg ${item.category === 'Insumos' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
-                                          <Package size={20} />
-                                       </div>
-                                       <div>
-                                          <p className="font-bold text-slate-900 dark:text-white">{item.name}</p>
-                                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{item.category}</p>
-                                       </div>
-                                    </div>
-                                 </td>
-                                 <td className="px-6 py-4 text-center">
-                                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${item.quantity < item.minStock
-                                       ? 'bg-rose-100 text-rose-700 border-rose-200'
-                                       : 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                                       }`}>
-                                       {item.quantity < item.minStock ? 'REPOSIÇÃO' : 'DISPONÍVEL'}
-                                    </span>
-                                 </td>
-                                 <td className="px-6 py-4 text-center">
-                                    <div className="flex flex-col items-center">
-                                       <span className={`font-bold ${item.quantity < item.minStock ? 'text-rose-600' : 'text-slate-700 dark:text-white'}`}>
-                                          {item.quantity} {item.unit}
-                                       </span>
-                                       <span className="text-[10px] text-slate-400">Mín: {item.minStock}</span>
-                                    </div>
-                                 </td>
-                                 <td className="px-6 py-4 text-right font-mono font-medium text-slate-600 dark:text-gray-300">
-                                    {formatCurrency(item.price)}
-                                 </td>
-                                 <td className="px-6 py-4 text-right">
-                                    <div className="flex items-center justify-end gap-2">
-                                       <button
-                                          onClick={() => {
-                                             addItemToOrder(item);
-                                             setActiveTab('new-order');
-                                          }}
-                                          className="p-2 text-cyan-600 hover:bg-cyan-50 rounded-lg transition-colors border border-transparent hover:border-cyan-100"
-                                          title="Solicitar Reposição"
-                                       >
-                                          <ShoppingBag size={18} />
-                                       </button>
-                                       {isAdmin && (
-                                          <>
-                                             <button
-                                                onClick={() => { setEditingItem(item); setStockForm(item); setIsStockModalOpen(true); }}
-                                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-colors"
-                                                title="Editar"
-                                             >
-                                                <Edit2 size={18} />
-                                             </button>
-                                             <button
-                                                onClick={() => addToast('Remover este item do catálogo?', 'warning', 5000, {
-                                                   label: 'EXCLUIR',
-                                                   onClick: () => deleteStockItem(item.id)
-                                                })}
-                                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                                                title="Excluir"
-                                             >
-                                                <Trash2 size={18} />
-                                             </button>
-                                          </>
-                                       )}
-                                    </div>
+                        <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
+                           {filteredStockItems.length === 0 ? (
+                              <tr>
+                                 <td colSpan={6} className="px-6 py-12 text-center text-slate-400 text-xs">
+                                    <Package size={36} className="mx-auto mb-2 text-slate-300" />
+                                    Nenhum item localizado no estoque geral com os filtros aplicados.
                                  </td>
                               </tr>
-                           ))}
+                           ) : (
+                              filteredStockItems.map(item => {
+                                 const isCritical = item.quantity <= item.minStock;
+                                 const isExcess = item.maxStock ? item.quantity > item.maxStock : item.quantity > (item.minStock * 3 || 100);
+                                 const cat = (item.category || '').toLowerCase();
+                                 const isTire = cat.includes('pneu');
+                                 const isPart = cat.includes('peça') || cat.includes('manuten');
+
+                                 return (
+                                    <tr key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-gray-700/50 transition-colors group">
+                                       <td className="px-5 py-3.5">
+                                          <div className="flex items-center gap-3">
+                                             <div className={`p-2.5 rounded-xl shrink-0 ${
+                                                isTire
+                                                   ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400'
+                                                   : isPart
+                                                   ? 'bg-teal-50 text-teal-600 dark:bg-teal-950/30 dark:text-teal-400'
+                                                   : 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400'
+                                             }`}>
+                                                {isTire ? <Disc size={18} /> : isPart ? <Wrench size={18} /> : <Package size={18} />}
+                                             </div>
+                                             <div className="min-w-0">
+                                                <p className="font-bold text-slate-900 dark:text-white text-xs truncate">{item.name}</p>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                   <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-gray-300">
+                                                      {item.category}
+                                                   </span>
+                                                   {item.serials && item.serials.length > 0 && (
+                                                      <span className="text-[10px] text-amber-600 font-mono font-medium">
+                                                         Fogo: {item.serials.slice(0, 3).join(', ')}{item.serials.length > 3 ? ` (+${item.serials.length - 3})` : ''}
+                                                      </span>
+                                                   )}
+                                                </div>
+                                             </div>
+                                          </div>
+                                       </td>
+                                       <td className="px-5 py-3.5">
+                                          <div className="flex items-center gap-1.5 text-slate-600 dark:text-gray-300 text-xs">
+                                             <MapPin size={13} className="text-cyan-600 shrink-0" />
+                                             <span className="truncate">{item.location || 'Almoxarifado Central'}</span>
+                                          </div>
+                                       </td>
+                                       <td className="px-5 py-3.5 text-center">
+                                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${
+                                             isCritical
+                                                ? 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900'
+                                                : isExcess
+                                                ? 'bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-900'
+                                                : 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900'
+                                          }`}>
+                                             {isCritical ? 'REPOSIÇÃO' : isExcess ? 'EXCEDENTE' : 'DISPONÍVEL'}
+                                          </span>
+                                       </td>
+                                       <td className="px-5 py-3.5 text-center">
+                                          <div className="flex flex-col items-center">
+                                             <span className={`font-black font-mono text-xs ${isCritical ? 'text-rose-600' : 'text-slate-800 dark:text-white'}`}>
+                                                {item.quantity} {item.unit}
+                                             </span>
+                                             <span className="text-[10px] text-slate-400 font-medium">Mín: {item.minStock} {item.unit}</span>
+                                          </div>
+                                       </td>
+                                       <td className="px-5 py-3.5 text-right font-mono">
+                                          <div className="flex flex-col items-end">
+                                             <span className="font-bold text-slate-900 dark:text-white text-xs">
+                                                {formatCurrency(item.price || item.costPrice || 0)}
+                                             </span>
+                                             <span className="text-[10px] text-slate-400">
+                                                Total: {formatCurrency((item.price || item.costPrice || 0) * item.quantity)}
+                                             </span>
+                                          </div>
+                                       </td>
+                                       <td className="px-5 py-3.5 text-right">
+                                          <div className="flex items-center justify-end gap-1.5">
+                                             <button
+                                                type="button"
+                                                onClick={() => {
+                                                   addItemToOrder(item);
+                                                   setActiveTab('new-order');
+                                                }}
+                                                className="p-1.5 text-cyan-600 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 rounded-lg transition-colors border border-transparent hover:border-cyan-100"
+                                                title="Solicitar Reposição / Emitir Compra"
+                                             >
+                                                <ShoppingBag size={16} />
+                                             </button>
+                                             {isAdmin && (
+                                                <>
+                                                   <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                         setEditingItem(item);
+                                                         setStockForm({
+                                                            ...item,
+                                                            location: item.location || ''
+                                                         });
+                                                         setIsStockModalOpen(true);
+                                                      }}
+                                                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                                      title="Editar Item"
+                                                   >
+                                                      <Edit2 size={16} />
+                                                   </button>
+                                                   <button
+                                                      type="button"
+                                                      onClick={() => addToast(`Remover "${item.name}" do catálogo?`, 'warning', 5000, {
+                                                         label: 'EXCLUIR',
+                                                         onClick: () => deleteStockItem(item.id)
+                                                      })}
+                                                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
+                                                      title="Excluir"
+                                                   >
+                                                      <Trash2 size={16} />
+                                                   </button>
+                                                </>
+                                             )}
+                                          </div>
+                                       </td>
+                                    </tr>
+                                 );
+                              })
+                           )}
                         </tbody>
                      </table>
                   </div>
@@ -2260,9 +2410,9 @@ const Purchases = () => {
                         </div>
                         <div>
                            <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                              {editingItem ? 'Editar Item de Estoque' : 'Novo Item de Estoque'}
+                              {editingItem ? 'Editar Item no Estoque Geral' : 'Novo Item no Estoque Geral'}
                            </h3>
-                           <p className="text-xs text-slate-500">Parâmetros de saldo, ponto de reposição e precificação</p>
+                           <p className="text-xs text-slate-500">Parâmetros de saldo, localização física, ponto de reposição e precificação</p>
                         </div>
                      </div>
                      <button onClick={() => setIsStockModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
@@ -2272,9 +2422,10 @@ const Purchases = () => {
                   <form onSubmit={handleSaveStock}>
                      <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
                         <div>
-                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Nome do Item / Insumo</label>
+                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Nome do Item / Material / Peça</label>
                            <input
                               type="text"
+                              placeholder="Ex: Pneu Radial 295/80 R22.5, Filtro de Óleo, Cimento CP-II..."
                               className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
                               value={stockForm.name || ''}
                               onChange={e => setStockForm({ ...stockForm, name: e.target.value })}
@@ -2285,44 +2436,58 @@ const Purchases = () => {
                            <div>
                               <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Categoria</label>
                               <select
-                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold uppercase"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
                                  value={stockForm.category || ''}
                                  onChange={e => setStockForm({ ...stockForm, category: e.target.value })}
                                  required
                               >
                                  <option value="">Selecione...</option>
-                                 <option value="Insumos">Insumos</option>
+                                 <option value="Insumos">Insumos Industriais</option>
+                                 <option value="Peças de Manutenção">Peças de Manutenção</option>
+                                 <option value="Pneus">Pneus & Rodagem</option>
                                  <option value="Matéria Prima">Matéria Prima</option>
                                  <option value="Acabamentos">Acabamentos</option>
                                  <option value="Ferramentas">Ferramentas</option>
                                  <option value="Equipamentos">Equipamentos</option>
-                                 <option value="Consumíveis">Consumíveis</option>
+                                 <option value="Consumíveis">Consumíveis / EPIs</option>
                                  <option value="Outros">Outros</option>
                               </select>
                            </div>
                            <div>
                               <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Unidade</label>
                               <select
-                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold uppercase"
+                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
                                  value={stockForm.unit || ''}
                                  onChange={e => setStockForm({ ...stockForm, unit: e.target.value })}
                                  required
                               >
                                  <option value="">Selecione...</option>
                                  <option value="un">UN (Unidade)</option>
+                                 <option value="kit">KIT (Kit / Conjunto)</option>
+                                 <option value="par">PAR (Par)</option>
                                  <option value="kg">KG (Quilos)</option>
                                  <option value="ton">TON (Toneladas)</option>
-                                 <option value="m³">M³ (Metros Cúb.)</option>
-                                 <option value="m²">M² (Metros Quad.)</option>
+                                 <option value="m³">M³ (Metros Cúbicos)</option>
+                                 <option value="m²">M² (Metros Quadrados)</option>
                                  <option value="m">M (Metros Lineares)</option>
                                  <option value="l">L (Litros)</option>
                                  <option value="sc">SC (Sacos)</option>
                               </select>
                            </div>
                         </div>
+                        <div>
+                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Localização Física no Almoxarifado</label>
+                           <input
+                              type="text"
+                              placeholder="Ex: Galpão Central - Prateleira B3 / Box Borracharia / Almox. Frota"
+                              className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
+                              value={stockForm.location || ''}
+                              onChange={e => setStockForm({ ...stockForm, location: e.target.value })}
+                           />
+                        </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                            <div>
-                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Quantidade Atual</label>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Quantidade Atual em Saldo</label>
                               <input
                                  type="number"
                                  className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
@@ -2332,7 +2497,7 @@ const Purchases = () => {
                               />
                            </div>
                            <div>
-                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Estoque Mínimo (Alerta)</label>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Estoque Mínimo (Ponto de Alerta)</label>
                               <input
                                  type="number"
                                  className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
@@ -2354,7 +2519,7 @@ const Purchases = () => {
                               />
                            </div>
                            <div>
-                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Preço Unitário Referência (R$)</label>
+                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Preço Referência (R$)</label>
                               <input
                                  type="number"
                                  step="0.01"

@@ -46,7 +46,8 @@ import {
    Star,
    Building2,
    QrCode,
-   Wallet
+   Wallet,
+   ArrowLeftRight
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, AreaChart, Area, Legend } from 'recharts';
@@ -132,6 +133,18 @@ const Finance = () => {
    const [isSubmitting, setIsSubmitting] = useState(false);
    const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
    const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+   const [transferForm, setTransferForm] = useState({
+      originAccountId: '',
+      destinationAccountId: '',
+      amount: '',
+      date: new Date().toLocaleDateString('pt-BR'),
+      fee: '',
+      paymentMethod: 'PIX',
+      description: '',
+      authCode: '',
+      allowOverdraft: false
+   });
 
    // Selection State for Batch Actions
    const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
@@ -338,6 +351,204 @@ const Finance = () => {
 
       addToast(isEditing ? "Conta bancária atualizada com sucesso!" : "Conta bancária cadastrada com sucesso!", 'success');
       setIsAccountModalOpen(false);
+   };
+
+   // =========================================================================
+   // TRANSFERÊNCIA ENTRE CONTAS BANCÁRIAS / CAIXA
+   // =========================================================================
+   const openTransferModal = () => {
+      const defaultAcc = accounts.find(a => a.isDefault) || accounts[0];
+      const otherAcc = accounts.find(a => a.id !== defaultAcc?.id) || accounts[1] || accounts[0];
+
+      setTransferForm({
+         originAccountId: defaultAcc?.id || '',
+         destinationAccountId: otherAcc?.id || '',
+         amount: '',
+         date: new Date().toLocaleDateString('pt-BR'),
+         fee: '',
+         paymentMethod: 'PIX',
+         description: '',
+         authCode: '',
+         allowOverdraft: false
+      });
+      setIsTransferModalOpen(true);
+   };
+
+   const transferSummary = useMemo(() => {
+      const originAcc = accounts.find(a => a.id === transferForm.originAccountId);
+      const destAcc = accounts.find(a => a.id === transferForm.destinationAccountId);
+
+      const transferAmount = Number(transferForm.amount) || 0;
+      const transferFee = Number(transferForm.fee) || 0;
+      const totalDeducted = transferAmount + transferFee;
+
+      const originCurrentBalance = Number(originAcc?.balance || 0);
+      const originCreditLimit = Number(originAcc?.creditLimit || 0);
+      const originProjectedBalance = originCurrentBalance - totalDeducted;
+
+      const destCurrentBalance = Number(destAcc?.balance || 0);
+      const destProjectedBalance = destCurrentBalance + transferAmount;
+
+      const isSameAccount = Boolean(transferForm.originAccountId && transferForm.originAccountId === transferForm.destinationAccountId);
+      const hasInsufficientFunds = originProjectedBalance < 0;
+      const isOverdraftAuthorized = transferForm.allowOverdraft;
+
+      const isValid = Boolean(
+         originAcc &&
+         destAcc &&
+         !isSameAccount &&
+         transferAmount > 0 &&
+         (!hasInsufficientFunds || isOverdraftAuthorized)
+      );
+
+      return {
+         originAcc,
+         destAcc,
+         transferAmount,
+         transferFee,
+         totalDeducted,
+         originCurrentBalance,
+         originCreditLimit,
+         originProjectedBalance,
+         destCurrentBalance,
+         destProjectedBalance,
+         isSameAccount,
+         hasInsufficientFunds,
+         isOverdraftAuthorized,
+         isValid
+      };
+   }, [accounts, transferForm]);
+
+   const handleExecuteTransfer = async (e: React.FormEvent) => {
+      e.preventDefault();
+
+      const {
+         originAcc,
+         destAcc,
+         transferAmount,
+         transferFee,
+         totalDeducted,
+         originCurrentBalance,
+         originProjectedBalance,
+         isSameAccount,
+         hasInsufficientFunds,
+         isOverdraftAuthorized,
+         isValid
+      } = transferSummary;
+
+      if (!originAcc || !destAcc) {
+         addToast("Selecione as contas de origem e destino.", 'warning');
+         return;
+      }
+
+      if (isSameAccount) {
+         addToast("A conta de origem e a conta de destino não podem ser a mesma conta.", 'error');
+         return;
+      }
+
+      if (transferAmount <= 0) {
+         addToast("Informe um valor de transferência maior que zero.", 'warning');
+         return;
+      }
+
+      if (hasInsufficientFunds && !isOverdraftAuthorized) {
+         addToast("Saldo insuficiente na conta de origem. Autorize o saldo negativo emergencial para prosseguir.", 'error');
+         return;
+      }
+
+      setIsSubmitting(true);
+
+      try {
+         const transferGroupId = `transf-${Date.now()}`;
+         const transferDate = transferForm.date || new Date().toLocaleDateString('pt-BR');
+         const userDesc = transferForm.description?.trim();
+         const docNumber = transferForm.authCode?.trim() || `TRF-${Date.now().toString().slice(-6)}`;
+
+         // 1. Lançamento de Despesa/Saída na Conta Origem
+         const debitTx: Transaction = {
+            id: `tx-deb-${Date.now()}`,
+            description: userDesc
+               ? `Transferência para ${destAcc.name} - ${userDesc}`
+               : `Transferência enviada para ${destAcc.name}`,
+            amount: transferAmount,
+            type: 'Despesa',
+            category: 'Transferência Interna',
+            costCenter: 'Financeiro / Tesouraria',
+            date: transferDate,
+            dueDate: transferDate,
+            status: 'Conciliado',
+            account: originAcc.name,
+            accountId: originAcc.id,
+            paymentMethod: transferForm.paymentMethod as any,
+            documentNumber: docNumber,
+            notes: `Transferência interna vinculada (Ref: ${transferGroupId}) para a conta ${destAcc.name}.`
+         };
+         addTransaction(debitTx);
+
+         // 2. Se houver tarifa bancária, lança como despesa separada
+         if (transferFee > 0) {
+            const feeTx: Transaction = {
+               id: `tx-fee-${Date.now()}`,
+               description: `Tarifa bancária de transferência (${originAcc.name} -> ${destAcc.name})`,
+               amount: transferFee,
+               type: 'Despesa',
+               category: 'Tarifas Bancárias',
+               costCenter: 'Financeiro / Tesouraria',
+               date: transferDate,
+               dueDate: transferDate,
+               status: 'Conciliado',
+               account: originAcc.name,
+               accountId: originAcc.id,
+               paymentMethod: transferForm.paymentMethod as any,
+               documentNumber: `TAR-${docNumber}`,
+               notes: `Tarifa de transferência vinculada à operação ${docNumber}.`
+            };
+            addTransaction(feeTx);
+         }
+
+         // 3. Lançamento de Receita/Entrada na Conta Destino
+         const creditTx: Transaction = {
+            id: `tx-cred-${Date.now() + 1}`,
+            description: userDesc
+               ? `Transferência recebida de ${originAcc.name} - ${userDesc}`
+               : `Transferência recebida de ${originAcc.name}`,
+            amount: transferAmount,
+            type: 'Receita',
+            category: 'Transferência Interna',
+            costCenter: 'Financeiro / Tesouraria',
+            date: transferDate,
+            dueDate: transferDate,
+            status: 'Conciliado',
+            account: destAcc.name,
+            accountId: destAcc.id,
+            paymentMethod: transferForm.paymentMethod as any,
+            documentNumber: docNumber,
+            notes: `Transferência interna vinculada (Ref: ${transferGroupId}) recebida da conta ${originAcc.name}.`
+         };
+         addTransaction(creditTx);
+
+         // 4. Sincronização direta de saldos em financial_accounts
+         await syncAccountBalance(originAcc.id, -totalDeducted);
+         await syncAccountBalance(destAcc.id, transferAmount);
+
+         // 5. Registro de Auditoria
+         addAuditLog({
+            userId: currentUser?.id || 'system',
+            userName: currentUser?.name || 'Administrador',
+            action: 'Transferência entre Contas',
+            module: 'Financeiro',
+            details: `Transferência de ${formatMoney(transferAmount)} de [${originAcc.name}] para [${destAcc.name}] realizada com sucesso.${transferFee > 0 ? ` Tarifa: ${formatMoney(transferFee)}.` : ''}${hasInsufficientFunds ? ' (Autorizado saldo negativo emergencial).' : ''}`,
+            severity: hasInsufficientFunds ? 'warning' : 'info'
+         });
+
+         addToast(`Transferência de ${formatMoney(transferAmount)} realizada com sucesso!`, 'success');
+         setIsTransferModalOpen(false);
+      } catch (err) {
+         console.error("Erro ao executar transferência entre contas:", err);
+         addToast("Erro ao processar transferência entre contas.", 'error');
+      } finally {
+         setIsSubmitting(false);
+      }
    };
 
    // Filters
@@ -2861,6 +3072,13 @@ const Finance = () => {
 
                   <div className="flex items-center gap-3">
                      <button
+                        onClick={openTransferModal}
+                        className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-gray-700 dark:hover:bg-gray-600 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        title="Transferência entre contas, PIX interno, sangria ou suprimento de caixa"
+                     >
+                        <ArrowLeftRight size={15} className="text-cyan-400" /> Nova Transferência
+                     </button>
+                     <button
                         onClick={openNewAccountModal}
                         className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-cyan-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
                      >
@@ -3940,6 +4158,296 @@ const Finance = () => {
                            className="flex-[2] py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-cyan-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
                         >
                            {accountForm.id ? 'Salvar Alterações' : 'Cadastrar Conta Bancária'}
+                        </button>
+                     </div>
+                  </form>
+               </div>
+            </div>
+         )}
+
+         {/* ========================================================================= */}
+         {/* TRANSFER BETWEEN ACCOUNTS MODAL */}
+         {/* ========================================================================= */}
+         {isTransferModalOpen && (
+            <div className="fixed inset-0 bg-black/65 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+               <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-xl shadow-2xl border border-slate-100 dark:border-slate-700 animate-in fade-in zoom-in duration-300 max-h-[92vh] flex flex-col overflow-hidden text-left">
+                  {/* Modal Header */}
+                  <div className="flex items-center justify-between p-6 border-b dark:border-gray-700 bg-slate-50/50 dark:bg-gray-700/50 shrink-0">
+                     <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-cyan-50 dark:bg-cyan-900/40 text-cyan-600 flex items-center justify-center">
+                           <ArrowLeftRight size={20} />
+                        </div>
+                        <div>
+                           <h3 className="text-lg font-black text-gray-900 dark:text-white">
+                              Nova Transferência entre Contas
+                           </h3>
+                           <p className="text-xs text-slate-400 font-medium">
+                              Movimentação interna entre contas bancárias, caixas e carteiras com conciliação automática.
+                           </p>
+                        </div>
+                     </div>
+                     <button
+                        onClick={() => setIsTransferModalOpen(false)}
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-2 rounded-lg cursor-pointer"
+                     >
+                        <X size={20} />
+                     </button>
+                  </div>
+
+                  {/* Modal Form */}
+                  <form onSubmit={handleExecuteTransfer} className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
+                     {/* 1. Seleção de Contas (Origem & Destino) */}
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="bg-slate-50 dark:bg-gray-700/40 p-4 rounded-2xl border border-slate-100 dark:border-gray-600/50 space-y-2">
+                           <div className="flex items-center justify-between">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Conta de Origem (Débito) *</label>
+                              <span className="text-[10px] font-bold text-red-500 uppercase">Saída</span>
+                           </div>
+                           <select
+                              required
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-cyan-500"
+                              value={transferForm.originAccountId}
+                              onChange={e => setTransferForm({ ...transferForm, originAccountId: e.target.value })}
+                           >
+                              <option value="">Selecione a conta de origem...</option>
+                              {accounts.map(acc => (
+                                 <option key={acc.id} value={acc.id}>
+                                    {acc.name} ({formatMoney(acc.balance)})
+                                 </option>
+                              ))}
+                           </select>
+                           {transferSummary.originAcc && (
+                              <div className="flex justify-between items-center text-[11px] pt-1 border-t border-slate-200 dark:border-gray-600">
+                                 <span className="text-slate-400">Saldo Disponível:</span>
+                                 <span className={`font-mono font-bold ${transferSummary.originCurrentBalance < 0 ? 'text-red-500' : 'text-slate-700 dark:text-slate-200'}`}>
+                                    {formatMoney(transferSummary.originCurrentBalance)}
+                                 </span>
+                              </div>
+                           )}
+                        </div>
+
+                        <div className="bg-slate-50 dark:bg-gray-700/40 p-4 rounded-2xl border border-slate-100 dark:border-gray-600/50 space-y-2">
+                           <div className="flex items-center justify-between">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Conta de Destino (Crédito) *</label>
+                              <span className="text-[10px] font-bold text-emerald-500 uppercase">Entrada</span>
+                           </div>
+                           <select
+                              required
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-cyan-500"
+                              value={transferForm.destinationAccountId}
+                              onChange={e => setTransferForm({ ...transferForm, destinationAccountId: e.target.value })}
+                           >
+                              <option value="">Selecione a conta de destino...</option>
+                              {accounts.map(acc => (
+                                 <option key={acc.id} value={acc.id}>
+                                    {acc.name} ({formatMoney(acc.balance)})
+                                 </option>
+                              ))}
+                           </select>
+                           {transferSummary.destAcc && (
+                              <div className="flex justify-between items-center text-[11px] pt-1 border-t border-slate-200 dark:border-gray-600">
+                                 <span className="text-slate-400">Saldo Atual:</span>
+                                 <span className={`font-mono font-bold ${transferSummary.destCurrentBalance < 0 ? 'text-red-500' : 'text-slate-700 dark:text-slate-200'}`}>
+                                    {formatMoney(transferSummary.destCurrentBalance)}
+                                 </span>
+                              </div>
+                           )}
+                        </div>
+                     </div>
+
+                     {/* Alerta de mesma conta selecionada */}
+                     {transferSummary.isSameAccount && (
+                        <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl text-xs text-red-600 dark:text-red-400 flex items-center gap-2">
+                           <AlertTriangle size={16} className="shrink-0" />
+                           <span>A conta de origem e a conta de destino não podem ser a mesma conta.</span>
+                        </div>
+                     )}
+
+                     {/* 2. Valores & Data */}
+                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                              Valor da Transferência (R$) *
+                           </label>
+                           <input
+                              required
+                              type="number"
+                              step="0.01"
+                              min="0.01"
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-bold text-sm focus:ring-2 focus:ring-cyan-500"
+                              placeholder="0,00"
+                              value={transferForm.amount}
+                              onChange={e => setTransferForm({ ...transferForm, amount: e.target.value })}
+                           />
+                        </div>
+
+                        <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                              Data da Operação
+                           </label>
+                           <input
+                              type="text"
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-semibold text-xs focus:ring-2 focus:ring-cyan-500"
+                              placeholder="DD/MM/AAAA"
+                              value={transferForm.date}
+                              onChange={e => setTransferForm({ ...transferForm, date: e.target.value })}
+                           />
+                        </div>
+
+                        <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                              Tarifa Bancária (R$)
+                           </label>
+                           <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-semibold text-xs focus:ring-2 focus:ring-cyan-500"
+                              placeholder="0,00 (opcional)"
+                              value={transferForm.fee}
+                              onChange={e => setTransferForm({ ...transferForm, fee: e.target.value })}
+                           />
+                        </div>
+                     </div>
+
+                     {/* 3. Forma de Pagamento & Nº Documento */}
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                              Forma de Movimentação
+                           </label>
+                           <select
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 text-xs font-bold focus:ring-2 focus:ring-cyan-500"
+                              value={transferForm.paymentMethod}
+                              onChange={e => setTransferForm({ ...transferForm, paymentMethod: e.target.value })}
+                           >
+                              <option value="PIX">PIX</option>
+                              <option value="Transferência">TED / DOC</option>
+                              <option value="Transferência Interna">Transferência Interna</option>
+                              <option value="Dinheiro">Dinheiro em Espécie (Sangria / Suprimento)</option>
+                              <option value="Cheque">Cheque</option>
+                           </select>
+                        </div>
+                        <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                              Nº Documento / Autenticação (Opcional)
+                           </label>
+                           <input
+                              type="text"
+                              className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-mono text-xs focus:ring-2 focus:ring-cyan-500"
+                              placeholder="Ex: TRF-839210 ou Autenticação bancária"
+                              value={transferForm.authCode}
+                              onChange={e => setTransferForm({ ...transferForm, authCode: e.target.value })}
+                           />
+                        </div>
+                     </div>
+
+                     {/* 4. Descrição / Finalidade */}
+                     <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                           Descrição / Finalidade da Transferência
+                        </label>
+                        <input
+                           type="text"
+                           className="w-full rounded-xl border border-slate-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white px-4 py-2.5 font-semibold text-xs focus:ring-2 focus:ring-cyan-500"
+                           placeholder="Ex: Aporte de troco para caixa geral, transferência para aplicação, sangria, etc."
+                           value={transferForm.description}
+                           onChange={e => setTransferForm({ ...transferForm, description: e.target.value })}
+                        />
+                     </div>
+
+                     {/* 5. Painel de Prévia dos Saldos Antes e Depois */}
+                     {transferSummary.originAcc && transferSummary.destAcc && !transferSummary.isSameAccount && (
+                        <div className="bg-slate-50 dark:bg-gray-700/30 p-4 rounded-2xl border border-slate-200 dark:border-gray-600 space-y-3">
+                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                              <TrendingUp size={14} className="text-cyan-600" /> Prévia dos Saldos após a Transferência
+                           </p>
+
+                           <div className="grid grid-cols-2 gap-3 text-xs">
+                              <div className="p-3 rounded-xl bg-white dark:bg-gray-800 border border-slate-100 dark:border-gray-700">
+                                 <p className="text-[10px] text-slate-400 font-bold uppercase truncate">{transferSummary.originAcc.name}</p>
+                                 <div className="flex items-baseline justify-between mt-1">
+                                    <span className="text-slate-400 font-mono text-[11px]">{formatMoney(transferSummary.originCurrentBalance)}</span>
+                                    <span className="text-slate-400 text-[10px]">➔</span>
+                                    <span className={`font-mono font-bold text-sm ${transferSummary.originProjectedBalance < 0 ? 'text-red-500' : 'text-slate-800 dark:text-white'}`}>
+                                       {formatMoney(transferSummary.originProjectedBalance)}
+                                    </span>
+                                 </div>
+                                 <p className="text-[10px] text-red-500 font-medium mt-1">
+                                    Débito: -{formatMoney(transferSummary.totalDeducted)}
+                                    {transferSummary.transferFee > 0 && ` (incl. taxa ${formatMoney(transferSummary.transferFee)})`}
+                                 </p>
+                              </div>
+
+                              <div className="p-3 rounded-xl bg-white dark:bg-gray-800 border border-slate-100 dark:border-gray-700">
+                                 <p className="text-[10px] text-slate-400 font-bold uppercase truncate">{transferSummary.destAcc.name}</p>
+                                 <div className="flex items-baseline justify-between mt-1">
+                                    <span className="text-slate-400 font-mono text-[11px]">{formatMoney(transferSummary.destCurrentBalance)}</span>
+                                    <span className="text-slate-400 text-[10px]">➔</span>
+                                    <span className={`font-mono font-bold text-sm ${transferSummary.destProjectedBalance < 0 ? 'text-red-500' : 'text-slate-800 dark:text-white'}`}>
+                                       {formatMoney(transferSummary.destProjectedBalance)}
+                                    </span>
+                                 </div>
+                                 <p className="text-[10px] text-emerald-500 font-medium mt-1">
+                                    Crédito: +{formatMoney(transferSummary.transferAmount)}
+                                 </p>
+                              </div>
+                           </div>
+                        </div>
+                     )}
+
+                     {/* 6. Alerta de Saldo Insuficiente & Checkbox de Autorização de Saldo Negativo */}
+                     {transferSummary.hasInsufficientFunds && (
+                        <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-900 rounded-2xl space-y-3">
+                           <div className="flex items-start gap-2.5">
+                              <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={18} />
+                              <div className="text-xs">
+                                 <p className="font-bold text-amber-900 dark:text-amber-200">
+                                    Saldo Insuficiente na Conta de Origem
+                                 </p>
+                                 <p className="text-amber-700 dark:text-amber-300 mt-0.5 text-[11px]">
+                                    O valor a ser debitado ({formatMoney(transferSummary.totalDeducted)}) excede o saldo atual ({formatMoney(transferSummary.originCurrentBalance)}). A conta ficará negativa em {formatMoney(Math.abs(transferSummary.originProjectedBalance))}.
+                                 </p>
+                              </div>
+                           </div>
+
+                           <label className="flex items-center gap-2.5 cursor-pointer pt-1 border-t border-amber-200 dark:border-amber-900/60">
+                              <input
+                                 type="checkbox"
+                                 checked={transferForm.allowOverdraft}
+                                 onChange={e => setTransferForm({ ...transferForm, allowOverdraft: e.target.checked })}
+                                 className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500 cursor-pointer"
+                              />
+                              <span className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                                 Autorizar saldo negativo emergencial nesta conta para concluir a transferência
+                              </span>
+                           </label>
+                        </div>
+                     )}
+
+                     {/* Footer Buttons */}
+                     <div className="flex gap-3 pt-3 border-t border-slate-100 dark:border-gray-700">
+                        <button
+                           type="button"
+                           onClick={() => setIsTransferModalOpen(false)}
+                           className="flex-1 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl text-xs hover:bg-slate-200 transition-all cursor-pointer"
+                        >
+                           Cancelar
+                        </button>
+                        <button
+                           type="submit"
+                           disabled={!transferSummary.isValid || isSubmitting}
+                           className="flex-[2] py-3 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-cyan-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+                        >
+                           {isSubmitting ? (
+                              <>
+                                 <Loader className="animate-spin" size={16} /> Processando Transferência...
+                              </>
+                           ) : (
+                              <>
+                                 <ArrowLeftRight size={16} /> Confirmar Transferência
+                              </>
+                           )}
                         </button>
                      </div>
                   </form>

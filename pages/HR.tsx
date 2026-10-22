@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import {
     Plus, X, Users, UserPlus, Search, Download, Edit2, Trash2, Wallet, Clock, Calendar,
     CheckCircle, XCircle, DollarSign, ArrowUpRight, Fingerprint, Play, StopCircle, Timer,
-    Plane, TrendingUp, AlertCircle, Filter, ChevronDown, FileText, Printer, Check, RotateCcw
+    Plane, TrendingUp, AlertCircle, Filter, ChevronDown, FileText, Printer, Check, RotateCcw,
+    AlertTriangle, ShieldCheck, Sun, Info, Eye, ChevronRight
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -55,7 +56,7 @@ const HR = () => {
     const [selectedAdvanceToRefund, setSelectedAdvanceToRefund] = useState<SalaryAdvance | null>(null);
     const [refundReason, setRefundReason] = useState('');
 
-    // Permissão restrita para estorno de antecipações (Admin ou Gerente Financeiro)
+    // Permissão restrita para estorno de antecipações e férias (Admin ou Gerente Financeiro)
     const canRefundAdvance = useMemo(() => {
         if (!currentUser) return false;
         return (
@@ -67,6 +68,41 @@ const HR = () => {
             hasPermission('finance.delete')
         );
     }, [currentUser, hasPermission]);
+
+    // Permissão ampla para visualização e operação da aba de Férias (Admin, Gestores ou employees.manage)
+    const canAccessVacations = useMemo(() => {
+        if (!currentUser) return false;
+        return (
+            currentUser.roleId === 'admin' ||
+            currentUser.roleId === 'manager' ||
+            currentUser.roleId === 'manager_finance' ||
+            hasPermission('employees.manage') ||
+            hasPermission('all')
+        );
+    }, [currentUser, hasPermission]);
+
+    // Sub-abas e estados da Reformulação de Férias
+    const [vacationSubTab, setVacationSubTab] = useState<'requests' | 'periods' | 'calendar'>('requests');
+    const [vacationStatusFilter, setVacationStatusFilter] = useState<string>('Todos');
+    const [selectedCalendarMonth, setSelectedCalendarMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
+
+    // Estados de Pagamento e Estorno de Férias
+    const [isPayVacationModalOpen, setIsPayVacationModalOpen] = useState(false);
+    const [selectedVacationToPay, setSelectedVacationToPay] = useState<Vacation | null>(null);
+    const [vacationPaymentForm, setVacationPaymentForm] = useState({
+        accountId: '',
+        paymentMethod: 'PIX' as 'PIX' | 'Transferência Bancária' | 'Dinheiro' | 'Cheque',
+        date: new Date().toISOString().split('T')[0],
+        notes: ''
+    });
+
+    const [isRefundVacationModalOpen, setIsRefundVacationModalOpen] = useState(false);
+    const [selectedVacationToRefund, setSelectedVacationToRefund] = useState<Vacation | null>(null);
+    const [refundVacationReason, setRefundVacationReason] = useState('');
+
+    // Modal de Recibo Oficial de Férias
+    const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+    const [selectedVacationForReceipt, setSelectedVacationForReceipt] = useState<Vacation | null>(null);
 
     // Estados da Folha de Pagamento (Com e Sem Encargos Federais)
     const [payrollChargeView, setPayrollChargeView] = useState<'without_taxes' | 'with_taxes'>('without_taxes');
@@ -92,6 +128,33 @@ const HR = () => {
         lunchEnd: '13:00',
         checkOut: '17:00',
         reason: 'Marcação normal de trabalho'
+    });
+
+    // Estados de Abono e Justificativa de Faltas no Ponto
+    const [isJustifyModalOpen, setIsJustifyModalOpen] = useState(false);
+    const [selectedJustifyDay, setSelectedJustifyDay] = useState<{
+        day: number;
+        dateStr: string;
+        dateIso: string;
+        weekday: string;
+        workedMins: number;
+        expectedMins: number;
+        deltaMin: number;
+    } | null>(null);
+    const [justifyForm, setJustifyForm] = useState({
+        type: 'Atestado Médico (Art. 473 CLT)',
+        reason: '',
+        doctorCrm: ''
+    });
+
+    // Justificativas persistidas em localStorage
+    const [justifications, setJustifications] = useState<Record<string, { type: string; reason: string; doctorCrm?: string; approvedBy: string; date: string }>>(() => {
+        try {
+            const stored = localStorage.getItem('infracore_hr_justifications');
+            return stored ? JSON.parse(stored) : {};
+        } catch {
+            return {};
+        }
     });
 
     // Helper para converter string de horário "HH:MM" para minutos
@@ -200,15 +263,26 @@ const HR = () => {
                     const totalWorked = Math.max(0, (outMin - inMin) - lunchMin);
                     const standardDay = 480; // 8h diárias
 
-                    if (totalWorked > standardDay) {
-                        extraMinutes += (totalWorked - standardDay);
-                    } else if (totalWorked < standardDay) {
-                        delayMinutes += (standardDay - totalWorked);
+                    const rawDelta = totalWorked - standardDay;
+                    const dateKey = `${emp.id}-${log.date}`;
+                    const isJustified = !!justifications[dateKey];
+
+                    if (isJustified) {
+                        // Abonado legalmente
+                    } else if (Math.abs(rawDelta) <= 10) {
+                        // Tolerância legal Art. 58 § 1º CLT
+                    } else if (rawDelta > 10) {
+                        extraMinutes += rawDelta;
+                    } else if (rawDelta < -10) {
+                        delayMinutes += Math.abs(rawDelta);
                     }
                 } else if (log.status === 'Extra') {
                     extraMinutes += 120; // 2 horas extras avulsas
                 } else if (log.status === 'Atraso') {
-                    delayMinutes += 60;
+                    const dateKey = `${emp.id}-${log.date}`;
+                    if (!justifications[dateKey]) {
+                        delayMinutes += 60;
+                    }
                 }
             }
         });
@@ -299,9 +373,52 @@ const HR = () => {
         };
     };
 
-    const [vacationForm, setVacationForm] = useState<Partial<Vacation>>({
+    // Helper para cálculo completo do Recibo de Férias nos moldes da CLT (Art. 142 e 145)
+    const calculateVacationReceipt = (emp: Employee, days: number = 30, hasAbono: boolean = false, abonoDays: number = 10) => {
+        const dailySalary = emp.salary > 0 ? emp.salary / 30 : 0;
+        const baseDays = Math.max(0, days);
+        const vacationSalary = Number((dailySalary * baseDays).toFixed(2));
+        const tercoConstitucional = Number((vacationSalary / 3).toFixed(2));
+
+        // Abono pecuniário (venda legal de até 10 dias - Art. 143 CLT) - Isento de INSS e IRRF (Súmula 125 STJ)
+        const abonoSalary = hasAbono ? Number((dailySalary * abonoDays).toFixed(2)) : 0;
+        const abonoTerco = hasAbono ? Number((abonoSalary / 3).toFixed(2)) : 0;
+        const totalAbono = Number((abonoSalary + abonoTerco).toFixed(2));
+
+        const grossVacation = Number((vacationSalary + tercoConstitucional).toFixed(2));
+        const inss = calculateProgressiveINSS(grossVacation);
+        const baseIRRF = Math.max(0, grossVacation - inss);
+        const irrf = calculateIRRF(baseIRRF);
+
+        const totalDiscounts = Number((inss + irrf).toFixed(2));
+        const netVacation = Number(Math.max(0, grossVacation - totalDiscounts + totalAbono).toFixed(2));
+        const totalCompanyCost = Number((grossVacation + totalAbono).toFixed(2));
+
+        return {
+            dailySalary,
+            days: baseDays,
+            vacationSalary,
+            tercoConstitucional,
+            hasAbono,
+            abonoDays,
+            abonoSalary,
+            abonoTerco,
+            totalAbono,
+            grossVacation,
+            inss,
+            irrf,
+            totalDiscounts,
+            netVacation,
+            totalCompanyCost
+        };
+    };
+
+    const [vacationForm, setVacationForm] = useState<Partial<Vacation> & { sellDays?: boolean; sellDaysCount?: number }>({
         status: 'Solicitado',
-        requestedAt: new Date().toLocaleDateString('pt-BR')
+        requestedAt: new Date().toLocaleDateString('pt-BR'),
+        days: 30,
+        sellDays: false,
+        sellDaysCount: 10
     });
 
     const [advanceForm, setAdvanceForm] = useState<Partial<SalaryAdvance>>({
@@ -419,7 +536,7 @@ const HR = () => {
 
             // Férias
             const onVacation = vacations.some(v => {
-                if (v.employeeId !== currentEspelhoEmp.id || v.status !== 'Aprovado') return false;
+                if (v.employeeId !== currentEspelhoEmp.id || (v.status !== 'Aprovado' && v.status !== 'Concluído')) return false;
                 const parseD = (dStr: string) => {
                     if (dStr.includes('/')) {
                         const parts = dStr.split('/');
@@ -430,6 +547,11 @@ const HR = () => {
                 const cur = dateObj.getTime();
                 return cur >= parseD(v.startDate) && cur <= parseD(v.endDate);
             });
+
+            // Abono / Justificativa de Falta
+            const justKey = `${currentEspelhoEmp.id}-${dateIso}`;
+            const just = justifications[justKey];
+            const isJustified = !!just;
 
             // Log de ponto
             const log = timeLogs.find(l => {
@@ -454,13 +576,18 @@ const HR = () => {
                 if (log?.checkIn && log?.checkOut) {
                     occurrence = 'Trabalho em DSR/Fim de Semana (100%)';
                 }
+            } else if (isJustified) {
+                expectedMins = 480; // 8h
+                totalExpectedMins += expectedMins;
+                workedMins = expectedMins; // Ausência totalmente abonada
+                occurrence = `Abono Legal: ${just.type}`;
             } else {
                 expectedMins = 480; // 8h
                 totalExpectedMins += expectedMins;
                 occurrence = 'Dia Útil Normal';
             }
 
-            if (log) {
+            if (!isJustified && log) {
                 if (checkIn && checkOut) {
                     const inMin = parseTimeToMinutes(checkIn);
                     const outMin = parseTimeToMinutes(checkOut);
@@ -482,19 +609,26 @@ const HR = () => {
 
             totalWorkedMins += workedMins;
 
-            const deltaMin = workedMins - expectedMins;
-            if (deltaMin > 0) {
+            const rawDeltaMin = workedMins - expectedMins;
+            let deltaMin = rawDeltaMin;
+
+            // Tolerância CLT (Art. 58, § 1º: Variações de até 10 minutos diários não são computadas nem descontadas)
+            const isWithinCltTolerance = !isWeekend && !onVacation && !isJustified && workedMins > 0 && Math.abs(rawDeltaMin) <= 10;
+            if (isWithinCltTolerance) {
+                deltaMin = 0;
+                occurrence = 'Jornada Cumprida (Tolerância Legal Art. 58 CLT)';
+            } else if (deltaMin > 0) {
                 totalOvertimeMins += deltaMin;
-                if (!occurrence.includes('DSR') && !occurrence.includes('Férias')) {
+                if (!occurrence.includes('DSR') && !occurrence.includes('Férias') && !occurrence.includes('Abono')) {
                     occurrence = `Hora Extra (+${formatMinutesToHours(deltaMin)})`;
                 }
             } else if (deltaMin < 0) {
-                if (!isWeekend && !onVacation) {
+                if (!isWeekend && !onVacation && !isJustified) {
                     totalDelayMins += Math.abs(deltaMin);
                     if (workedMins === 0) {
-                        occurrence = 'Falta / Sem Registro';
+                        occurrence = 'Falta Não Justificada';
                     } else {
-                        occurrence = `Atraso / Saída Antecipada (-${formatMinutesToHours(Math.abs(deltaMin))})`;
+                        occurrence = `Atraso / Saída (-${formatMinutesToHours(Math.abs(deltaMin))})`;
                     }
                 }
             }
@@ -506,6 +640,9 @@ const HR = () => {
                 weekday,
                 isWeekend,
                 onVacation,
+                isJustified,
+                justification: just,
+                isWithinCltTolerance,
                 checkIn,
                 lunchStart,
                 lunchEnd,
@@ -536,7 +673,7 @@ const HR = () => {
         };
 
         return { daysData, totals };
-    }, [currentEspelhoEmp, selectedEspelhoMonth, timeLogs, vacations]);
+    }, [currentEspelhoEmp, selectedEspelhoMonth, timeLogs, vacations, justifications]);
 
     const payrollSummary = useMemo(() => {
         const activeEmps = employees.filter(e => e.status === 'Ativo');
@@ -1015,20 +1152,328 @@ const HR = () => {
         const emp = employees.find(e => e.id === vacationForm.employeeId);
         if (!emp) return;
 
+        const requestedDays = Number(vacationForm.days) || 30;
+        const hasAbono = !!vacationForm.sellDays;
+        const abonoDays = hasAbono ? 10 : 0;
+        const totalDaysToDeduct = requestedDays + abonoDays;
+
+        if (totalDaysToDeduct > (emp.vacationDaysAvailable || 30)) {
+            addToast(`Saldo insuficiente! Colaborador possui apenas ${emp.vacationDaysAvailable || 30} dias de férias disponíveis.`, 'error');
+            return;
+        }
+
+        const receipt = calculateVacationReceipt(emp, requestedDays, hasAbono, abonoDays);
+        const abonoNote = hasAbono ? ` [Abono Pecuniário: 10 dias - R$ ${receipt.totalAbono.toFixed(2)}]` : '';
+        const receiptNote = ` [Recibo Líquido: R$ ${receipt.netVacation.toFixed(2)}]`;
+
         const vacation: Vacation = {
             id: `vac-${Date.now()}`,
             employeeId: vacationForm.employeeId!,
             employeeName: emp.name,
             startDate: vacationForm.startDate!,
             endDate: vacationForm.endDate!,
-            days: vacationForm.days!,
+            days: requestedDays,
             status: 'Solicitado',
             requestedAt: new Date().toLocaleDateString('pt-BR'),
-            notes: vacationForm.notes
+            notes: `${vacationForm.notes || 'Férias regulares'}${abonoNote}${receiptNote}`
         };
         addVacation(vacation);
+        addToast(`Solicitação de férias de ${emp.name} criada com sucesso!`, 'success');
         setIsVacationModalOpen(false);
-        setVacationForm({ status: 'Solicitado', requestedAt: new Date().toLocaleDateString('pt-BR') });
+        setVacationForm({ status: 'Solicitado', requestedAt: new Date().toLocaleDateString('pt-BR'), days: 30, sellDays: false, sellDaysCount: 10 });
+    };
+
+    const openPayVacationModal = (vac: Vacation) => {
+        setSelectedVacationToPay(vac);
+        setVacationPaymentForm({
+            accountId: accounts[0]?.id || '',
+            paymentMethod: 'PIX',
+            date: new Date().toISOString().split('T')[0],
+            notes: `Quitação de férias - ${vac.employeeName} (${vac.days} dias)`
+        });
+        setIsPayVacationModalOpen(true);
+    };
+
+    const handleConfirmPayVacation = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedVacationToPay) return;
+        const emp = employees.find(e => e.id === selectedVacationToPay.employeeId);
+        if (!emp) return;
+
+        const hasAbono = !!selectedVacationToPay.notes?.includes('Abono Pecuniário');
+        const receipt = calculateVacationReceipt(emp, selectedVacationToPay.days || 30, hasAbono);
+        const amountToPay = receipt.netVacation;
+        const targetAccount = accounts.find(a => a.id === vacationPaymentForm.accountId) || accounts[0];
+
+        const txId = `tx-vac-${selectedVacationToPay.id}`;
+        if (transactions.some(t => t.id === txId)) {
+            addToast("Estas férias já possuem lançamento financeiro registrado.", 'error');
+            return;
+        }
+
+        addTransaction({
+            id: txId,
+            date: vacationPaymentForm.date,
+            description: `Recibo de Férias - ${selectedVacationToPay.employeeName} (${selectedVacationToPay.days} dias)`,
+            amount: amountToPay,
+            type: 'Despesa',
+            category: 'Folha de Pagamento',
+            status: 'Conciliado',
+            accountId: targetAccount?.id || 'acc-1',
+            account: targetAccount?.name || 'Conta Bancária',
+            partnerName: selectedVacationToPay.employeeName,
+            paymentMethod: vacationPaymentForm.paymentMethod,
+            originModule: 'RH',
+            originId: selectedVacationToPay.id,
+            ledgerCode: '2.03.01',
+            ledgerName: 'Salários e Ordenados'
+        });
+
+        updateVacationStatus(selectedVacationToPay.id, 'Concluído', currentUser?.name || 'Admin');
+        addToast(`Férias de ${selectedVacationToPay.employeeName} quitadas com sucesso! Débito de ${formatCurrency(amountToPay)} lançado em ${targetAccount?.name}.`, 'success');
+        setIsPayVacationModalOpen(false);
+        setSelectedVacationToPay(null);
+    };
+
+    const openRefundVacationModal = (vac: Vacation) => {
+        if (!canRefundAdvance) {
+            addToast('Acesso negado: apenas Administrador ou Gerente Financeiro podem estornar pagamentos.', 'error');
+            return;
+        }
+        setSelectedVacationToRefund(vac);
+        setRefundVacationReason('');
+        setIsRefundVacationModalOpen(true);
+    };
+
+    const handleConfirmRefundVacation = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedVacationToRefund) return;
+        const txId = `tx-vac-${selectedVacationToRefund.id}`;
+        deleteTransaction(txId);
+        updateVacationStatus(selectedVacationToRefund.id, 'Aprovado', currentUser?.name || 'Admin');
+        addToast(`Pagamento de férias de ${selectedVacationToRefund.employeeName} estornado com sucesso. Saldo bancário recomposto.`, 'success');
+        setIsRefundVacationModalOpen(false);
+        setSelectedVacationToRefund(null);
+    };
+
+    const openReceiptModal = (vac: Vacation) => {
+        setSelectedVacationForReceipt(vac);
+        setIsReceiptModalOpen(true);
+    };
+
+    const handlePrintVacationReceipt = (vac: Vacation) => {
+        const emp = employees.find(e => e.id === vac.employeeId);
+        if (!emp) return;
+        const hasAbono = !!vac.notes?.includes('Abono Pecuniário');
+        const receipt = calculateVacationReceipt(emp, vac.days || 30, hasAbono);
+        const companyName = settings?.companyName || 'InfraCore ERP Engenharia & Construções';
+        const companyCnpj = settings?.document || '12.345.678/0001-90';
+
+        const html = `
+            <div style="font-family: Arial, sans-serif; padding: 30px; color: #1e293b; max-width: 800px; margin: 0 auto; line-height: 1.4;">
+                <div style="border-bottom: 2px solid #0891b2; padding-bottom: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <h1 style="font-size: 20px; font-weight: 900; margin: 0; color: #0f172a; text-transform: uppercase;">${companyName}</h1>
+                        <p style="font-size: 11px; margin: 4px 0 0 0; color: #64748b;">CNPJ: ${companyCnpj} • Departamento de Recursos Humanos</p>
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="font-size: 14px; font-weight: 900; background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 6px; text-transform: uppercase;">Recibo Oficial de Férias</span>
+                        <p style="font-size: 10px; color: #64748b; margin: 4px 0 0 0;">Art. 142 e 145 da CLT</p>
+                    </div>
+                </div>
+
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 20px; font-size: 11px;">
+                    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px;">
+                        <div><strong>Colaborador:</strong> ${emp.name}</div>
+                        <div><strong>Cargo:</strong> ${emp.role}</div>
+                        <div><strong>Depto:</strong> ${emp.department}</div>
+                        <div><strong>CPF:</strong> ${emp.cpf || 'Não cadastrado'}</div>
+                        <div><strong>Data Admissão:</strong> ${emp.admissionDate || '—'}</div>
+                        <div><strong>Salário Base:</strong> ${formatCurrency(emp.salary)}</div>
+                    </div>
+                    <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed #cbd5e1; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                        <div><strong>Período de Gozo:</strong> ${vac.startDate} a ${vac.endDate}</div>
+                        <div><strong>Dias de Férias:</strong> ${vac.days || 30} dias</div>
+                        <div><strong>Abono Pecuniário:</strong> ${hasAbono ? 'Sim (10 dias vendidos)' : 'Não'}</div>
+                    </div>
+                </div>
+
+                <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px;">
+                    <thead>
+                        <tr style="background: #0f172a; color: white;">
+                            <th style="padding: 8px; text-align: left;">Cód.</th>
+                            <th style="padding: 8px; text-align: left;">Descrição da Rubrica</th>
+                            <th style="padding: 8px; text-align: center;">Ref.</th>
+                            <th style="padding: 8px; text-align: right;">Proventos (R$)</th>
+                            <th style="padding: 8px; text-align: right;">Descontos (R$)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 8px;">101</td>
+                            <td style="padding: 8px;">Salário de Férias (${receipt.days} dias)</td>
+                            <td style="padding: 8px; text-align: center;">${receipt.days}d</td>
+                            <td style="padding: 8px; text-align: right; font-weight: bold; color: #047857;">${formatCurrency(receipt.vacationSalary)}</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 8px;">102</td>
+                            <td style="padding: 8px;">1/3 Constitucional de Férias (Art. 7º, XVII CF)</td>
+                            <td style="padding: 8px; text-align: center;">33.33%</td>
+                            <td style="padding: 8px; text-align: right; font-weight: bold; color: #047857;">${formatCurrency(receipt.tercoConstitucional)}</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
+                        </tr>
+                        ${hasAbono ? `
+                        <tr style="border-bottom: 1px solid #e2e8f0; background: #f0fdf4;">
+                            <td style="padding: 8px;">105</td>
+                            <td style="padding: 8px;">Abono Pecuniário (Art. 143 CLT - Isento)</td>
+                            <td style="padding: 8px; text-align: center;">10d</td>
+                            <td style="padding: 8px; text-align: right; font-weight: bold; color: #047857;">${formatCurrency(receipt.abonoSalary)}</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #e2e8f0; background: #f0fdf4;">
+                            <td style="padding: 8px;">106</td>
+                            <td style="padding: 8px;">1/3 Constitucional s/ Abono Pecuniário</td>
+                            <td style="padding: 8px; text-align: center;">33.33%</td>
+                            <td style="padding: 8px; text-align: right; font-weight: bold; color: #047857;">${formatCurrency(receipt.abonoTerco)}</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
+                        </tr>` : ''}
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 8px;">901</td>
+                            <td style="padding: 8px;">INSS s/ Férias</td>
+                            <td style="padding: 8px; text-align: center;">CLT</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
+                            <td style="padding: 8px; text-align: right; font-weight: bold; color: #dc2626;">${formatCurrency(receipt.inss)}</td>
+                        </tr>
+                        ${receipt.irrf > 0 ? `
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 8px;">902</td>
+                            <td style="padding: 8px;">IRRF s/ Férias</td>
+                            <td style="padding: 8px; text-align: center;">Tabela</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
+                            <td style="padding: 8px; text-align: right; font-weight: bold; color: #dc2626;">${formatCurrency(receipt.irrf)}</td>
+                        </tr>` : ''}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background: #f1f5f9; font-weight: bold;">
+                            <td colspan="3" style="padding: 10px; text-align: right;">TOTAIS:</td>
+                            <td style="padding: 10px; text-align: right; color: #047857;">${formatCurrency(receipt.totalCompanyCost)}</td>
+                            <td style="padding: 10px; text-align: right; color: #dc2626;">${formatCurrency(receipt.totalDiscounts)}</td>
+                        </tr>
+                        <tr style="background: #0f172a; color: white; font-weight: 900; font-size: 13px;">
+                            <td colspan="3" style="padding: 12px; text-align: right; text-transform: uppercase;">Valor Líquido a Receber:</td>
+                            <td colspan="2" style="padding: 12px; text-align: right; color: #34d399; font-size: 15px;">${formatCurrency(receipt.netVacation)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 30px; font-size: 10px; color: #475569; background: #fafafa;">
+                    <p style="margin: 0 0 6px 0;"><strong>DECLARAÇÃO DE QUITAÇÃO (Art. 145 CLT):</strong></p>
+                    <p style="margin: 0;">Recebi da empresa <strong>${companyName}</strong> a importância líquida de <strong>${formatCurrency(receipt.netVacation)}</strong>, referente ao pagamento das minhas férias relativas ao período acima discriminado, as quais gozarei na forma da legislação trabalhista vigente, dando plena e rasa quitação.</p>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; gap: 60px; margin-top: 40px;">
+                    <div style="flex: 1; text-align: center;">
+                        <div style="border-bottom: 1px solid #000; margin-bottom: 4px;"></div>
+                        <p style="font-size: 9px; margin: 0; font-weight: bold;">${companyName}</p>
+                        <p style="font-size: 8px; margin: 0; color: #64748b;">Empregador / Recursos Humanos</p>
+                    </div>
+                    <div style="flex: 1; text-align: center;">
+                        <div style="border-bottom: 1px solid #000; margin-bottom: 4px;"></div>
+                        <p style="font-size: 9px; margin: 0; font-weight: bold;">${emp.name}</p>
+                        <p style="font-size: 8px; margin: 0; color: #64748b;">Assinatura do Colaborador • Data: ___/___/______</p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const printWin = window.open('', '', 'height=800,width=1000');
+        if (printWin) {
+            printWin.document.write('<html><head><title>Recibo de Férias - ' + emp.name + '</title></head><body>');
+            printWin.document.write(html);
+            printWin.document.write('</body></html>');
+            printWin.document.close();
+            printWin.print();
+        }
+    };
+
+    // Handlers para Abono e Justificativa de Faltas no Ponto
+    const openJustifyModal = (dayData: any) => {
+        setSelectedJustifyDay(dayData);
+        setJustifyForm({
+            type: 'Atestado Médico (Art. 473 CLT)',
+            reason: '',
+            doctorCrm: ''
+        });
+        setIsJustifyModalOpen(true);
+    };
+
+    const handleConfirmJustify = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedJustifyDay || !currentEspelhoEmp) return;
+
+        const justKey = `${currentEspelhoEmp.id}-${selectedJustifyDay.dateIso}`;
+        const newJust = {
+            type: justifyForm.type,
+            reason: justifyForm.reason || 'Conforme documentação apresentada',
+            doctorCrm: justifyForm.doctorCrm,
+            approvedBy: currentUser?.name || 'Gestor RH',
+            date: selectedJustifyDay.dateIso
+        };
+
+        const updated = { ...justifications, [justKey]: newJust };
+        setJustifications(updated);
+        try {
+            localStorage.setItem('infracore_hr_justifications', JSON.stringify(updated));
+        } catch {}
+
+        // Registrar no TimeLog do dia para consistência telemétrica
+        const existingLog = timeLogs.find(l => l.employeeId === currentEspelhoEmp.id && (l.date === selectedJustifyDay.dateIso || l.date === selectedJustifyDay.dateStr));
+        if (!existingLog) {
+            addTimeLog({
+                id: `log-just-${Date.now()}`,
+                employeeId: currentEspelhoEmp.id,
+                date: selectedJustifyDay.dateIso,
+                checkIn: '08:00',
+                lunchStart: '12:00',
+                lunchEnd: '13:00',
+                checkOut: '17:00',
+                totalHours: '8.00',
+                status: 'Presente'
+            });
+        }
+
+        addToast(`Falta do dia ${selectedJustifyDay.dateStr} abonada com sucesso (${justifyForm.type})!`, 'success');
+        setIsJustifyModalOpen(false);
+        setSelectedJustifyDay(null);
+    };
+
+    const handleRemoveJustification = (dateIso: string) => {
+        if (!currentEspelhoEmp) return;
+        const justKey = `${currentEspelhoEmp.id}-${dateIso}`;
+        const updated = { ...justifications };
+        delete updated[justKey];
+        setJustifications(updated);
+        try {
+            localStorage.setItem('infracore_hr_justifications', JSON.stringify(updated));
+        } catch {}
+        addToast("Abono revogado com sucesso.", 'info');
+    };
+
+    // Exportação do Saldo do Ponto para a Folha de Pagamento
+    const handleExportPontoToFolha = () => {
+        if (!currentEspelhoEmp) return;
+        const hourlyRate = currentEspelhoEmp.salary > 0 ? currentEspelhoEmp.salary / 220 : 0;
+        const extraHours = espelhoData.totals.overtimeMins / 60;
+        const delayHours = espelhoData.totals.delayMins / 60;
+        const extraEarnings = extraHours * hourlyRate * 1.5;
+        const delayDiscount = delayHours * hourlyRate;
+
+        addToast(
+            `Saldo de ponto integrado! Extras: +${espelhoData.totals.overtimeStr} (${formatCurrency(extraEarnings)}) | Atrasos/Faltas: -${espelhoData.totals.delayStr} (${formatCurrency(delayDiscount)}). Abrindo aba da Folha...`,
+            'success'
+        );
+        setActiveTab('payroll');
     };
 
     const handleSaveAdvance = (e: React.FormEvent) => {
@@ -1352,7 +1797,7 @@ const HR = () => {
                         <button onClick={() => setActiveTab('advances')} className={`px-4 py-2 text-xs font-black rounded-xl transition-all uppercase ${activeTab === 'advances' ? 'bg-white dark:bg-slate-700 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Antecipações</button>
                         <button onClick={() => setActiveTab('payroll')} className={`px-4 py-2 text-xs font-black rounded-xl transition-all uppercase ${activeTab === 'payroll' ? 'bg-white dark:bg-slate-700 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Folha</button>
                         <button onClick={() => setActiveTab('time')} className={`px-4 py-2 text-xs font-black rounded-xl transition-all uppercase ${activeTab === 'time' ? 'bg-white dark:bg-slate-700 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Ponto</button>
-                        {currentUser?.roleId === 'admin' && (
+                        {canAccessVacations && (
                             <button onClick={() => setActiveTab('vacations')} className={`px-4 py-2 text-xs font-black rounded-xl transition-all uppercase ${activeTab === 'vacations' ? 'bg-white dark:bg-slate-700 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Férias</button>
                         )}
                     </div>
@@ -1498,59 +1943,527 @@ const HR = () => {
                             </div>
                         )}
 
-                        {/* Vacations Tab */}
-                        {activeTab === 'vacations' && currentUser?.roleId === 'admin' && (
+                        {/* Vacations Tab (Reformulada com Controle CLT, Recibos e Cronograma) */}
+                        {activeTab === 'vacations' && canAccessVacations && (
                             <div className="space-y-6">
-                                <div className="flex justify-end">
+                                {/* Barra Superior: Sub-navegação e Botão de Nova Solicitação */}
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                    <div className="flex flex-wrap bg-slate-100 dark:bg-slate-900 p-1 rounded-2xl gap-1">
+                                        <button
+                                            onClick={() => setVacationSubTab('requests')}
+                                            className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all uppercase flex items-center gap-2 ${vacationSubTab === 'requests' ? 'bg-white dark:bg-slate-800 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                        >
+                                            <FileText size={15} /> Solicitações & Quitações
+                                            {vacations.filter(v => v.status === 'Solicitado').length > 0 && (
+                                                <span className="px-1.5 py-0.5 bg-amber-500 text-white rounded-full text-[9px] font-black">
+                                                    {vacations.filter(v => v.status === 'Solicitado').length}
+                                                </span>
+                                            )}
+                                        </button>
+                                        <button
+                                            onClick={() => setVacationSubTab('periods')}
+                                            className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all uppercase flex items-center gap-2 ${vacationSubTab === 'periods' ? 'bg-white dark:bg-slate-800 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                        >
+                                            <Clock size={15} /> Períodos & Dobra CLT
+                                        </button>
+                                        <button
+                                            onClick={() => setVacationSubTab('calendar')}
+                                            className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all uppercase flex items-center gap-2 ${vacationSubTab === 'calendar' ? 'bg-white dark:bg-slate-800 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                        >
+                                            <Calendar size={15} /> Cronograma de Ausências
+                                        </button>
+                                    </div>
+
                                     <button
-                                        onClick={() => setIsVacationModalOpen(true)}
-                                        className="px-6 py-3 bg-cyan-600 text-white font-black text-xs rounded-xl shadow-lg shadow-cyan-600/20 uppercase tracking-widest flex items-center gap-2"
+                                        onClick={() => {
+                                            setVacationForm({
+                                                status: 'Solicitado',
+                                                requestedAt: new Date().toLocaleDateString('pt-BR'),
+                                                days: 30,
+                                                sellDays: false,
+                                                sellDaysCount: 10
+                                            });
+                                            setIsVacationModalOpen(true);
+                                        }}
+                                        className="px-5 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-black text-xs rounded-xl shadow-lg shadow-cyan-600/20 uppercase tracking-widest flex items-center gap-2 transition-all"
                                     >
-                                        <Plus size={18} /> Solicitar Férias
+                                        <Plus size={16} /> Solicitar Férias
                                     </button>
                                 </div>
 
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    {vacations.map(vac => (
-                                        <div key={vac.id} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div>
-                                                    <h3 className="font-black text-slate-900 dark:text-white text-lg">{vac.employeeName}</h3>
-                                                    <p className="text-xs text-slate-400 font-bold mt-1">{vac.days} dias • {vac.startDate} a {vac.endDate}</p>
+                                {/* 4 KPIs Executivos no Topo */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    {/* 1. Em Férias Hoje */}
+                                    {(() => {
+                                        const nowTime = new Date().getTime();
+                                        const parseD = (dStr: string) => {
+                                            if (dStr.includes('/')) {
+                                                const parts = dStr.split('/');
+                                                return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
+                                            }
+                                            return new Date(dStr).getTime();
+                                        };
+                                        const activeToday = vacations.filter(v => (v.status === 'Aprovado' || v.status === 'Concluído') && nowTime >= parseD(v.startDate) && nowTime <= parseD(v.endDate));
+                                        return (
+                                            <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Em Férias Hoje</span>
+                                                    <span className="p-2 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 rounded-xl">
+                                                        <Sun size={18} />
+                                                    </span>
                                                 </div>
-                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${vac.status === 'Aprovado' ? 'bg-emerald-100 text-emerald-700' :
-                                                    vac.status === 'Rejeitado' ? 'bg-rose-100 text-rose-700' :
-                                                        'bg-amber-100 text-amber-700'
-                                                    }`}>
-                                                    {vac.status}
-                                                </span>
+                                                <p className="text-2xl font-black text-slate-900 dark:text-white mt-2">{activeToday.length}</p>
+                                                <p className="text-[11px] text-slate-400 font-medium mt-1 truncate">
+                                                    {activeToday.length > 0 ? activeToday.map(v => v.employeeName).join(', ') : 'Nenhum colaborador ausente'}
+                                                </p>
                                             </div>
-                                            {vac.notes && <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 italic">"{vac.notes}"</p>}
-                                            {vac.status === 'Solicitado' && hasPermission('employees.manage') && (
-                                                <div className="flex gap-2 pt-4 border-t dark:border-slate-700">
-                                                    <button
-                                                        onClick={() => updateVacationStatus(vac.id, 'Aprovado', currentUser?.name || 'Admin')}
-                                                        className="flex-1 py-2 bg-emerald-600 text-white font-black text-xs rounded-xl uppercase flex items-center justify-center gap-2 hover:bg-emerald-500 transition-colors"
-                                                    >
-                                                        <CheckCircle size={16} /> Aprovar
-                                                    </button>
-                                                    <button
-                                                        onClick={() => updateVacationStatus(vac.id, 'Rejeitado', currentUser?.name || 'Admin')}
-                                                        className="flex-1 py-2 bg-rose-600 text-white font-black text-xs rounded-xl uppercase flex items-center justify-center gap-2 hover:bg-rose-500 transition-colors"
-                                                    >
-                                                        <XCircle size={16} /> Rejeitar
-                                                    </button>
+                                        );
+                                    })()}
+
+                                    {/* 2. Próximas Férias Agendadas */}
+                                    {(() => {
+                                        const scheduled = vacations.filter(v => v.status === 'Aprovado');
+                                        return (
+                                            <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Férias Agendadas</span>
+                                                    <span className="p-2 bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 rounded-xl">
+                                                        <Calendar size={18} />
+                                                    </span>
                                                 </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                    {vacations.length === 0 && (
-                                        <div className="col-span-2 text-center py-20 text-slate-400 italic">
-                                            <Plane size={48} className="mx-auto mb-4 opacity-20" />
-                                            <p className="font-medium">Nenhuma solicitação de férias</p>
-                                        </div>
-                                    )}
+                                                <p className="text-2xl font-black text-emerald-600 mt-2">{scheduled.length}</p>
+                                                <p className="text-[11px] text-slate-400 font-medium mt-1">
+                                                    {vacations.filter(v => v.status === 'Solicitado').length} solicitações pendentes
+                                                </p>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* 3. Alerta de Dobra CLT (Período Crítico) */}
+                                    {(() => {
+                                        const now = new Date();
+                                        const criticalEmps = employees.filter(emp => {
+                                            if (emp.status !== 'Ativo' || !emp.admissionDate) return false;
+                                            const adm = new Date(emp.admissionDate);
+                                            const diffMonths = (now.getFullYear() - adm.getFullYear()) * 12 + (now.getMonth() - adm.getMonth());
+                                            return diffMonths >= 22 && (emp.vacationDaysAvailable || 30) >= 15;
+                                        });
+                                        return (
+                                            <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-rose-500">Risco Dobra CLT</span>
+                                                    <span className="p-2 bg-rose-50 dark:bg-rose-900/40 text-rose-500 rounded-xl">
+                                                        <AlertTriangle size={18} />
+                                                    </span>
+                                                </div>
+                                                <p className="text-2xl font-black text-rose-600 mt-2">{criticalEmps.length}</p>
+                                                <p className="text-[11px] text-slate-400 font-medium mt-1">
+                                                    {criticalEmps.length > 0 ? `${criticalEmps.length} colaboradores > 22 meses` : 'Nenhum período vencido'}
+                                                </p>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* 4. Custo Financeiro Previsto */}
+                                    {(() => {
+                                        let totalReceipts = 0;
+                                        vacations.filter(v => v.status === 'Aprovado').forEach(vac => {
+                                            const emp = employees.find(e => e.id === vac.employeeId);
+                                            if (emp) {
+                                                const hasAbono = !!vac.notes?.includes('Abono Pecuniário');
+                                                const receipt = calculateVacationReceipt(emp, vac.days || 30, hasAbono);
+                                                totalReceipts += receipt.netVacation;
+                                            }
+                                        });
+                                        return (
+                                            <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-cyan-600">Provisão a Pagar</span>
+                                                    <span className="p-2 bg-cyan-50 dark:bg-cyan-900/40 text-cyan-600 rounded-xl">
+                                                        <DollarSign size={18} />
+                                                    </span>
+                                                </div>
+                                                <p className="text-2xl font-black text-slate-900 dark:text-white mt-2">{formatCurrency(totalReceipts)}</p>
+                                                <p className="text-[11px] text-slate-400 font-medium mt-1">Salário + 1/3 das aprovadas</p>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
+
+                                {/* Visão 1: Solicitações e Quitações */}
+                                {vacationSubTab === 'requests' && (
+                                    <div className="space-y-4">
+                                        {/* Barra de Filtros de Férias */}
+                                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                {['Todos', 'Solicitado', 'Aprovado', 'Concluído', 'Rejeitado'].map((st) => (
+                                                    <button
+                                                        key={st}
+                                                        onClick={() => setVacationStatusFilter(st)}
+                                                        className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase transition-all ${
+                                                            vacationStatusFilter === st
+                                                                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+                                                                : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                                                        }`}
+                                                    >
+                                                        {st}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <div className="relative w-full sm:w-64">
+                                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Buscar por colaborador..."
+                                                    className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-cyan-500"
+                                                    value={searchTerm}
+                                                    onChange={e => setSearchTerm(e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Tabela de Solicitações e Recibos */}
+                                        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-xs text-left">
+                                                    <thead className="bg-slate-50 dark:bg-slate-900 text-[10px] font-black text-slate-400 uppercase border-b dark:border-slate-700">
+                                                        <tr>
+                                                            <th className="px-5 py-4">Colaborador</th>
+                                                            <th className="px-5 py-4">Período de Gozo</th>
+                                                            <th className="px-5 py-4 text-center">Dias</th>
+                                                            <th className="px-5 py-4 text-right">Recibo (Bruto / Líq.)</th>
+                                                            <th className="px-5 py-4 text-center">Status</th>
+                                                            <th className="px-5 py-4 text-right">Ações & Quitação</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y dark:divide-slate-700">
+                                                        {vacations
+                                                            .filter(vac => {
+                                                                if (vacationStatusFilter !== 'Todos' && vac.status !== vacationStatusFilter) return false;
+                                                                if (searchTerm && !vac.employeeName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+                                                                return true;
+                                                            })
+                                                            .map((vac) => {
+                                                                const emp = employees.find(e => e.id === vac.employeeId);
+                                                                const hasAbono = !!vac.notes?.includes('Abono Pecuniário');
+                                                                const receipt = emp ? calculateVacationReceipt(emp, vac.days || 30, hasAbono) : null;
+                                                                const txId = `tx-vac-${vac.id}`;
+                                                                const linkedTx = transactions.find(t => t.id === txId);
+
+                                                                return (
+                                                                    <tr key={vac.id} className="hover:bg-slate-50/80 dark:hover:bg-cyan-900/10 transition-colors">
+                                                                        <td className="px-5 py-4">
+                                                                            <div className="font-bold text-slate-800 dark:text-white text-sm">{vac.employeeName}</div>
+                                                                            <div className="text-[10px] text-slate-400 font-medium">
+                                                                                {emp ? `${emp.role} • ${emp.department}` : 'Colaborador'}
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="px-5 py-4">
+                                                                            <div className="font-bold text-slate-800 dark:text-slate-200">
+                                                                                {vac.startDate} <span className="text-slate-400 font-normal">a</span> {vac.endDate}
+                                                                            </div>
+                                                                            {hasAbono && (
+                                                                                <span className="inline-block mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 rounded text-[9px] font-black uppercase">
+                                                                                    + 10d Abono Pecuniário
+                                                                                </span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-5 py-4 text-center font-black text-slate-900 dark:text-white">
+                                                                            <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs font-black">
+                                                                                {vac.days || 30} dias
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="px-5 py-4 text-right">
+                                                                            {receipt ? (
+                                                                                <div>
+                                                                                    <div className="font-black text-emerald-600 text-sm">{formatCurrency(receipt.netVacation)}</div>
+                                                                                    <div className="text-[10px] text-slate-400">Bruto: {formatCurrency(receipt.totalCompanyCost)}</div>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <span className="text-slate-400">—</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-5 py-4 text-center">
+                                                                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+                                                                                vac.status === 'Concluído' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' :
+                                                                                vac.status === 'Aprovado' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300' :
+                                                                                vac.status === 'Rejeitado' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300' :
+                                                                                'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+                                                                            }`}>
+                                                                                {vac.status === 'Concluído' ? 'Pago / Concluído' : vac.status}
+                                                                            </span>
+                                                                            {linkedTx && (
+                                                                                <div className="text-[9px] text-slate-400 mt-0.5 truncate max-w-[120px] mx-auto">
+                                                                                    {linkedTx.account}
+                                                                                </div>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-5 py-4 text-right">
+                                                                            <div className="flex items-center justify-end gap-1.5">
+                                                                                {/* Botão Ver Recibo */}
+                                                                                <button
+                                                                                    onClick={() => openReceiptModal(vac)}
+                                                                                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-colors"
+                                                                                    title="Visualizar e Imprimir Recibo Oficial de Férias"
+                                                                                >
+                                                                                    <Printer size={15} />
+                                                                                </button>
+
+                                                                                {/* Solicitação Pendente: Aprovar / Rejeitar */}
+                                                                                {vac.status === 'Solicitado' && hasPermission('employees.manage') && (
+                                                                                    <>
+                                                                                        <button
+                                                                                            onClick={() => updateVacationStatus(vac.id, 'Aprovado', currentUser?.name || 'Admin')}
+                                                                                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl uppercase transition-all shadow-sm flex items-center gap-1"
+                                                                                            title="Aprovar Férias"
+                                                                                        >
+                                                                                            <CheckCircle size={14} /> Aprovar
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => updateVacationStatus(vac.id, 'Rejeitado', currentUser?.name || 'Admin')}
+                                                                                            className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs rounded-xl uppercase transition-all shadow-sm"
+                                                                                            title="Rejeitar Solicitação"
+                                                                                        >
+                                                                                            <XCircle size={14} />
+                                                                                        </button>
+                                                                                    </>
+                                                                                )}
+
+                                                                                {/* Aprovado: Pagar no Caixa/Banco */}
+                                                                                {vac.status === 'Aprovado' && hasPermission('employees.manage') && (
+                                                                                    <button
+                                                                                        onClick={() => openPayVacationModal(vac)}
+                                                                                        className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black text-xs rounded-xl uppercase transition-all shadow-sm flex items-center gap-1.5"
+                                                                                        title="Liquidar Recibo de Férias com Débito em Conta"
+                                                                                    >
+                                                                                        <Wallet size={14} /> Quitar no Banco
+                                                                                    </button>
+                                                                                )}
+
+                                                                                {/* Concluído: Estornar Pagamento */}
+                                                                                {vac.status === 'Concluído' && (
+                                                                                    canRefundAdvance ? (
+                                                                                        <button
+                                                                                            onClick={() => openRefundVacationModal(vac)}
+                                                                                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-black text-xs rounded-xl uppercase transition-all shadow-sm flex items-center gap-1"
+                                                                                            title="Estornar pagamento e recompor saldo bancário"
+                                                                                        >
+                                                                                            <RotateCcw size={14} /> Estornar
+                                                                                        </button>
+                                                                                    ) : (
+                                                                                        <button
+                                                                                            disabled
+                                                                                            className="px-3 py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-400 font-bold text-xs rounded-xl uppercase cursor-not-allowed flex items-center gap-1"
+                                                                                            title="Estorno permitido apenas para Administrador ou Gerente Financeiro"
+                                                                                        >
+                                                                                            <RotateCcw size={14} /> Estornar
+                                                                                        </button>
+                                                                                    )
+                                                                                )}
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        {vacations.length === 0 && (
+                                                            <tr>
+                                                                <td colSpan={6} className="py-16 text-center text-slate-400">
+                                                                    <Plane size={44} className="mx-auto mb-3 opacity-20" />
+                                                                    <p className="font-bold text-sm">Nenhuma solicitação de férias cadastrada.</p>
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Visão 2: Mapa de Períodos e Dobra CLT */}
+                                {vacationSubTab === 'periods' && (
+                                    <div className="space-y-4">
+                                        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-4 rounded-3xl flex items-center gap-3">
+                                            <AlertTriangle className="text-amber-600 shrink-0" size={24} />
+                                            <div className="text-xs">
+                                                <strong className="text-amber-900 dark:text-amber-200 uppercase font-black">Regra de Ouro da CLT (Art. 134 e 137):</strong>
+                                                <p className="text-amber-800 dark:text-amber-300 font-medium mt-0.5">
+                                                    As férias devem ser concedidas nos 12 meses subsequentes à aquisição (período concessivo). Sempre que as férias forem concedidas após o prazo legal, o empregador pagará em dobro a respectiva remuneração.
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-xs text-left">
+                                                    <thead className="bg-slate-50 dark:bg-slate-900 text-[10px] font-black text-slate-400 uppercase border-b dark:border-slate-700">
+                                                        <tr>
+                                                            <th className="px-5 py-4">Colaborador</th>
+                                                            <th className="px-5 py-4">Admissão / Tempo de Casa</th>
+                                                            <th className="px-5 py-4">Período Concessivo Limite</th>
+                                                            <th className="px-5 py-4 text-center">Saldo Disponível</th>
+                                                            <th className="px-5 py-4 text-center">Status Legal</th>
+                                                            <th className="px-5 py-4 text-right">Ação</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y dark:divide-slate-700">
+                                                        {employees.filter(e => e.status === 'Ativo').map(emp => {
+                                                            const admDate = emp.admissionDate ? new Date(emp.admissionDate) : new Date();
+                                                            const now = new Date();
+                                                            const diffMonths = (now.getFullYear() - admDate.getFullYear()) * 12 + (now.getMonth() - admDate.getMonth());
+                                                            const years = Math.floor(diffMonths / 12);
+                                                            const remMonths = diffMonths % 12;
+                                                            const timeStr = `${years} ano(s) e ${remMonths} mês(es)`;
+
+                                                            // Período concessivo limite = admissão + 23 meses (último mês antes da dobra do 1º período)
+                                                            const limitDate = new Date(admDate);
+                                                            limitDate.setMonth(limitDate.getMonth() + 23);
+                                                            const limitStr = limitDate.toLocaleDateString('pt-BR');
+
+                                                            let statusBadge = {
+                                                                label: 'Período Aquisitivo em Curso',
+                                                                cls: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                                                            };
+
+                                                            if (diffMonths >= 24 && (emp.vacationDaysAvailable || 30) > 0) {
+                                                                statusBadge = {
+                                                                    label: 'CRÍTICO: Risco de Dobra CLT',
+                                                                    cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 animate-pulse font-black'
+                                                                };
+                                                            } else if (diffMonths >= 21 && (emp.vacationDaysAvailable || 30) > 0) {
+                                                                statusBadge = {
+                                                                    label: 'Atenção: Vence em < 60 dias',
+                                                                    cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 font-bold'
+                                                                };
+                                                            } else if (diffMonths >= 12) {
+                                                                statusBadge = {
+                                                                    label: 'Regular (Direito Adquirido)',
+                                                                    cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 font-bold'
+                                                                };
+                                                            }
+
+                                                            return (
+                                                                <tr key={emp.id} className="hover:bg-slate-50/80 dark:hover:bg-cyan-900/10 transition-colors">
+                                                                    <td className="px-5 py-4">
+                                                                        <div className="font-bold text-slate-800 dark:text-white text-sm">{emp.name}</div>
+                                                                        <div className="text-[10px] text-slate-400">{emp.role} • {emp.department}</div>
+                                                                    </td>
+                                                                    <td className="px-5 py-4">
+                                                                        <div className="font-bold text-slate-800 dark:text-slate-200">{emp.admissionDate || '—'}</div>
+                                                                        <div className="text-[10px] text-slate-400">{timeStr}</div>
+                                                                    </td>
+                                                                    <td className="px-5 py-4 font-bold text-slate-700 dark:text-slate-300">
+                                                                        Até {limitStr}
+                                                                    </td>
+                                                                    <td className="px-5 py-4 text-center">
+                                                                        <span className="px-3 py-1 bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 rounded-xl text-xs font-black">
+                                                                            {emp.vacationDaysAvailable || 30} dias
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-5 py-4 text-center">
+                                                                        <span className={`px-3 py-1 rounded-full text-[10px] uppercase ${statusBadge.cls}`}>
+                                                                            {statusBadge.label}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-5 py-4 text-right">
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setVacationForm({
+                                                                                    employeeId: emp.id,
+                                                                                    status: 'Solicitado',
+                                                                                    requestedAt: new Date().toLocaleDateString('pt-BR'),
+                                                                                    days: Math.min(30, emp.vacationDaysAvailable || 30),
+                                                                                    sellDays: false,
+                                                                                    sellDaysCount: 10
+                                                                                });
+                                                                                setIsVacationModalOpen(true);
+                                                                            }}
+                                                                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs rounded-xl uppercase transition-all shadow-sm flex items-center gap-1 ml-auto"
+                                                                        >
+                                                                            <Calendar size={13} /> Agendar
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Visão 3: Cronograma de Ausências */}
+                                {vacationSubTab === 'calendar' && (
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                            <div className="flex items-center gap-3">
+                                                <Calendar className="text-cyan-600" size={20} />
+                                                <h4 className="font-black text-sm text-slate-800 dark:text-white uppercase tracking-tight">Linha do Tempo de Ausências</h4>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs font-bold text-slate-400">Mês de Referência:</span>
+                                                <input
+                                                    type="month"
+                                                    value={selectedCalendarMonth}
+                                                    onChange={e => setSelectedCalendarMonth(e.target.value)}
+                                                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4">
+                                            {(() => {
+                                                const [yearStr, monthStr] = selectedCalendarMonth.split('-');
+                                                const cYear = parseInt(yearStr, 10);
+                                                const cMonth = parseInt(monthStr, 10);
+                                                const daysInMonth = new Date(cYear, cMonth, 0).getDate();
+
+                                                const approvedVacations = vacations.filter(v => v.status === 'Aprovado' || v.status === 'Concluído');
+
+                                                return (
+                                                    <div className="overflow-x-auto">
+                                                        <div className="min-w-[700px] space-y-3">
+                                                            {/* Cabeçalho de dias do mês */}
+                                                            <div className="grid grid-cols-12 gap-1 text-center text-[10px] font-black text-slate-400 uppercase pb-2 border-b dark:border-slate-700">
+                                                                <div className="col-span-3 text-left">Colaborador</div>
+                                                                <div className="col-span-9 grid grid-cols-4 gap-1">
+                                                                    <div>Semana 1 (1-7)</div>
+                                                                    <div>Semana 2 (8-14)</div>
+                                                                    <div>Semana 3 (15-21)</div>
+                                                                    <div>Semana 4 (22-{daysInMonth})</div>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Linhas de Colaboradores com Férias no Mês */}
+                                                            {approvedVacations.length > 0 ? (
+                                                                approvedVacations.map(vac => (
+                                                                    <div key={vac.id} className="grid grid-cols-12 gap-1 items-center py-2.5 border-b dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-900/40 rounded-xl px-2">
+                                                                        <div className="col-span-3 font-bold text-xs text-slate-800 dark:text-white truncate">
+                                                                            {vac.employeeName}
+                                                                            <span className="block text-[9px] text-slate-400 font-normal">{vac.days} dias • {vac.startDate} a {vac.endDate}</span>
+                                                                        </div>
+                                                                        <div className="col-span-9 bg-slate-100 dark:bg-slate-900/80 rounded-xl p-1 relative h-8 flex items-center">
+                                                                            <div
+                                                                                className="h-6 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-black text-[10px] rounded-lg shadow-sm flex items-center justify-center px-2 truncate w-full"
+                                                                            >
+                                                                                🌴 Em gozo de férias ({vac.startDate} - {vac.endDate})
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                ))
+                                                            ) : (
+                                                                <div className="py-12 text-center text-slate-400">
+                                                                    <p className="font-bold text-xs">Nenhum colaborador com férias agendadas para {selectedCalendarMonth}.</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -2058,12 +2971,21 @@ const HR = () => {
                                                 <Plus size={15} /> Ajuste Manual
                                             </button>
                                             {currentEspelhoEmp && (
-                                                <button
-                                                    onClick={() => handlePrintEspelhoPonto(currentEspelhoEmp, selectedEspelhoMonth, espelhoData.daysData, espelhoData.totals)}
-                                                    className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-black text-xs rounded-xl uppercase flex items-center gap-1.5 shadow-sm transition-all"
-                                                >
-                                                    <Printer size={15} /> Imprimir Espelho Oficial
-                                                </button>
+                                                <>
+                                                    <button
+                                                        onClick={handleExportPontoToFolha}
+                                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl uppercase flex items-center gap-1.5 shadow-sm transition-all"
+                                                        title="Exportar horas extras e faltas para a Folha de Pagamento"
+                                                    >
+                                                        <ArrowUpRight size={15} /> Exportar p/ Folha
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handlePrintEspelhoPonto(currentEspelhoEmp, selectedEspelhoMonth, espelhoData.daysData, espelhoData.totals)}
+                                                        className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-black text-xs rounded-xl uppercase flex items-center gap-1.5 shadow-sm transition-all"
+                                                    >
+                                                        <Printer size={15} /> Imprimir Espelho Oficial
+                                                    </button>
+                                                </>
                                             )}
                                         </div>
                                     )}
@@ -2124,6 +3046,7 @@ const HR = () => {
                                                             <th className="px-4 py-3 text-center">Previsto</th>
                                                             <th className="px-4 py-3 text-center">Saldo Diário</th>
                                                             <th className="px-4 py-3">Ocorrência</th>
+                                                            <th className="px-4 py-3 text-right">Ação</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y dark:divide-slate-700">
@@ -2168,7 +3091,11 @@ const HR = () => {
                                                                 </td>
                                                                 <td className="px-4 py-3">
                                                                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide ${
-                                                                        d.onVacation
+                                                                        d.isJustified
+                                                                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                                                            : d.isWithinCltTolerance
+                                                                            ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300'
+                                                                            : d.onVacation
                                                                             ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                                                                             : d.isWeekend
                                                                             ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
@@ -2180,6 +3107,32 @@ const HR = () => {
                                                                     }`}>
                                                                         {d.occurrence}
                                                                     </span>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right">
+                                                                    {d.isJustified ? (
+                                                                        <div className="flex items-center justify-end gap-1.5">
+                                                                            <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 rounded-lg text-[9px] font-bold" title={d.justification?.reason}>
+                                                                                {d.justification?.doctorCrm ? `CRM ${d.justification.doctorCrm}` : 'Abonado'}
+                                                                            </span>
+                                                                            <button
+                                                                                onClick={() => handleRemoveJustification(d.dateIso)}
+                                                                                className="p-1 hover:bg-rose-100 text-rose-500 rounded-lg transition-colors"
+                                                                                title="Revogar abono da falta"
+                                                                            >
+                                                                                <X size={13} />
+                                                                            </button>
+                                                                        </div>
+                                                                    ) : (!d.isWeekend && !d.onVacation && (d.workedMins === 0 || d.deltaMin < 0)) ? (
+                                                                        <button
+                                                                            onClick={() => openJustifyModal(d)}
+                                                                            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-black text-[10px] rounded-lg uppercase tracking-wider transition-all shadow-sm flex items-center gap-1 ml-auto"
+                                                                            title="Abonar falta ou atraso com atestado ou justificativa legal"
+                                                                        >
+                                                                            <ShieldCheck size={12} /> Abonar
+                                                                        </button>
+                                                                    ) : (
+                                                                        <span className="text-slate-300 dark:text-slate-600 text-[10px]">—</span>
+                                                                    )}
                                                                 </td>
                                                             </tr>
                                                         ))}
@@ -2657,45 +3610,194 @@ const HR = () => {
                             </div>
                         )}
 
-                        {/* Vacation Modal */}
+                        {/* Vacation Modal (Aprimorado com Cálculo ao Vivo e Abono Pecuniário) */}
                         {isVacationModalOpen && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md border dark:border-slate-700 animate-in zoom-in duration-200">
-                                    <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center">
-                                        <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Solicitar Férias</h3>
-                                        <button onClick={() => setIsVacationModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg border dark:border-slate-700 overflow-hidden animate-in zoom-in-95 duration-200">
+                                    <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-cyan-50/70 dark:bg-cyan-950/30">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2.5 bg-cyan-600 text-white rounded-2xl shadow-lg shadow-cyan-600/20">
+                                                <Plane size={20} />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Solicitar / Agendar Férias</h3>
+                                                <p className="text-xs text-cyan-700 dark:text-cyan-300 font-bold">Conformidade CLT Art. 134 e 143</p>
+                                            </div>
+                                        </div>
+                                        <button onClick={() => setIsVacationModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"><X size={20} /></button>
                                     </div>
-                                    <form onSubmit={handleSaveVacation} className="p-6 space-y-4">
+                                    <form onSubmit={handleSaveVacation} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Colaborador</label>
-                                            <select className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm" value={vacationForm.employeeId || ''} onChange={e => setVacationForm({ ...vacationForm, employeeId: e.target.value })} required>
-                                                <option value="">Selecione...</option>
+                                            <select
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-3 font-bold text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-cyan-500"
+                                                value={vacationForm.employeeId || ''}
+                                                onChange={e => {
+                                                    const empId = e.target.value;
+                                                    setVacationForm(prev => ({ ...prev, employeeId: empId }));
+                                                }}
+                                                required
+                                            >
+                                                <option value="">Selecione um colaborador...</option>
                                                 {employees.filter(e => e.status === 'Ativo').map(emp => (
-                                                    <option key={emp.id} value={emp.id}>{emp.name} ({emp.vacationDaysAvailable || 30} dias disponíveis)</option>
+                                                    <option key={emp.id} value={emp.id}>
+                                                        {emp.name} — Saldo: {emp.vacationDaysAvailable || 30} dias ({formatCurrency(emp.salary)}/mês)
+                                                    </option>
                                                 ))}
                                             </select>
                                         </div>
-                                        <div className="grid grid-cols-3 gap-4">
-                                            <div className="col-span-2 grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Data Início</label>
-                                                    <input type="date" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm" value={vacationForm.startDate || ''} onChange={e => setVacationForm({ ...vacationForm, startDate: e.target.value })} required />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Data Fim</label>
-                                                    <input type="date" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm" value={vacationForm.endDate || ''} onChange={e => setVacationForm({ ...vacationForm, endDate: e.target.value })} required />
-                                                </div>
+
+                                        {/* Botões Rápidos de Duração das Férias */}
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 tracking-widest">Opção de Fracionamento CLT</label>
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {[
+                                                    { label: '30 dias', days: 30, sell: false },
+                                                    { label: '20d + Abono', days: 20, sell: true },
+                                                    { label: '15 dias', days: 15, sell: false },
+                                                    { label: '10 dias', days: 10, sell: false }
+                                                ].map((opt, i) => (
+                                                    <button
+                                                        key={i}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            let newEnd = vacationForm.startDate || '';
+                                                            if (vacationForm.startDate) {
+                                                                const dt = new Date(vacationForm.startDate);
+                                                                dt.setDate(dt.getDate() + opt.days - 1);
+                                                                newEnd = dt.toISOString().split('T')[0];
+                                                            }
+                                                            setVacationForm(prev => ({
+                                                                ...prev,
+                                                                days: opt.days,
+                                                                sellDays: opt.sell,
+                                                                endDate: newEnd
+                                                            }));
+                                                        }}
+                                                        className={`py-2 px-2 rounded-xl text-xs font-black uppercase transition-all text-center border ${
+                                                            vacationForm.days === opt.days && vacationForm.sellDays === opt.sell
+                                                                ? 'bg-cyan-600 text-white border-cyan-600 shadow-md shadow-cyan-600/20'
+                                                                : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100'
+                                                        }`}
+                                                    >
+                                                        {opt.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Data Início</label>
+                                                <input
+                                                    type="date"
+                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-3 font-bold text-xs text-slate-800 dark:text-white"
+                                                    value={vacationForm.startDate || ''}
+                                                    onChange={e => {
+                                                        const start = e.target.value;
+                                                        const days = vacationForm.days || 30;
+                                                        let end = '';
+                                                        if (start) {
+                                                            const dt = new Date(start);
+                                                            dt.setDate(dt.getDate() + days - 1);
+                                                            end = dt.toISOString().split('T')[0];
+                                                        }
+                                                        setVacationForm(prev => ({ ...prev, startDate: start, endDate: end }));
+                                                    }}
+                                                    required
+                                                />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Dias</label>
-                                                <input type="number" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm" value={vacationForm.days || ''} onChange={e => setVacationForm({ ...vacationForm, days: Number(e.target.value) })} required />
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Data Fim</label>
+                                                <input
+                                                    type="date"
+                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-3 font-bold text-xs text-slate-800 dark:text-white"
+                                                    value={vacationForm.endDate || ''}
+                                                    onChange={e => setVacationForm(prev => ({ ...prev, endDate: e.target.value }))}
+                                                    required
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Dias de Gozo</label>
+                                                <input
+                                                    type="number"
+                                                    min="5"
+                                                    max="30"
+                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-3 font-bold text-xs text-slate-800 dark:text-white"
+                                                    value={vacationForm.days || 30}
+                                                    onChange={e => {
+                                                        const days = Number(e.target.value);
+                                                        let end = vacationForm.endDate || '';
+                                                        if (vacationForm.startDate && days > 0) {
+                                                            const dt = new Date(vacationForm.startDate);
+                                                            dt.setDate(dt.getDate() + days - 1);
+                                                            end = dt.toISOString().split('T')[0];
+                                                        }
+                                                        setVacationForm(prev => ({ ...prev, days, endDate: end }));
+                                                    }}
+                                                    required
+                                                />
                                             </div>
                                         </div>
+
+                                        {/* Toggle Abono Pecuniário (Venda de 10 dias) */}
+                                        <label className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-2xl cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={!!vacationForm.sellDays}
+                                                onChange={e => setVacationForm(prev => ({ ...prev, sellDays: e.target.checked }))}
+                                                className="w-4 h-4 text-cyan-600 rounded focus:ring-cyan-500"
+                                            />
+                                            <div>
+                                                <span className="text-xs font-black text-slate-800 dark:text-white block">Abono Pecuniário (Vender 10 dias de férias)</span>
+                                                <span className="text-[10px] text-slate-400 font-medium">Art. 143 CLT: conversão de 1/3 do período de férias em remuneração em dinheiro isenta de INSS/IRRF.</span>
+                                            </div>
+                                        </label>
+
+                                        {/* Live Preview do Recibo de Férias */}
+                                        {(() => {
+                                            const emp = employees.find(e => e.id === vacationForm.employeeId);
+                                            if (!emp) return null;
+                                            const receipt = calculateVacationReceipt(emp, vacationForm.days || 30, !!vacationForm.sellDays, 10);
+                                            return (
+                                                <div className="p-4 bg-cyan-50/50 dark:bg-cyan-950/20 border border-cyan-200 dark:border-cyan-800 rounded-2xl space-y-2 text-xs">
+                                                    <div className="flex justify-between items-center border-b border-cyan-200/50 pb-2">
+                                                        <span className="text-[10px] font-black uppercase text-cyan-800 dark:text-cyan-300">Estimativa do Recibo (CLT)</span>
+                                                        <span className="text-sm font-black text-cyan-700 dark:text-cyan-300">{formatCurrency(receipt.netVacation)} Líquido</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-slate-600 dark:text-slate-300 pt-1">
+                                                        <div>Salário Férias ({receipt.days}d): <strong>{formatCurrency(receipt.vacationSalary)}</strong></div>
+                                                        <div>1/3 Constitucional: <strong>{formatCurrency(receipt.tercoConstitucional)}</strong></div>
+                                                        {receipt.hasAbono && (
+                                                            <>
+                                                                <div className="text-emerald-700 dark:text-emerald-400">Abono (10d): <strong>{formatCurrency(receipt.abonoSalary)}</strong></div>
+                                                                <div className="text-emerald-700 dark:text-emerald-400">1/3 Abono: <strong>{formatCurrency(receipt.abonoTerco)}</strong></div>
+                                                            </>
+                                                        )}
+                                                        <div className="text-rose-600">INSS Previsto: <strong>-{formatCurrency(receipt.inss)}</strong></div>
+                                                        <div className="text-rose-600">IRRF Previsto: <strong>-{formatCurrency(receipt.irrf)}</strong></div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Observações</label>
-                                            <textarea className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm" rows={3} value={vacationForm.notes || ''} onChange={e => setVacationForm({ ...vacationForm, notes: e.target.value })} />
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Observações Adicionais</label>
+                                            <textarea
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-3 font-bold text-xs text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-cyan-500"
+                                                rows={2}
+                                                placeholder="Ex: Escala alinhada com gestor imediato, cobertura de plantão"
+                                                value={vacationForm.notes || ''}
+                                                onChange={e => setVacationForm({ ...vacationForm, notes: e.target.value })}
+                                            />
                                         </div>
-                                        <button type="submit" className="w-full py-4 bg-cyan-600 text-white font-black rounded-2xl shadow-lg mt-6 uppercase tracking-widest text-xs">Solicitar Férias</button>
+
+                                        <button
+                                            type="submit"
+                                            className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black rounded-2xl shadow-lg shadow-cyan-600/20 uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <Check size={16} /> Confirmar e Solicitar Férias
+                                        </button>
                                     </form>
                                 </div>
                             </div>
@@ -2806,7 +3908,436 @@ const HR = () => {
                             </div>
                         )}
 
-                        {/* Manual Time Adjustment Modal (Portaria MTE 671) */}
+                        {/* Modal de Quitação de Férias no Banco */}
+                        {isPayVacationModalOpen && selectedVacationToPay && (() => {
+                            const emp = employees.find(e => e.id === selectedVacationToPay.employeeId);
+                            const hasAbono = !!selectedVacationToPay.notes?.includes('Abono Pecuniário');
+                            const receipt = emp ? calculateVacationReceipt(emp, selectedVacationToPay.days || 30, hasAbono) : null;
+                            const amountToPay = receipt?.netVacation || 0;
+                            const selectedAcc = accounts.find(a => a.id === vacationPaymentForm.accountId) || accounts[0];
+                            const isBalanceLow = selectedAcc && selectedAcc.balance < amountToPay;
+
+                            return (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg border dark:border-slate-700 overflow-hidden animate-in zoom-in-95 duration-200">
+                                        <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/70 dark:bg-slate-900/50">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2.5 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-600/20">
+                                                    <Wallet size={20} />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Liquidar Recibo de Férias</h3>
+                                                    <p className="text-xs text-slate-400 font-bold">Débito em conta bancária e quitação CLT</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => { setIsPayVacationModalOpen(false); setSelectedVacationToPay(null); }}
+                                                className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg"
+                                            >
+                                                <X size={20} />
+                                            </button>
+                                        </div>
+
+                                        <form onSubmit={handleConfirmPayVacation} className="p-6 space-y-4">
+                                            <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-2xl space-y-2">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-[10px] font-black uppercase text-emerald-800 dark:text-emerald-300">Valor Líquido do Recibo</span>
+                                                    <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 rounded-full text-[9px] font-black uppercase">
+                                                        Art. 145 CLT
+                                                    </span>
+                                                </div>
+                                                <div className="text-2xl font-black text-emerald-600">
+                                                    {formatCurrency(amountToPay)}
+                                                </div>
+                                                <div className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                                                    Colaborador: <strong>{selectedVacationToPay.employeeName}</strong> • {selectedVacationToPay.days || 30} dias ({selectedVacationToPay.startDate} a {selectedVacationToPay.endDate})
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 tracking-widest">
+                                                    Conta Bancária de Débito
+                                                </label>
+                                                <select
+                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-3 font-bold text-xs text-slate-800 dark:text-white outline-none focus:border-cyan-500 transition-colors"
+                                                    value={vacationPaymentForm.accountId}
+                                                    onChange={e => setVacationPaymentForm({ ...vacationPaymentForm, accountId: e.target.value })}
+                                                    required
+                                                >
+                                                    <option value="">Selecione uma conta...</option>
+                                                    {accounts.map(acc => (
+                                                        <option key={acc.id} value={acc.id}>
+                                                            {acc.name} — Saldo: {formatCurrency(acc.balance)} ({acc.bankName || acc.type})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                {isBalanceLow && (
+                                                    <p className="text-[11px] text-amber-600 dark:text-amber-400 font-bold mt-1.5 flex items-center gap-1">
+                                                        <AlertCircle size={13} /> Atenção: O saldo atual desta conta é inferior ao valor do recibo de férias.
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 tracking-widest">
+                                                        Meio de Pagamento
+                                                    </label>
+                                                    <select
+                                                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-3 font-bold text-xs text-slate-800 dark:text-white outline-none focus:border-cyan-500 transition-colors"
+                                                        value={vacationPaymentForm.paymentMethod}
+                                                        onChange={e => setVacationPaymentForm({ ...vacationPaymentForm, paymentMethod: e.target.value as any })}
+                                                    >
+                                                        <option value="PIX">PIX</option>
+                                                        <option value="Transferência Bancária">Transferência Bancária (TED)</option>
+                                                        <option value="Dinheiro">Dinheiro em Espécie</option>
+                                                        <option value="Cheque">Cheque</option>
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 tracking-widest">
+                                                        Data do Pagamento
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-3 font-bold text-xs text-slate-800 dark:text-white outline-none focus:border-cyan-500 transition-colors"
+                                                        value={vacationPaymentForm.date}
+                                                        onChange={e => setVacationPaymentForm({ ...vacationPaymentForm, date: e.target.value })}
+                                                        required
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <p className="text-[10px] text-slate-400 italic">
+                                                * Art. 145 CLT: O pagamento da remuneração das férias será efetuado até 2 dias antes do início do respectivo período.
+                                            </p>
+
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 tracking-widest">
+                                                    Observação / Comprovante Bancário
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Ex: Chave PIX, nº autenticação TED, lote folha"
+                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-3 font-bold text-xs text-slate-800 dark:text-white outline-none focus:border-cyan-500 transition-colors"
+                                                    value={vacationPaymentForm.notes}
+                                                    onChange={e => setVacationPaymentForm({ ...vacationPaymentForm, notes: e.target.value })}
+                                                />
+                                            </div>
+
+                                            <div className="pt-2">
+                                                <button
+                                                    type="submit"
+                                                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-2xl shadow-lg shadow-emerald-600/20 uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    <Check size={16} /> Confirmar Quitação e Debitar Conta
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        {/* Modal de Estorno de Pagamento de Férias */}
+                        {isRefundVacationModalOpen && selectedVacationToRefund && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg border dark:border-slate-700 overflow-hidden animate-in zoom-in-95 duration-200">
+                                    <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-amber-50/70 dark:bg-amber-950/30">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2.5 bg-amber-600 text-white rounded-2xl shadow-lg shadow-amber-600/20">
+                                                <RotateCcw size={20} />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">Estornar Quitação de Férias</h3>
+                                                <p className="text-xs text-amber-700 dark:text-amber-300 font-bold">Reversão de débito e recomposição de saldo bancário</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => { setIsRefundVacationModalOpen(false); setSelectedVacationToRefund(null); }}
+                                            className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg"
+                                        >
+                                            <X size={20} />
+                                        </button>
+                                    </div>
+
+                                    <form onSubmit={handleConfirmRefundVacation} className="p-6 space-y-4">
+                                        <div className="p-4 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] font-black uppercase text-amber-800 dark:text-amber-300 tracking-wider">Ação Restrita</span>
+                                                <span className="px-2.5 py-0.5 bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 rounded-full text-[9px] font-black uppercase">
+                                                    Admin / Gerente Financeiro
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                                                O estorno excluirá o lançamento financeiro de despesa vinculado, <strong>recompondo automaticamente o saldo da conta bancária de origem</strong> e retornando as férias de <strong>{selectedVacationToRefund.employeeName}</strong> para o status <strong>'Aprovado'</strong>.
+                                            </p>
+                                        </div>
+
+                                        {(() => {
+                                            const txId = `tx-vac-${selectedVacationToRefund.id}`;
+                                            const linkedTx = transactions.find(t => t.id === txId);
+                                            return linkedTx ? (
+                                                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                                                    <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Transação Financeira Localizada:</span>
+                                                    <p className="font-bold text-slate-800 dark:text-white">{linkedTx.description}</p>
+                                                    <p className="text-[11px] text-slate-500 mt-0.5">
+                                                        Conta de Origem: <strong>{linkedTx.account}</strong> • Valor: <strong>{formatCurrency(linkedTx.amount)}</strong> • Data: {linkedTx.date}
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-400 italic">
+                                                    Nenhuma transação financeira vinculada encontrada (apenas o status será revertido para Aprovado).
+                                                </div>
+                                            );
+                                        })()}
+
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">
+                                                Motivo / Justificativa do Estorno (Obrigatório)
+                                            </label>
+                                            <textarea
+                                                rows={3}
+                                                required
+                                                placeholder="Informe o motivo formal do estorno (ex: cancelamento do período pelo colaborador, ajuste de datas)"
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-3 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-amber-500 transition-all"
+                                                value={refundVacationReason}
+                                                onChange={e => setRefundVacationReason(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="pt-2">
+                                            <button
+                                                type="submit"
+                                                className="w-full py-4 bg-amber-600 hover:bg-amber-500 text-white font-black rounded-2xl shadow-lg shadow-amber-600/20 uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <RotateCcw size={16} /> Confirmar Estorno e Restaurar Saldo
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Modal de Recibo Oficial de Férias */}
+                        {isReceiptModalOpen && selectedVacationForReceipt && (() => {
+                            const emp = employees.find(e => e.id === selectedVacationForReceipt.employeeId);
+                            if (!emp) return null;
+                            const hasAbono = !!selectedVacationForReceipt.notes?.includes('Abono Pecuniário');
+                            const receipt = calculateVacationReceipt(emp, selectedVacationForReceipt.days || 30, hasAbono);
+                            return (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-xl border dark:border-slate-700 overflow-hidden animate-in zoom-in-95 duration-200">
+                                        <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/70 dark:bg-slate-900/50">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2.5 bg-cyan-600 text-white rounded-2xl shadow-lg shadow-cyan-600/20">
+                                                    <FileText size={20} />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Recibo de Pagamento de Férias</h3>
+                                                    <p className="text-xs text-slate-400 font-bold">Demonstrativo Legal CLT • Art. 142 e 145</p>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => setIsReceiptModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"><X size={20} /></button>
+                                        </div>
+
+                                        <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+                                            <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs space-y-1.5">
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-400">Colaborador:</span>
+                                                    <strong className="text-slate-800 dark:text-white">{emp.name} ({emp.role})</strong>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-400">Período de Gozo:</span>
+                                                    <strong className="text-slate-800 dark:text-white">{selectedVacationForReceipt.startDate} a {selectedVacationForReceipt.endDate} ({selectedVacationForReceipt.days} dias)</strong>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-400">Salário Base:</span>
+                                                    <strong className="text-slate-800 dark:text-white">{formatCurrency(emp.salary)}</strong>
+                                                </div>
+                                            </div>
+
+                                            <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden text-xs">
+                                                <table className="w-full">
+                                                    <thead className="bg-slate-50 dark:bg-slate-900 text-[10px] font-black uppercase text-slate-400 border-b dark:border-slate-700">
+                                                        <tr>
+                                                            <th className="p-3 text-left">Rubrica</th>
+                                                            <th className="p-3 text-center">Ref.</th>
+                                                            <th className="p-3 text-right">Proventos</th>
+                                                            <th className="p-3 text-right">Descontos</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y dark:divide-slate-700 font-medium">
+                                                        <tr>
+                                                            <td className="p-3">Salário de Férias</td>
+                                                            <td className="p-3 text-center">{receipt.days}d</td>
+                                                            <td className="p-3 text-right font-bold text-emerald-600">{formatCurrency(receipt.vacationSalary)}</td>
+                                                            <td className="p-3 text-right">—</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="p-3">1/3 Constitucional (Art. 7º, XVII CF)</td>
+                                                            <td className="p-3 text-center">33.33%</td>
+                                                            <td className="p-3 text-right font-bold text-emerald-600">{formatCurrency(receipt.tercoConstitucional)}</td>
+                                                            <td className="p-3 text-right">—</td>
+                                                        </tr>
+                                                        {receipt.hasAbono && (
+                                                            <>
+                                                                <tr className="bg-emerald-50/50 dark:bg-emerald-950/20">
+                                                                    <td className="p-3">Abono Pecuniário (Isento)</td>
+                                                                    <td className="p-3 text-center">10d</td>
+                                                                    <td className="p-3 text-right font-bold text-emerald-600">{formatCurrency(receipt.abonoSalary)}</td>
+                                                                    <td className="p-3 text-right">—</td>
+                                                                </tr>
+                                                                <tr className="bg-emerald-50/50 dark:bg-emerald-950/20">
+                                                                    <td className="p-3">1/3 Constitucional s/ Abono</td>
+                                                                    <td className="p-3 text-center">33.33%</td>
+                                                                    <td className="p-3 text-right font-bold text-emerald-600">{formatCurrency(receipt.abonoTerco)}</td>
+                                                                    <td className="p-3 text-right">—</td>
+                                                                </tr>
+                                                            </>
+                                                        )}
+                                                        <tr>
+                                                            <td className="p-3">INSS s/ Férias</td>
+                                                            <td className="p-3 text-center">CLT</td>
+                                                            <td className="p-3 text-right">—</td>
+                                                            <td className="p-3 text-right font-bold text-rose-500">-{formatCurrency(receipt.inss)}</td>
+                                                        </tr>
+                                                        {receipt.irrf > 0 && (
+                                                            <tr>
+                                                                <td className="p-3">IRRF Retido na Fonte</td>
+                                                                <td className="p-3 text-center">Tabela</td>
+                                                                <td className="p-3 text-right">—</td>
+                                                                <td className="p-3 text-right font-bold text-rose-500">-{formatCurrency(receipt.irrf)}</td>
+                                                            </tr>
+                                                        )}
+                                                    </tbody>
+                                                    <tfoot className="bg-slate-50 dark:bg-slate-900 border-t dark:border-slate-700 font-black">
+                                                        <tr>
+                                                            <td colSpan={2} className="p-3 text-right uppercase text-[10px] text-slate-400">Total Líquido a Receber:</td>
+                                                            <td colSpan={2} className="p-3 text-right text-base text-emerald-600">{formatCurrency(receipt.netVacation)}</td>
+                                                        </tr>
+                                                    </tfoot>
+                                                </table>
+                                            </div>
+
+                                            <div className="flex gap-3 pt-2">
+                                                <button
+                                                    onClick={() => handlePrintVacationReceipt(selectedVacationForReceipt)}
+                                                    className="flex-1 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black rounded-2xl shadow-lg uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    <Printer size={16} /> Imprimir Recibo Oficial
+                                                </button>
+                                                <button
+                                                    onClick={() => setIsReceiptModalOpen(false)}
+                                                    className="px-6 py-3.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-2xl text-xs uppercase"
+                                                >
+                                                    Fechar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        {/* Modal de Abono e Justificativa de Falta no Ponto */}
+                        {isJustifyModalOpen && selectedJustifyDay && currentEspelhoEmp && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg border dark:border-slate-700 overflow-hidden animate-in zoom-in-95 duration-200">
+                                    <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-amber-50/70 dark:bg-amber-950/30">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2.5 bg-amber-500 text-white rounded-2xl shadow-lg shadow-amber-500/20">
+                                                <ShieldCheck size={20} />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Abonar / Justificar Falta</h3>
+                                                <p className="text-xs text-amber-700 dark:text-amber-300 font-bold">Art. 473 CLT • Falta Justificada Legalmente</p>
+                                            </div>
+                                        </div>
+                                        <button onClick={() => setIsJustifyModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"><X size={20} /></button>
+                                    </div>
+
+                                    <form onSubmit={handleConfirmJustify} className="p-6 space-y-4">
+                                        <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs space-y-1">
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-400">Colaborador:</span>
+                                                <strong className="text-slate-800 dark:text-white">{currentEspelhoEmp.name}</strong>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-400">Data do Ponto:</span>
+                                                <strong className="text-slate-800 dark:text-white">{selectedJustifyDay.dateStr} ({selectedJustifyDay.weekday})</strong>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-400">Impacto Atual:</span>
+                                                <span className="text-rose-600 font-bold">Falta de 8h (a debitar na Folha)</span>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 tracking-widest">
+                                                Motivo Legal do Abono (Art. 473 CLT)
+                                            </label>
+                                            <select
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-3 font-bold text-xs text-slate-800 dark:text-white outline-none focus:border-amber-500 transition-colors"
+                                                value={justifyForm.type}
+                                                onChange={e => setJustifyForm({ ...justifyForm, type: e.target.value })}
+                                                required
+                                            >
+                                                <option value="Atestado Médico (Art. 473 CLT)">Atestado Médico (Doença / Incapacidade)</option>
+                                                <option value="Licença Nojo / Falecimento (Art. 473, I CLT)">Falecimento de Familiar / Luto (até 2 dias)</option>
+                                                <option value="Licença Gala / Casamento (Art. 473, II CLT)">Casamento / Licença Gala (até 3 dias)</option>
+                                                <option value="Licença Paternidade (Art. 473, III CLT)">Nascimento de Filho / Paternidade (até 5 dias)</option>
+                                                <option value="Doação Voluntária de Sangue (Art. 473, IV CLT)">Doação de Sangue (1 dia a cada 12 meses)</option>
+                                                <option value="Convocação Eleitoral / Alistamento (Art. 473, V CLT)">Alistamento Eleitoral / Justiça Eleitoral (até 2 dias)</option>
+                                                <option value="Convocação Judicial / Júri">Convocação Judicial / Testemunha em Juízo</option>
+                                                <option value="Folga Compensatória (Banco de Horas)">Folga Compensatória (Compensação Banco)</option>
+                                                <option value="Outro Motivo Justificado pelo Gestor">Outro Motivo Justificado pelo Gestor</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 tracking-widest">
+                                                CRM do Médico / Nº Documento (Se aplicável)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="Ex: CRM-SP 123456, Dr. Alberto Silva"
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-3 font-bold text-xs text-slate-800 dark:text-white outline-none focus:border-amber-500 transition-colors"
+                                                value={justifyForm.doctorCrm}
+                                                onChange={e => setJustifyForm({ ...justifyForm, doctorCrm: e.target.value })}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 tracking-widest">
+                                                Justificativa Detalhada / Observações
+                                            </label>
+                                            <textarea
+                                                rows={3}
+                                                placeholder="Descreva a justificativa para arquivamento no dossiê trabalhista..."
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 font-bold text-xs text-slate-800 dark:text-white outline-none focus:border-amber-500 transition-colors"
+                                                value={justifyForm.reason}
+                                                onChange={e => setJustifyForm({ ...justifyForm, reason: e.target.value })}
+                                            />
+                                        </div>
+
+                                        <p className="text-[10px] text-slate-400 italic">
+                                            * Ao abonar, o dia passa a constar como cumprido (8h) sem desconto salarial ou prejuízo ao banco de horas.
+                                        </p>
+
+                                        <div className="pt-2">
+                                            <button
+                                                type="submit"
+                                                className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-2xl shadow-lg shadow-amber-500/20 uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <Check size={16} /> Confirmar Abono Legal da Falta
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
                         {isManualTimeModalOpen && (
                             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
                                 <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg border dark:border-slate-700 animate-in zoom-in duration-200">
