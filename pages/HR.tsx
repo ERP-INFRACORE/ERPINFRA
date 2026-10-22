@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
     Plus, X, Users, UserPlus, Search, Download, Edit2, Trash2, Wallet, Clock, Calendar,
     CheckCircle, XCircle, DollarSign, ArrowUpRight, Fingerprint, Play, StopCircle, Timer,
-    Plane, TrendingUp, AlertCircle, Filter, ChevronDown, FileText, Printer, Check
+    Plane, TrendingUp, AlertCircle, Filter, ChevronDown, FileText, Printer, Check, RotateCcw
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -18,7 +18,7 @@ const HR = () => {
         salaryAdvances, addSalaryAdvance, updateAdvanceStatus, paySalaryAdvance, deleteAdvance,
         users
     } = useApp();
-    const { addTransaction, accounts, hasPermission, currentUser, transactions, addPurchaseOrder, settings } = useApp();
+    const { addTransaction, deleteTransaction, accounts, hasPermission, currentUser, transactions, addPurchaseOrder, settings } = useApp();
     const { addToast } = useToast();
 
     const [activeTab, setActiveTab] = useState<'employees' | 'payroll' | 'vacations' | 'advances' | 'time'>('employees');
@@ -40,6 +40,33 @@ const HR = () => {
         vacationDaysAvailable: 30,
         admissionDate: new Date().toISOString().split('T')[0]
     });
+
+    // Estados de Liquidação e Estorno de Antecipações
+    const [isPayAdvanceModalOpen, setIsPayAdvanceModalOpen] = useState(false);
+    const [selectedAdvanceToPay, setSelectedAdvanceToPay] = useState<SalaryAdvance | null>(null);
+    const [advancePaymentForm, setAdvancePaymentForm] = useState({
+        accountId: '',
+        paymentMethod: 'PIX' as 'PIX' | 'Transferência Bancária' | 'Dinheiro' | 'Cheque',
+        date: new Date().toISOString().split('T')[0],
+        notes: ''
+    });
+
+    const [isRefundAdvanceModalOpen, setIsRefundAdvanceModalOpen] = useState(false);
+    const [selectedAdvanceToRefund, setSelectedAdvanceToRefund] = useState<SalaryAdvance | null>(null);
+    const [refundReason, setRefundReason] = useState('');
+
+    // Permissão restrita para estorno de antecipações (Admin ou Gerente Financeiro)
+    const canRefundAdvance = useMemo(() => {
+        if (!currentUser) return false;
+        return (
+            currentUser.roleId === 'admin' ||
+            currentUser.roleId === 'manager_finance' ||
+            currentUser.roleId === 'financial' ||
+            hasPermission('all') ||
+            hasPermission('finance.admin') ||
+            hasPermission('finance.delete')
+        );
+    }, [currentUser, hasPermission]);
 
     // Estados da Folha de Pagamento (Com e Sem Encargos Federais)
     const [payrollChargeView, setPayrollChargeView] = useState<'without_taxes' | 'with_taxes'>('without_taxes');
@@ -1049,37 +1076,93 @@ const HR = () => {
         });
     };
 
-    const handlePayAdvance = (adv: SalaryAdvance) => {
-        addToast(`Confirmar pagamento de antecipação: ${formatCurrency(adv.amount)} para ${adv.employeeName}?`, 'info', 10000, {
-            label: 'CONFIRMAR',
-            onClick: () => {
-                // 1. Check if transaction already exists
-                const txId = `tx-adv-${adv.id}`;
-                if (transactions.some(t => t.id === txId)) {
-                    addToast("Este adiantamento já foi processado no financeiro.", 'error');
-                    return;
-                }
-
-                // 2. Create Financial Transaction
-                addTransaction({
-                    id: txId,
-                    date: new Date().toLocaleDateString('pt-BR'),
-                    description: `Adiantamento Salarial - ${adv.employeeName}`,
-                    category: 'Adiantamentos',
-                    type: 'Despesa',
-                    amount: adv.amount,
-                    status: 'Conciliado',
-                    account: accounts[0]?.name || 'Caixa',
-                    accountId: accounts[0]?.id || 'acc-1',
-                    ledgerCode: '2.03.01',
-                    ledgerName: 'Salários e Ordenados'
-                });
-
-                // 2. Update Status
-                paySalaryAdvance(adv.id);
-                addToast("Antecipação paga e registrada no financeiro.", 'success');
-            }
+    const openPayAdvanceModal = (adv: SalaryAdvance) => {
+        setSelectedAdvanceToPay(adv);
+        setAdvancePaymentForm({
+            accountId: accounts[0]?.id || '',
+            paymentMethod: 'PIX',
+            date: new Date().toISOString().split('T')[0],
+            notes: ''
         });
+        setIsPayAdvanceModalOpen(true);
+    };
+
+    const handleConfirmPayAdvance = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedAdvanceToPay) return;
+
+        const targetAccount = accounts.find(a => a.id === advancePaymentForm.accountId) || accounts[0];
+        if (!targetAccount) {
+            addToast("Selecione uma conta bancária de origem para efetuar o débito.", 'warning');
+            return;
+        }
+
+        const txId = `tx-adv-${selectedAdvanceToPay.id}`;
+        if (transactions.some(t => t.id === txId)) {
+            addToast("Este adiantamento já possui transação financeira registrada.", 'error');
+            return;
+        }
+
+        // 1. Criar transação financeira de despesa vinculada à conta bancária selecionada
+        const formattedDate = advancePaymentForm.date
+            ? new Date(advancePaymentForm.date + 'T12:00:00').toLocaleDateString('pt-BR')
+            : new Date().toLocaleDateString('pt-BR');
+
+        addTransaction({
+            id: txId,
+            date: formattedDate,
+            description: `Adiantamento Salarial (${advancePaymentForm.paymentMethod}) - ${selectedAdvanceToPay.employeeName}`,
+            category: 'Adiantamentos',
+            type: 'Despesa',
+            amount: selectedAdvanceToPay.amount,
+            status: 'Conciliado',
+            account: targetAccount.name,
+            accountId: targetAccount.id,
+            ledgerCode: '2.03.01',
+            ledgerName: 'Salários e Ordenados'
+        });
+
+        // 2. Atualizar status da antecipação para 'Pago'
+        paySalaryAdvance(selectedAdvanceToPay.id);
+
+        addToast(`Adiantamento de ${selectedAdvanceToPay.employeeName} (${formatCurrency(selectedAdvanceToPay.amount)}) liquidado com sucesso pela conta ${targetAccount.name}!`, 'success');
+        setIsPayAdvanceModalOpen(false);
+        setSelectedAdvanceToPay(null);
+    };
+
+    const openRefundAdvanceModal = (adv: SalaryAdvance) => {
+        if (!canRefundAdvance) {
+            addToast("Apenas Administradores ou Gerente Financeiro podem estornar pagamentos de adiantamentos.", 'error');
+            return;
+        }
+        setSelectedAdvanceToRefund(adv);
+        setRefundReason('');
+        setIsRefundAdvanceModalOpen(true);
+    };
+
+    const handleConfirmRefundAdvance = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedAdvanceToRefund) return;
+        if (!canRefundAdvance) {
+            addToast("Acesso negado: apenas Administradores ou Gerente Financeiro têm autorização para estornar.", 'error');
+            return;
+        }
+
+        const txId = `tx-adv-${selectedAdvanceToRefund.id}`;
+        const linkedTx = transactions.find(t => t.id === txId);
+
+        // 1. Excluir a transação financeira de despesa vinculada (recompondo automaticamente o saldo bancário da conta)
+        if (linkedTx) {
+            deleteTransaction(linkedTx.id);
+        }
+
+        // 2. Retornar status da antecipação para 'Aprovado'
+        updateAdvanceStatus(selectedAdvanceToRefund.id, 'Aprovado', currentUser?.name || 'Admin');
+
+        addToast(`Estorno realizado com sucesso! O adiantamento de ${selectedAdvanceToRefund.employeeName} retornou para 'Aprovado' e o valor de ${formatCurrency(selectedAdvanceToRefund.amount)} foi recomposto na conta bancária.`, 'success');
+        setIsRefundAdvanceModalOpen(false);
+        setSelectedAdvanceToRefund(null);
+        setRefundReason('');
     };
 
     const handleTimeClock = (type: 'In' | 'Out') => {
@@ -1530,10 +1613,25 @@ const HR = () => {
                                                                 )}
                                                                 {adv.status === 'Aprovado' && hasPermission('finance.transact') && (
                                                                     <button
-                                                                        onClick={() => handlePayAdvance(adv)}
-                                                                        className="px-4 py-1.5 bg-cyan-600 text-white font-black text-[10px] rounded-lg shadow-sm hover:scale-105 transition-transform uppercase"
+                                                                        onClick={() => openPayAdvanceModal(adv)}
+                                                                        className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black text-[10px] rounded-lg shadow-sm hover:scale-105 transition-all uppercase flex items-center gap-1"
+                                                                        title="Liquidar antecipação escolhendo conta bancária e forma de pagamento"
                                                                     >
-                                                                        Pagar
+                                                                        <DollarSign size={12} /> Pagar
+                                                                    </button>
+                                                                )}
+                                                                {adv.status === 'Pago' && (
+                                                                    <button
+                                                                        onClick={() => openRefundAdvanceModal(adv)}
+                                                                        disabled={!canRefundAdvance}
+                                                                        className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all uppercase flex items-center gap-1 ${
+                                                                            canRefundAdvance
+                                                                                ? 'bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 shadow-sm hover:scale-105 cursor-pointer'
+                                                                                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed opacity-60'
+                                                                        }`}
+                                                                        title={canRefundAdvance ? "Estornar pagamento e recompor saldo da conta bancária" : "Apenas Administradores ou Gerente Financeiro podem estornar pagamentos"}
+                                                                    >
+                                                                        <RotateCcw size={12} /> Estornar
                                                                     </button>
                                                                 )}
                                                             </div>
@@ -2278,6 +2376,205 @@ const HR = () => {
                                         </div>
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {/* Modal de Liquidação / Pagamento de Antecipação */}
+                        {isPayAdvanceModalOpen && selectedAdvanceToPay && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg border dark:border-slate-700 overflow-hidden animate-in zoom-in-95 duration-200">
+                                    <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/70 dark:bg-slate-900/50">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2.5 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-600/20">
+                                                <Wallet size={20} />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">Liquidar Antecipação</h3>
+                                                <p className="text-xs text-slate-400 font-bold">Lançamento de débito e quitação de adiantamento</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => { setIsPayAdvanceModalOpen(false); setSelectedAdvanceToPay(null); }}
+                                            className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg"
+                                        >
+                                            <X size={20} />
+                                        </button>
+                                    </div>
+
+                                    <form onSubmit={handleConfirmPayAdvance} className="p-6 space-y-4">
+                                        {/* Card de Resumo da Solicitação */}
+                                        <div className="p-4 bg-slate-50 dark:bg-slate-900/80 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                                            <div>
+                                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Colaborador</span>
+                                                <p className="font-black text-base text-slate-800 dark:text-white">{selectedAdvanceToPay.employeeName}</p>
+                                                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">
+                                                    Desconto previsto: <span className="text-cyan-600 dark:text-cyan-400">{selectedAdvanceToPay.deductFromMonth}</span>
+                                                </p>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Valor a Pagar</span>
+                                                <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(selectedAdvanceToPay.amount)}</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Seleção da Conta Bancária de Origem com Saldo */}
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">
+                                                Conta Bancária de Saída (Débito)
+                                            </label>
+                                            <select
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-3 font-bold text-sm outline-none focus:border-cyan-500 transition-colors"
+                                                value={advancePaymentForm.accountId}
+                                                onChange={e => setAdvancePaymentForm({ ...advancePaymentForm, accountId: e.target.value })}
+                                                required
+                                            >
+                                                <option value="">Selecione a conta bancária...</option>
+                                                {accounts.map(acc => (
+                                                    <option key={acc.id} value={acc.id}>
+                                                        {acc.name} ({acc.bankName || acc.type || 'Conta'}) — Saldo: {formatCurrency(acc.balance || 0)}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {/* Forma de Pagamento */}
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">
+                                                    Forma de Pagamento
+                                                </label>
+                                                <select
+                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-3 font-bold text-sm outline-none focus:border-cyan-500 transition-colors"
+                                                    value={advancePaymentForm.paymentMethod}
+                                                    onChange={e => setAdvancePaymentForm({ ...advancePaymentForm, paymentMethod: e.target.value as any })}
+                                                    required
+                                                >
+                                                    <option value="PIX">⚡ PIX</option>
+                                                    <option value="Transferência Bancária">🏦 Transferência (TED/DOC)</option>
+                                                    <option value="Dinheiro">💵 Dinheiro em Espécie</option>
+                                                    <option value="Cheque">📄 Cheque</option>
+                                                </select>
+                                            </div>
+
+                                            {/* Data do Pagamento */}
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">
+                                                    Data do Débito
+                                                </label>
+                                                <input
+                                                    type="date"
+                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-3 font-bold text-sm outline-none focus:border-cyan-500 transition-colors"
+                                                    value={advancePaymentForm.date}
+                                                    onChange={e => setAdvancePaymentForm({ ...advancePaymentForm, date: e.target.value })}
+                                                    required
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Observações */}
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">
+                                                Observações / Identificador Comprovante (Opcional)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="Ex: Chave PIX, autenticação bancária, nº comprovante"
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-3 font-bold text-xs outline-none focus:border-cyan-500 transition-colors"
+                                                value={advancePaymentForm.notes}
+                                                onChange={e => setAdvancePaymentForm({ ...advancePaymentForm, notes: e.target.value })}
+                                            />
+                                        </div>
+
+                                        <div className="pt-2">
+                                            <button
+                                                type="submit"
+                                                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-2xl shadow-lg shadow-emerald-600/20 uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <Check size={16} /> Confirmar Pagamento e Debitar Conta
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Modal de Estorno de Pagamento de Antecipação */}
+                        {isRefundAdvanceModalOpen && selectedAdvanceToRefund && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg border dark:border-slate-700 overflow-hidden animate-in zoom-in-95 duration-200">
+                                    <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-amber-50/70 dark:bg-amber-950/30">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2.5 bg-amber-600 text-white rounded-2xl shadow-lg shadow-amber-600/20">
+                                                <RotateCcw size={20} />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">Estornar Pagamento</h3>
+                                                <p className="text-xs text-amber-700 dark:text-amber-300 font-bold">Reversão de débito e recomposição de saldo bancário</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => { setIsRefundAdvanceModalOpen(false); setSelectedAdvanceToRefund(null); }}
+                                            className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg"
+                                        >
+                                            <X size={20} />
+                                        </button>
+                                    </div>
+
+                                    <form onSubmit={handleConfirmRefundAdvance} className="p-6 space-y-4">
+                                        <div className="p-4 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] font-black uppercase text-amber-800 dark:text-amber-300 tracking-wider">Ação Restrita</span>
+                                                <span className="px-2.5 py-0.5 bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 rounded-full text-[9px] font-black uppercase">
+                                                    Admin / Gerente Financeiro
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                                                O estorno excluirá o lançamento financeiro de despesa vinculado, <strong>recompondo automaticamente o saldo da conta bancária de origem</strong> e retornando a antecipação de <strong>{selectedAdvanceToRefund.employeeName}</strong> no valor de <strong>{formatCurrency(selectedAdvanceToRefund.amount)}</strong> para o status <strong>'Aprovado'</strong>.
+                                            </p>
+                                        </div>
+
+                                        {(() => {
+                                            const txId = `tx-adv-${selectedAdvanceToRefund.id}`;
+                                            const linkedTx = transactions.find(t => t.id === txId);
+                                            return linkedTx ? (
+                                                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                                                    <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Transação Financeira Localizada:</span>
+                                                    <p className="font-bold text-slate-800 dark:text-white">{linkedTx.description}</p>
+                                                    <p className="text-[11px] text-slate-500 mt-0.5">
+                                                        Conta de Origem: <strong>{linkedTx.account}</strong> • Valor: <strong>{formatCurrency(linkedTx.amount)}</strong> • Data: {linkedTx.date}
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-400 italic">
+                                                    Nenhuma transação financeira vinculada encontrada (será apenas revertido o status para Aprovado).
+                                                </div>
+                                            );
+                                        })()}
+
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">
+                                                Motivo / Justificativa do Estorno (Obrigatório)
+                                            </label>
+                                            <textarea
+                                                rows={3}
+                                                required
+                                                placeholder="Informe o motivo da reversão (ex: pagamento em duplicidade, conta bancária incorreta, cancelamento solicitado pelo colaborador)..."
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 font-medium text-xs outline-none focus:border-amber-500 transition-colors"
+                                                value={refundReason}
+                                                onChange={e => setRefundReason(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="pt-2">
+                                            <button
+                                                type="submit"
+                                                className="w-full py-4 bg-amber-600 hover:bg-amber-500 text-white font-black rounded-2xl shadow-lg shadow-amber-600/20 uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <RotateCcw size={16} /> Confirmar Estorno e Recompor Saldo
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
                             </div>
                         )}
 

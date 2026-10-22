@@ -42,136 +42,22 @@ import {
    Square,
    Download,
    Award,
-   Coins,
    Percent,
    Check,
    Layers,
    RefreshCw,
    Inbox,
    Lock,
-   Info
+   Info,
+   Phone,
+   Mail,
+   Building2
 } from 'lucide-react';
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, CartesianGrid } from 'recharts';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { PurchaseOrder, PurchaseItem, Supplier, InventoryItem, MaintenanceRecord, Employee } from '../types';
 import { printDocument, exportToCSV } from '../utils/exportUtils';
-
-// Quotation Interfaces (Gestão de Cotações & Mapa Comparativo)
-export interface SupplierQuoteEntry {
-   supplierId: string;
-   supplierName: string;
-   unitPrice: number;
-   totalPrice: number;
-   deliveryDays: number;
-   paymentTerms: string;
-   notes?: string;
-}
-
-export interface Quotation {
-   id: string;
-   title: string;
-   date: string;
-   expiryDate: string;
-   requestedBy: string;
-   status: 'Em Cotação' | 'Analisada' | 'Aprovada' | 'Cancelada';
-   items: {
-      productId: string;
-      productName: string;
-      quantity: number;
-      unit: string;
-   }[];
-   supplierQuotes: SupplierQuoteEntry[];
-   winningSupplierId?: string;
-   winningOrderId?: string;
-   notes?: string;
-}
-
-const INITIAL_MOCK_QUOTATIONS: Quotation[] = [
-   {
-      id: 'COT-2026-001',
-      title: 'Cimento Portland CP-II F 32 a Granel (20 Toneladas)',
-      date: '15/01/2026',
-      expiryDate: '25/01/2026',
-      requestedBy: 'Engenharia de Produção',
-      status: 'Analisada',
-      items: [
-         { productId: 'p1', productName: 'Cimento CP-II F 32 Granel', quantity: 20, unit: 'ton' }
-      ],
-      supplierQuotes: [
-         {
-            supplierId: 's1',
-            supplierName: 'Cimento Nacional SA',
-            unitPrice: 420.00,
-            totalPrice: 8400.00,
-            deliveryDays: 3,
-            paymentTerms: '30 DDL',
-            notes: 'Frete FOB incluso para entrega na Usina'
-         },
-         {
-            supplierId: 's2',
-            supplierName: 'Votoran Cimentos Brasil',
-            unitPrice: 445.00,
-            totalPrice: 8900.00,
-            deliveryDays: 5,
-            paymentTerms: '28 DDL',
-            notes: 'Pagamento via boleto faturado'
-         },
-         {
-            supplierId: 's3',
-            supplierName: 'InterCement Indústria',
-            unitPrice: 460.00,
-            totalPrice: 9200.00,
-            deliveryDays: 7,
-            paymentTerms: '15 DDL',
-            notes: 'Estoque sob encomenda'
-         }
-      ],
-      notes: 'Cotação tripla obrigatória para reposição do silo 01.'
-   },
-   {
-      id: 'COT-2026-002',
-      title: 'Agregados Brita 1 e Areia Média Lavada (50 m³)',
-      date: '18/01/2026',
-      expiryDate: '28/01/2026',
-      requestedBy: 'Gestão de Suprimentos',
-      status: 'Em Cotação',
-      items: [
-         { productId: 'p2', productName: 'Brita 1 Granítica', quantity: 30, unit: 'm³' },
-         { productId: 'p3', productName: 'Areia Média Lavada', quantity: 20, unit: 'm³' }
-      ],
-      supplierQuotes: [
-         {
-            supplierId: 's4',
-            supplierName: 'Pedreira Santa Rita Ltda',
-            unitPrice: 85.00,
-            totalPrice: 4250.00,
-            deliveryDays: 2,
-            paymentTerms: '30 DDL',
-            notes: 'Entrega imediata em caçambas traçadas'
-         },
-         {
-            supplierId: 's5',
-            supplierName: 'Mineradora Rio Branco',
-            unitPrice: 92.00,
-            totalPrice: 4600.00,
-            deliveryDays: 3,
-            paymentTerms: '15 DDL',
-            notes: 'Material ensaiado com laudo de granulometria'
-         },
-         {
-            supplierId: 's6',
-            supplierName: 'Agregados São Bento',
-            unitPrice: 98.00,
-            totalPrice: 4900.00,
-            deliveryDays: 1,
-            paymentTerms: 'À Vista',
-            notes: 'Frete cobrado à parte'
-         }
-      ],
-      notes: 'Insumos fundamentais para ordens de concreto estrutural.'
-   }
-];
 
 const Purchases = () => {
    const {
@@ -202,61 +88,9 @@ const Purchases = () => {
 
    const isAdmin = currentUser?.roleId === 'admin' || currentUser?.username === 'admin' || hasPermission('all') || hasPermission('inventory.admin');
 
-   const [activeTab, setActiveTab] = useState<'dashboard' | 'quotations' | 'orders' | 'approval' | 'new-order' | 'suppliers' | 'inventory'>('dashboard');
+   const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'approval' | 'new-order' | 'suppliers' | 'inventory'>('dashboard');
    const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
    const [isSubmitting, setIsSubmitting] = useState(false);
-
-   // Quotations Local State (with LocalStorage persistence)
-   const [quotations, setQuotations] = useState<Quotation[]>(() => {
-      try {
-         const saved = localStorage.getItem('infracore_quotations');
-         return saved ? JSON.parse(saved) : INITIAL_MOCK_QUOTATIONS;
-      } catch (e) {
-         return INITIAL_MOCK_QUOTATIONS;
-      }
-   });
-
-   useEffect(() => {
-      try {
-         localStorage.setItem('infracore_quotations', JSON.stringify(quotations));
-      } catch (e) {
-         console.error('Failed to save quotations to localStorage', e);
-      }
-   }, [quotations]);
-
-   const [quotationSearch, setQuotationSearch] = useState('');
-   const [quotationStatusFilter, setQuotationStatusFilter] = useState<string>('Todas');
-   const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null);
-   const [isNewQuotationModalOpen, setIsNewQuotationModalOpen] = useState(false);
-
-   // New Quotation Form
-   const [newQuotationForm, setNewQuotationForm] = useState<{
-      title: string;
-      requestedBy: string;
-      expiryDate: string;
-      notes: string;
-      items: { productId: string; productName: string; quantity: number; unit: string }[];
-      quotes: {
-         supplierId: string;
-         supplierName: string;
-         unitPrice: number;
-         totalPrice: number;
-         deliveryDays: number;
-         paymentTerms: string;
-         notes: string;
-      }[];
-   }>({
-      title: '',
-      requestedBy: 'Almoxarifado Central',
-      expiryDate: new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0],
-      notes: '',
-      items: [{ productId: '', productName: '', quantity: 10, unit: 'kg' }],
-      quotes: [
-         { supplierId: '', supplierName: '', unitPrice: 0, totalPrice: 0, deliveryDays: 3, paymentTerms: '30 DDL', notes: '' },
-         { supplierId: '', supplierName: '', unitPrice: 0, totalPrice: 0, deliveryDays: 5, paymentTerms: '30 DDL', notes: '' },
-         { supplierId: '', supplierName: '', unitPrice: 0, totalPrice: 0, deliveryDays: 7, paymentTerms: '30 DDL', notes: '' }
-      ]
-   });
 
    // Delivery Inspection Modal State (Conferência de Recebimento)
    const [isReceiveInspectionModalOpen, setIsReceiveInspectionModalOpen] = useState(false);
@@ -293,6 +127,10 @@ const Purchases = () => {
       status: 'Ativo', registeredAt: new Date().toLocaleDateString('pt-BR')
    });
    const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+   const [supplierSearch, setSupplierSearch] = useState('');
+   const [supplierStatusFilter, setSupplierStatusFilter] = useState<'Todos' | 'Ativo' | 'Inativo'>('Todos');
+   const [supplierCategoryFilter, setSupplierCategoryFilter] = useState('Todas');
+   const [selectedSupplierDetailId, setSelectedSupplierDetailId] = useState<string | null>(null);
 
    // Search & Filter for Orders
    const [searchTerm, setSearchTerm] = useState('');
@@ -537,48 +375,6 @@ const Purchases = () => {
       });
    };
 
-   // Quotation Approval -> Generates Official Purchase Order
-   const handleApproveQuotation = (quotation: Quotation, winningQuote: SupplierQuoteEntry) => {
-      addToast(`Aprovar cotação com ${winningQuote.supplierName} (${formatCurrency(winningQuote.totalPrice)})?`, 'info', 10000, {
-         label: 'GERAR PEDIDO DE COMPRA',
-         onClick: () => {
-            const poId = `PO-COT-${Date.now()}`;
-            const officialOrder: PurchaseOrder = {
-               id: poId,
-               supplierId: winningQuote.supplierId,
-               supplierName: winningQuote.supplierName,
-               date: new Date().toLocaleDateString('pt-BR'),
-               items: quotation.items.map(it => ({
-                  id: it.productId || `ITM-${Date.now()}`,
-                  name: it.productName,
-                  quantity: it.quantity,
-                  unit: it.unit,
-                  price: winningQuote.unitPrice
-               })),
-               subtotal: winningQuote.totalPrice,
-               total: winningQuote.totalPrice,
-               status: 'Aprovado', // Directly approved by executive decision
-               paymentTerms: winningQuote.paymentTerms,
-               ledgerCode: '2.02.03',
-               ledgerName: 'Insumos Industriais (Cotação Aprovada)'
-            };
-
-            addPurchaseOrder(officialOrder);
-
-            // Update Quotation Status
-            setQuotations(prev => prev.map(q => q.id === quotation.id ? {
-               ...q,
-               status: 'Aprovada' as const,
-               winningSupplierId: winningQuote.supplierId,
-               winningOrderId: poId
-            } : q));
-
-            addToast(`Cotação aprovada! Ordem de Compra Oficial #${poId} gerada e autorizada.`, 'success');
-            setActiveTab('orders');
-         }
-      });
-   };
-
    const handleSaveStock = (e: React.FormEvent) => {
       e.preventDefault();
       if (!isAdmin) {
@@ -638,26 +434,6 @@ const Purchases = () => {
       addToast("Histórico de compras exportado para CSV!", 'success');
    };
 
-   // Export Quotations to CSV
-   const handleExportQuotationsCSV = () => {
-      const data = filteredQuotations.map(q => {
-         const quotesSorted = [...q.supplierQuotes].sort((a, b) => a.totalPrice - b.totalPrice);
-         const best = quotesSorted[0];
-         return {
-            'ID Cotacao': q.id,
-            'Titulo': q.title,
-            'Data': q.date,
-            'Validade': q.expiryDate,
-            'Status': q.status,
-            'Melhor Fornecedor': best?.supplierName || '-',
-            'Melhor Preco Total': best?.totalPrice || 0,
-            'Prazo Entrega': best ? `${best.deliveryDays} dias` : '-'
-         };
-      });
-      exportToCSV(data, 'Mapa_Comparativo_Cotacoes');
-      addToast("Mapa de cotações exportado!", 'success');
-   };
-
    // Filtered Orders
    const filteredOrders = useMemo(() => {
       return purchaseOrders.filter(order => {
@@ -678,19 +454,37 @@ const Purchases = () => {
       });
    }, [purchaseOrders, searchTerm, statusFilter, orderTypeFilter]);
 
-   // Filtered Quotations
-   const filteredQuotations = useMemo(() => {
-      return quotations.filter(q => {
-         const matchesSearch = !quotationSearch.trim() ||
-            q.id.toLowerCase().includes(quotationSearch.toLowerCase()) ||
-            q.title.toLowerCase().includes(quotationSearch.toLowerCase()) ||
-            q.supplierQuotes.some(sq => sq.supplierName.toLowerCase().includes(quotationSearch.toLowerCase()));
+   // Categories & Filtered Suppliers for Suppliers Master-Detail List
+   const supplierCategories = useMemo(() => {
+      return Array.from(new Set(suppliers.map(s => s.category).filter(Boolean)));
+   }, [suppliers]);
 
-         const matchesStatus = quotationStatusFilter === 'Todas' || q.status === quotationStatusFilter;
+   const filteredSuppliers = useMemo(() => {
+      return suppliers.filter(s => {
+         const term = supplierSearch.toLowerCase().trim();
+         const matchesSearch = !term ||
+            s.name.toLowerCase().includes(term) ||
+            (s.tradeName && s.tradeName.toLowerCase().includes(term)) ||
+            s.document.toLowerCase().includes(term) ||
+            s.category.toLowerCase().includes(term) ||
+            (s.contactPerson && s.contactPerson.toLowerCase().includes(term)) ||
+            (s.email && s.email.toLowerCase().includes(term)) ||
+            (s.phone && s.phone.includes(term));
 
-         return matchesSearch && matchesStatus;
+         const matchesStatus = supplierStatusFilter === 'Todos' || s.status === supplierStatusFilter;
+         const matchesCategory = supplierCategoryFilter === 'Todas' || s.category === supplierCategoryFilter;
+
+         return matchesSearch && matchesStatus && matchesCategory;
       });
-   }, [quotations, quotationSearch, quotationStatusFilter]);
+   }, [suppliers, supplierSearch, supplierStatusFilter, supplierCategoryFilter]);
+
+   const activeDetailSupplier = useMemo(() => {
+      if (selectedSupplierDetailId) {
+         const found = suppliers.find(s => s.id === selectedSupplierDetailId);
+         if (found) return found;
+      }
+      return filteredSuppliers[0] || null;
+   }, [suppliers, selectedSupplierDetailId, filteredSuppliers]);
 
    const handlePrintPurchaseOrder = (order: PurchaseOrder) => {
       const html = `
@@ -758,68 +552,6 @@ const Purchases = () => {
          </div>
       `;
       printDocument(`Ordem_Compra_${order.id}_${order.supplierName.replace(/\s+/g, '_')}`, html);
-   };
-
-   // Print Quotation Comparison Sheet
-   const handlePrintQuotationSheet = (quotation: Quotation) => {
-      const sortedQuotes = [...quotation.supplierQuotes].sort((a, b) => a.totalPrice - b.totalPrice);
-      const lowest = sortedQuotes[0];
-      const highest = sortedQuotes[sortedQuotes.length - 1];
-      const savings = highest ? highest.totalPrice - lowest.totalPrice : 0;
-
-      const html = `
-         <div class="header">
-            <div class="company-info">
-               <h1 style="color: #0891b2; font-size:24px; margin:0;">INFRACORE SUPRIMENTOS</h1>
-               <p style="margin:2px 0; color:#64748b; font-size:12px;">Mapa Comparativo de Cotações (Mínimo 3 Cotações)</p>
-            </div>
-            <div class="doc-info" style="text-align: right;">
-               <h2 style="margin:0; font-size:18px;">MAPA DE COTAÇÃO</h2>
-               <p style="margin:2px 0; font-size:12px;">ID: <strong>${quotation.id}</strong> | Data: ${quotation.date}</p>
-            </div>
-         </div>
-
-         <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin:20px 0;">
-            <p style="margin:0; font-size:16px; font-weight:bold; color:#1e293b;">OBJETO: ${quotation.title.toUpperCase()}</p>
-            <p style="margin:4px 0 0 0; font-size:12px; color:#64748b;">Solicitado por: <strong>${quotation.requestedBy}</strong> | Status: <strong>${quotation.status}</strong></p>
-         </div>
-
-         <h3 style="font-size:12px; text-transform:uppercase; color:#475569;">Quadro Comparativo de Propostas</h3>
-         <table style="width:100%; border-collapse:collapse; margin-top:10px;">
-            <thead>
-               <tr style="background:#f1f5f9; text-align:left; font-size:11px; text-transform:uppercase; color:#475569;">
-                  <th style="padding:10px; border:1px solid #cbd5e1;">Fornecedor</th>
-                  <th style="padding:10px; border:1px solid #cbd5e1; text-align:center;">Prazo Entrega</th>
-                  <th style="padding:10px; border:1px solid #cbd5e1; text-align:center;">Condição Pgto</th>
-                  <th style="padding:10px; border:1px solid #cbd5e1; text-align:right;">Valor Proposta</th>
-                  <th style="padding:10px; border:1px solid #cbd5e1; text-align:center;">Classificação</th>
-               </tr>
-            </thead>
-            <tbody>
-               ${sortedQuotes.map((q, idx) => `
-                  <tr style="font-size:12px; ${idx === 0 ? 'background:#ecfdf5;' : ''}">
-                     <td style="padding:10px; border:1px solid #cbd5e1;"><strong>${q.supplierName}</strong> ${idx === 0 ? '<span style="color:#059669; font-weight:bold;">★ MELHOR PREÇO</span>' : ''}</td>
-                     <td style="padding:10px; border:1px solid #cbd5e1; text-align:center;">${q.deliveryDays} dias</td>
-                     <td style="padding:10px; border:1px solid #cbd5e1; text-align:center;">${q.paymentTerms}</td>
-                     <td style="padding:10px; border:1px solid #cbd5e1; text-align:right; font-weight:bold;">${formatCurrency(q.totalPrice)}</td>
-                     <td style="padding:10px; border:1px solid #cbd5e1; text-align:center;">${idx + 1}º Lugar</td>
-                  </tr>
-               `).join('')}
-            </tbody>
-         </table>
-
-         <div style="margin-top:20px; background:#ecfdf5; border:1px solid #a7f3d0; padding:15px; border-radius:8px;">
-            <p style="margin:0; font-size:13px; font-weight:bold; color:#065f46;">
-               Economia estimada de ${formatCurrency(savings)} contratando o fornecedor vencedor (${lowest?.supplierName}).
-            </p>
-         </div>
-
-         <div style="margin-top: 60px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px;">
-            <div style="border-top: 1px solid #000; text-align:center; font-size:11px; padding-top:6px;">Analista de Suprimentos / Comprador</div>
-            <div style="border-top: 1px solid #000; text-align:center; font-size:11px; padding-top:6px;">Parecer da Diretoria / Aprovação</div>
-         </div>
-      `;
-      printDocument(`Mapa_Cotacao_${quotation.id}`, html);
    };
 
    const getStatusColor = (status: string) => {
@@ -1094,16 +826,11 @@ const Purchases = () => {
                   Módulo de Compras & Suprimentos
                </h2>
                <p className="text-slate-500 dark:text-gray-400 text-sm mt-1">
-                  Gestão integrada de cotações, mapa comparativo, autorização de pedidos e controle de estoque.
+                  Gestão integrada de compras, autorização de pedidos e controle de estoque.
                </p>
             </div>
             <div className="flex items-center gap-2">
-               <button
-                  onClick={() => setIsNewQuotationModalOpen(true)}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md transition-all"
-               >
-                  <Coins size={15} /> Nova Cotação (RFQ)
-               </button>
+               
                <button
                   onClick={() => setActiveTab('new-order')}
                   className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md transition-all"
@@ -1118,7 +845,7 @@ const Purchases = () => {
             <nav className="flex space-x-6 overflow-x-auto no-scrollbar">
                {[
                   { id: 'dashboard', label: 'Painel Geral', icon: BarIcon },
-                  { id: 'quotations', label: 'Cotações & Mapa Comparativo', icon: Coins },
+                  
                   { id: 'orders', label: 'Histórico de Pedidos', icon: FileText },
                   { id: 'approval', label: 'Central de Aprovações', icon: ShieldCheck, badge: purchaseOrders.filter(o => o.status === 'Pendente').length },
                   { id: 'new-order', label: 'Nova Compra (OCP)', icon: Plus },
@@ -1255,17 +982,17 @@ const Purchases = () => {
                   <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700">
                      <div className="flex justify-between items-start mb-3">
                         <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 rounded-xl">
-                           <Coins size={22} />
+                           <Users size={22} />
                         </div>
                         <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-black">
-                           {quotations.filter(q => q.status === 'Em Cotação' || q.status === 'Analisada').length}
+                           {suppliers.filter(s => s.status === 'Ativo').length} Ativos
                         </span>
                      </div>
-                     <p className="text-xs text-slate-400 font-bold uppercase mb-1">Cotações em Andamento</p>
+                     <p className="text-xs text-slate-400 font-bold uppercase mb-1">Fornecedores Homologados</p>
                      <h3 className="text-2xl font-black text-indigo-600">
-                        {quotations.length} RFQs
+                        {suppliers.length} Parceiros
                      </h3>
-                     <div className="mt-2 text-[10px] text-slate-400">Processos de tomada de preço abertos</div>
+                     <div className="mt-2 text-[10px] text-slate-400">Base homologada para suprimentos</div>
                   </div>
 
                   <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700">
@@ -1314,225 +1041,23 @@ const Purchases = () => {
                   <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-gray-700 flex flex-col justify-between">
                      <div>
                         <div className="flex items-center gap-2 text-cyan-600 dark:text-cyan-400 mb-2">
-                           <Coins size={18} />
+                           <Warehouse size={18} />
                            <span className="text-[10px] font-black uppercase tracking-wider">Diretriz de Suprimentos</span>
                         </div>
-                        <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Política de Cotação Mínima</h3>
+                        <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Controle e Recebimento de Insumos</h3>
                         <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                           Aquisições de insumos acima de R$ 5.000,00 exigem mapa comparativo com no mínimo 3 propostas de fornecedores homologados para garantir melhores custos e prazos.
+                           Toda entrada física de material e lançamento financeiro em contas a pagar ocorre diretamente através da conferência de entrega e recebimento de Ordens de Compra aprovadas.
                         </p>
                      </div>
                      <div className="pt-4 border-t border-slate-100 dark:border-gray-700 mt-4">
                         <button
-                           onClick={() => setActiveTab('quotations')}
+                           onClick={() => setActiveTab('inventory')}
                            className="w-full py-2.5 bg-cyan-50 dark:bg-cyan-900/30 hover:bg-cyan-100 text-cyan-700 dark:text-cyan-300 rounded-xl font-bold uppercase text-xs tracking-wider transition-colors flex items-center justify-center gap-2"
                         >
-                           <Coins size={15} /> Acessar Mapa de Cotações
+                           <Warehouse size={15} /> Consultar Estoque de Insumos
                         </button>
                      </div>
                   </div>
-               </div>
-            </div>
-         )}
-
-         {/* TAB 2: COTAÇÕES & MAPA COMPARATIVO */}
-         {activeTab === 'quotations' && (
-            <div className="space-y-6">
-               {/* Quotations Header Control */}
-               <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-gray-700 flex flex-col md:flex-row gap-4 items-center justify-between">
-                  <div className="relative w-full md:w-96">
-                     <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                     <input
-                        type="text"
-                        placeholder="Buscar cotação, objeto ou fornecedor..."
-                        value={quotationSearch}
-                        onChange={e => setQuotationSearch(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
-                     />
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                     <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold">
-                        <Filter size={14} /> Status:
-                     </div>
-                     <select
-                        value={quotationStatusFilter}
-                        onChange={e => setQuotationStatusFilter(e.target.value)}
-                        className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold"
-                     >
-                        <option value="Todas">Todas as Cotações</option>
-                        <option value="Em Cotação">Em Cotação</option>
-                        <option value="Analisada">Analisada</option>
-                        <option value="Aprovada">Aprovada</option>
-                        <option value="Cancelada">Cancelada</option>
-                     </select>
-
-                     <button
-                        onClick={handleExportQuotationsCSV}
-                        className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
-                        title="Exportar CSV"
-                     >
-                        <Download size={14} /> CSV
-                     </button>
-
-                     <button
-                        onClick={() => setIsNewQuotationModalOpen(true)}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
-                     >
-                        <Plus size={14} /> Nova Cotação (RFQ)
-                     </button>
-                  </div>
-               </div>
-
-               {/* Quotations Cards with Comparative Matrix */}
-               <div className="space-y-6">
-                  {filteredQuotations.map(quotation => {
-                     const sortedQuotes = [...quotation.supplierQuotes].sort((a, b) => a.totalPrice - b.totalPrice);
-                     const bestProposal = sortedQuotes[0];
-                     const worstProposal = sortedQuotes[sortedQuotes.length - 1];
-                     const savings = worstProposal ? (worstProposal.totalPrice - bestProposal.totalPrice) : 0;
-                     const savingsPercent = worstProposal && worstProposal.totalPrice > 0 ? (savings / worstProposal.totalPrice) * 100 : 0;
-
-                     return (
-                        <div key={quotation.id} className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-gray-700 space-y-6">
-                           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 dark:border-gray-700 pb-4">
-                              <div>
-                                 <div className="flex items-center gap-2 mb-1">
-                                    <span className="font-mono text-xs font-black text-indigo-600 dark:text-indigo-400">#{quotation.id}</span>
-                                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                                       quotation.status === 'Aprovada' ? 'bg-emerald-100 text-emerald-700' :
-                                       quotation.status === 'Analisada' ? 'bg-indigo-100 text-indigo-700' :
-                                       quotation.status === 'Em Cotação' ? 'bg-amber-100 text-amber-700' :
-                                       'bg-slate-100 text-slate-600'
-                                    }`}>
-                                       {quotation.status}
-                                    </span>
-                                    <span className="text-xs text-slate-400 font-medium">• Validade: {quotation.expiryDate}</span>
-                                 </div>
-                                 <h3 className="text-lg font-black text-slate-800 dark:text-white uppercase tracking-tight">{quotation.title}</h3>
-                                 <p className="text-xs text-slate-500 mt-0.5">Solicitante: <strong>{quotation.requestedBy}</strong> | Itens: {quotation.items.map(i => `${i.quantity} ${i.unit} ${i.productName}`).join(', ')}</p>
-                              </div>
-
-                              <div className="flex items-center gap-3">
-                                 {savings > 0 && (
-                                    <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-xl text-right">
-                                       <span className="text-[9px] font-black uppercase text-emerald-600 block">Economia Máxima</span>
-                                       <span className="text-sm font-black text-emerald-700 dark:text-emerald-400">{formatCurrency(savings)} ({savingsPercent.toFixed(1)}%)</span>
-                                    </div>
-                                 )}
-
-                                 <button
-                                    onClick={() => handlePrintQuotationSheet(quotation)}
-                                    className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 rounded-xl transition-colors"
-                                    title="Imprimir Mapa Comparativo"
-                                 >
-                                    <Printer size={16} />
-                                 </button>
-                              </div>
-                           </div>
-
-                           {/* Comparative Matrix Grid */}
-                           <div>
-                              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-                                 <Award size={13} className="text-amber-500" /> Comparativo de Fornecedores ({quotation.supplierQuotes.length} Cotações)
-                              </h4>
-
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                 {sortedQuotes.map((quote, idx) => {
-                                    const isLowest = idx === 0;
-                                    const isApprovedWinner = quotation.winningSupplierId === quote.supplierId;
-
-                                    return (
-                                       <div
-                                          key={idx}
-                                          className={`p-4 rounded-2xl border transition-all relative flex flex-col justify-between ${
-                                             isApprovedWinner ? 'bg-emerald-50/70 dark:bg-emerald-900/30 border-emerald-400 ring-2 ring-emerald-500' :
-                                             isLowest ? 'bg-indigo-50/40 dark:bg-indigo-900/20 border-indigo-300' :
-                                             'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700'
-                                          }`}
-                                       >
-                                          {isLowest && (
-                                             <div className="absolute -top-2.5 right-4 bg-emerald-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm flex items-center gap-1">
-                                                <Award size={10} /> Melhor Preço
-                                             </div>
-                                          )}
-
-                                          <div>
-                                             <div className="flex justify-between items-start mb-2">
-                                                <h5 className="font-bold text-sm text-slate-800 dark:text-white leading-tight">{quote.supplierName}</h5>
-                                                <span className="text-[10px] font-black text-slate-400">{idx + 1}º Lugar</span>
-                                             </div>
-
-                                             <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-                                                <div className="flex justify-between">
-                                                   <span className="text-slate-400 text-[11px]">Valor Unitário:</span>
-                                                   <span className="font-mono font-bold">{formatCurrency(quote.unitPrice)}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                   <span className="text-slate-400 text-[11px]">Prazo de Entrega:</span>
-                                                   <span className="font-bold">{quote.deliveryDays} dias úteis</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                   <span className="text-slate-400 text-[11px]">Condição de Pgto:</span>
-                                                   <span className="font-bold">{quote.paymentTerms}</span>
-                                                </div>
-                                                {quote.notes && (
-                                                   <p className="text-[10px] text-slate-400 italic pt-1 border-t border-slate-100 dark:border-slate-800">
-                                                      "{quote.notes}"
-                                                   </p>
-                                                )}
-                                             </div>
-                                          </div>
-
-                                          <div className="pt-4 mt-3 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
-                                             <div>
-                                                <span className="text-[9px] font-black uppercase text-slate-400 block">Total Proposta</span>
-                                                <span className={`text-base font-black ${isLowest ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-800 dark:text-white'}`}>
-                                                   {formatCurrency(quote.totalPrice)}
-                                                </span>
-                                             </div>
-
-                                             {quotation.status !== 'Aprovada' && quotation.status !== 'Cancelada' && (
-                                                <button
-                                                   onClick={() => handleApproveQuotation(quotation, quote)}
-                                                   className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-1 shadow-sm ${
-                                                      isLowest
-                                                         ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                                                         : 'bg-white dark:bg-slate-700 hover:bg-slate-100 text-slate-700 dark:text-slate-200 border border-slate-200'
-                                                   }`}
-                                                >
-                                                   <Check size={12} /> Contratar
-                                                </button>
-                                             )}
-
-                                             {isApprovedWinner && (
-                                                <span className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-[9px] font-black uppercase flex items-center gap-1">
-                                                   <CheckCircle size={11} /> Contratado
-                                                </span>
-                                             )}
-                                          </div>
-                                       </div>
-                                    );
-                                 })}
-                              </div>
-                           </div>
-                        </div>
-                     );
-                  })}
-
-                  {filteredQuotations.length === 0 && (
-                     <div className="bg-white dark:bg-gray-800 rounded-3xl p-12 text-center border border-slate-200 dark:border-gray-700">
-                        <Inbox size={40} className="mx-auto text-slate-300 mb-3" />
-                        <h4 className="text-base font-bold text-slate-700 dark:text-slate-300">Nenhuma cotação encontrada</h4>
-                        <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">Cadastre solicitações de cotação para comparar propostas e escolher a melhor oferta de insumos.</p>
-                        <button
-                           onClick={() => setIsNewQuotationModalOpen(true)}
-                           className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold uppercase inline-flex items-center gap-1.5"
-                        >
-                           <Plus size={14} /> Cadastrar Nova Cotação
-                        </button>
-                     </div>
-                  )}
                </div>
             </div>
          )}
@@ -2015,73 +1540,346 @@ const Purchases = () => {
             </div>
          )}
 
-         {/* TAB 6: FORNECEDORES */}
+         {/* TAB 6: FORNECEDORES (LISTA COM DETALHES) */}
          {activeTab === 'suppliers' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
-               {suppliers.map(sup => (
-                  <div key={sup.id} className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-gray-700 hover:border-cyan-200 transition-all group flex flex-col justify-between">
-                     <div>
-                        <div className="flex justify-between items-start mb-4">
-                           <div className="w-12 h-12 bg-slate-100 dark:bg-gray-700 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-cyan-50 group-hover:text-cyan-600 transition-colors">
-                              <Users size={24} />
-                           </div>
-                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${sup.status === 'Ativo' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                              {sup.status}
-                           </span>
-                        </div>
-                        <h4 className="font-bold text-slate-900 dark:text-white text-lg leading-tight mb-1">{sup.name}</h4>
-                        <p className="text-xs text-slate-500 mb-4">{sup.category} • {sup.document}</p>
+            <div className="space-y-4 animate-in fade-in duration-300">
+               {/* Controls Bar */}
+               <div className="flex flex-col md:flex-row gap-3 items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700">
+                  <div className="relative w-full md:w-96">
+                     <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                     <input
+                        type="text"
+                        placeholder="Buscar por razão social, CNPJ, categoria, contato..."
+                        value={supplierSearch}
+                        onChange={e => setSupplierSearch(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-cyan-500"
+                     />
+                  </div>
 
-                        <div className="space-y-2 border-t dark:border-gray-700 pt-4 mt-4">
-                           <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-gray-400">
-                              <Calendar size={14} className="text-slate-400" />
-                              Cadastrado em: {sup.registeredAt}
-                           </div>
-                           <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-gray-400">
-                              <DollarSign size={14} className="text-slate-400" />
-                              Total Comprado: {formatCurrency(purchaseOrders.filter(o => o.supplierId === sup.id).reduce((a, b) => a + b.total, 0))}
-                           </div>
-                        </div>
-                     </div>
+                  <div className="flex items-center gap-2 overflow-x-auto no-scrollbar w-full md:w-auto">
+                     <select
+                        value={supplierCategoryFilter}
+                        onChange={e => setSupplierCategoryFilter(e.target.value)}
+                        className="px-3 py-1.5 bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl text-xs font-bold text-slate-600 dark:text-gray-300 outline-none"
+                     >
+                        <option value="Todas">Todas Categorias</option>
+                        {supplierCategories.map(c => (
+                           <option key={c} value={c}>{c}</option>
+                        ))}
+                     </select>
 
-                     <div className="mt-6 flex gap-2">
+                     {(['Todos', 'Ativo', 'Inativo'] as const).map(f => (
                         <button
+                           key={f}
                            type="button"
-                           onClick={() => {
-                              setEditingSupplier(sup);
-                              setSupForm(sup);
-                              setIsSupplierModalOpen(true);
-                           }}
-                           className="flex-1 py-2 bg-slate-50 dark:bg-gray-700 text-slate-600 dark:text-gray-300 rounded-lg text-xs font-bold hover:bg-cyan-50 hover:text-cyan-600 transition-colors"
+                           onClick={() => setSupplierStatusFilter(f)}
+                           className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+                              supplierStatusFilter === f
+                                 ? 'bg-slate-900 text-white shadow-sm'
+                                 : 'bg-slate-50 text-slate-500 border border-slate-100 hover:bg-slate-100 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600'
+                           }`}
                         >
-                           Editar
+                           {f}
                         </button>
-                        <button
-                           onClick={() => {
-                              setSelectedSupplier(sup.id);
-                              setActiveTab('new-order');
-                           }}
-                           className="flex-1 py-2 bg-cyan-600 text-white rounded-lg text-xs font-bold hover:bg-cyan-700 transition-colors"
-                        >
-                           Nova Ordem
-                        </button>
+                     ))}
+
+                     <button
+                        onClick={() => {
+                           setEditingSupplier(null);
+                           setSupForm({ status: 'Ativo', registeredAt: new Date().toLocaleDateString('pt-BR') });
+                           setIsSupplierModalOpen(true);
+                        }}
+                        className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold uppercase ml-2 flex items-center gap-1.5 transition-colors shadow-sm whitespace-nowrap"
+                     >
+                        <Plus size={14} /> Novo Fornecedor
+                     </button>
+                  </div>
+               </div>
+
+               {/* Master-Detail Layout */}
+               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  {/* Master List (5 cols) */}
+                  <div className="lg:col-span-5 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 overflow-hidden flex flex-col">
+                     <div className="p-3.5 border-b border-slate-100 dark:border-gray-700 flex justify-between items-center bg-slate-50/60 dark:bg-gray-800/60">
+                        <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
+                           Fornecedores Homologados ({filteredSuppliers.length})
+                        </span>
+                        <span className="text-[10px] text-slate-400">Clique para inspecionar</span>
+                     </div>
+
+                     <div className="divide-y divide-slate-100 dark:divide-gray-700 max-h-[720px] overflow-y-auto">
+                        {filteredSuppliers.length === 0 ? (
+                           <div className="p-8 text-center text-slate-400 text-xs">
+                              <Users size={32} className="mx-auto mb-2 text-slate-300" />
+                              Nenhum fornecedor encontrado com os filtros atuais.
+                           </div>
+                        ) : (
+                           filteredSuppliers.map(sup => {
+                              const isSelected = activeDetailSupplier?.id === sup.id;
+                              const supOrders = purchaseOrders.filter(o => o.supplierId === sup.id);
+                              const totalPurchased = supOrders.reduce((a, b) => a + b.total, 0);
+
+                              return (
+                                 <button
+                                    key={sup.id}
+                                    type="button"
+                                    onClick={() => setSelectedSupplierDetailId(sup.id)}
+                                    className={`w-full text-left p-4 transition-all flex items-start gap-3.5 relative ${
+                                       isSelected
+                                          ? 'bg-cyan-50/70 dark:bg-cyan-950/30 border-l-4 border-l-cyan-600'
+                                          : 'hover:bg-slate-50 dark:hover:bg-gray-700/50 border-l-4 border-l-transparent'
+                                    }`}
+                                 >
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs shrink-0 transition-colors ${
+                                       isSelected
+                                          ? 'bg-cyan-600 text-white'
+                                          : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-gray-300'
+                                    }`}>
+                                       {sup.initials || sup.name.slice(0, 2).toUpperCase()}
+                                    </div>
+
+                                    <div className="min-w-0 flex-1">
+                                       <div className="flex items-center justify-between gap-2 mb-0.5">
+                                          <h4 className="font-bold text-xs text-slate-900 dark:text-white truncate">
+                                             {sup.name}
+                                          </h4>
+                                          <span className={`px-2 py-0.2 rounded-full text-[9px] font-black uppercase shrink-0 ${
+                                             sup.status === 'Ativo'
+                                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                                : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
+                                          }`}>
+                                             {sup.status}
+                                          </span>
+                                       </div>
+
+                                       <p className="text-[11px] text-slate-500 dark:text-gray-400 truncate mb-1.5">
+                                          {sup.category} • CNPJ: {sup.document}
+                                       </p>
+
+                                       <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-100 dark:border-gray-700/60">
+                                          <span>{supOrders.length} ordens</span>
+                                          <span className="font-bold font-mono text-slate-700 dark:text-gray-300">
+                                             {formatCurrency(totalPurchased)}
+                                          </span>
+                                       </div>
+                                    </div>
+                                 </button>
+                              );
+                           })
+                        )}
                      </div>
                   </div>
-               ))}
 
-               <button
-                  onClick={() => {
-                     setEditingSupplier(null);
-                     setSupForm({ status: 'Ativo', registeredAt: new Date().toLocaleDateString('pt-BR') });
-                     setIsSupplierModalOpen(true);
-                  }}
-                  className="bg-slate-50/50 dark:bg-gray-800/50 border-2 border-dashed border-slate-200 dark:border-gray-700 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-cyan-300 hover:text-cyan-500 transition-all group min-h-[250px]"
-               >
-                  <div className="p-3 bg-white dark:bg-gray-700 rounded-full group-hover:scale-110 transition-transform shadow-sm">
-                     <Plus size={32} />
+                  {/* Detail View (7 cols) */}
+                  <div className="lg:col-span-7">
+                     {activeDetailSupplier ? (() => {
+                        const sup = activeDetailSupplier;
+                        const supOrders = purchaseOrders.filter(o => o.supplierId === sup.id);
+                        const totalPurchased = supOrders.reduce((a, b) => a + b.total, 0);
+                        const avgTicket = supOrders.length > 0 ? (totalPurchased / supOrders.length) : 0;
+
+                        return (
+                           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 p-6 space-y-6 animate-in fade-in duration-200">
+                              {/* Header Card */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-gray-700">
+                                 <div className="flex items-start gap-4">
+                                    <div className="w-14 h-14 bg-cyan-600 text-white rounded-2xl flex items-center justify-center font-black text-lg shadow-md shadow-cyan-600/20 shrink-0">
+                                       {sup.initials || sup.name.slice(0, 2).toUpperCase()}
+                                    </div>
+                                    <div>
+                                       <div className="flex items-center gap-2 mb-1">
+                                          <h3 className="font-bold text-lg text-slate-900 dark:text-white leading-tight">
+                                             {sup.name}
+                                          </h3>
+                                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                             sup.status === 'Ativo'
+                                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                                : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
+                                          }`}>
+                                             {sup.status}
+                                          </span>
+                                       </div>
+                                       {sup.tradeName && (
+                                          <p className="text-xs font-semibold text-slate-500 mb-1">
+                                             Nome Fantasia: {sup.tradeName}
+                                          </p>
+                                       )}
+                                       <p className="text-xs text-slate-400">
+                                          Categoria: <strong className="text-slate-600 dark:text-slate-300">{sup.category}</strong> • CNPJ/CPF: <strong className="text-slate-600 dark:text-slate-300">{sup.document}</strong>
+                                       </p>
+                                    </div>
+                                 </div>
+
+                                 <div className="flex items-center gap-2 self-start sm:self-center">
+                                    <button
+                                       type="button"
+                                       onClick={() => {
+                                          setEditingSupplier(sup);
+                                          setSupForm(sup);
+                                          setIsSupplierModalOpen(true);
+                                       }}
+                                       className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-slate-700 dark:text-gray-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+                                    >
+                                       <Edit2 size={14} /> Editar
+                                    </button>
+                                    <button
+                                       type="button"
+                                       onClick={() => {
+                                          setSelectedSupplier(sup.id);
+                                          setActiveTab('new-order');
+                                       }}
+                                       className="px-3.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow transition-colors"
+                                    >
+                                       <Plus size={14} /> Nova Compra
+                                    </button>
+                                 </div>
+                              </div>
+
+                              {/* KPI Strip */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                 <div className="bg-slate-50 dark:bg-gray-900/50 p-3.5 rounded-xl border border-slate-100 dark:border-gray-700">
+                                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Volume Comprado</span>
+                                    <span className="text-sm font-black font-mono text-cyan-600">{formatCurrency(totalPurchased)}</span>
+                                 </div>
+                                 <div className="bg-slate-50 dark:bg-gray-900/50 p-3.5 rounded-xl border border-slate-100 dark:border-gray-700">
+                                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Ordens Totais</span>
+                                    <span className="text-sm font-black text-slate-800 dark:text-white">{supOrders.length} pedidos</span>
+                                 </div>
+                                 <div className="bg-slate-50 dark:bg-gray-900/50 p-3.5 rounded-xl border border-slate-100 dark:border-gray-700">
+                                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Ticket Médio</span>
+                                    <span className="text-sm font-black font-mono text-slate-800 dark:text-white">{formatCurrency(avgTicket)}</span>
+                                 </div>
+                                 <div className="bg-slate-50 dark:bg-gray-900/50 p-3.5 rounded-xl border border-slate-100 dark:border-gray-700">
+                                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Cadastrado em</span>
+                                    <span className="text-xs font-bold text-slate-700 dark:text-gray-300">{sup.registeredAt || 'Não informado'}</span>
+                                 </div>
+                              </div>
+
+                              {/* Informações de Contato e Fiscais */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                 <div className="p-4 bg-slate-50 dark:bg-gray-900/40 rounded-xl border border-slate-100 dark:border-gray-700/80 space-y-2.5">
+                                    <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-gray-300 mb-2">
+                                       <Phone size={14} className="text-cyan-600" />
+                                       Contato & Comunicação
+                                    </div>
+                                    <div className="text-xs">
+                                       <span className="text-slate-400 block text-[10px] uppercase font-bold">Responsável</span>
+                                       <span className="font-semibold text-slate-800 dark:text-white">{sup.contactPerson || 'Não informado'}</span>
+                                    </div>
+                                    <div className="text-xs">
+                                       <span className="text-slate-400 block text-[10px] uppercase font-bold">Telefone</span>
+                                       <span className="font-semibold text-slate-800 dark:text-white">{sup.phone || 'Não informado'}</span>
+                                    </div>
+                                    <div className="text-xs">
+                                       <span className="text-slate-400 block text-[10px] uppercase font-bold">E-mail Comercial</span>
+                                       <span className="font-semibold text-slate-800 dark:text-white break-all">{sup.email || 'Não informado'}</span>
+                                    </div>
+                                 </div>
+
+                                 <div className="p-4 bg-slate-50 dark:bg-gray-900/40 rounded-xl border border-slate-100 dark:border-gray-700/80 space-y-2.5">
+                                    <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-gray-300 mb-2">
+                                       <Building2 size={14} className="text-cyan-600" />
+                                       Dados Cadastrais & Fiscais
+                                    </div>
+                                    <div className="text-xs">
+                                       <span className="text-slate-400 block text-[10px] uppercase font-bold">Razão Social</span>
+                                       <span className="font-semibold text-slate-800 dark:text-white">{sup.name}</span>
+                                    </div>
+                                    <div className="text-xs">
+                                       <span className="text-slate-400 block text-[10px] uppercase font-bold">CNPJ / CPF</span>
+                                       <span className="font-semibold font-mono text-slate-800 dark:text-white">{sup.document}</span>
+                                    </div>
+                                    <div className="text-xs">
+                                       <span className="text-slate-400 block text-[10px] uppercase font-bold">Segmento / Categoria</span>
+                                       <span className="font-semibold text-slate-800 dark:text-white">{sup.category}</span>
+                                    </div>
+                                 </div>
+                              </div>
+
+                              {/* Histórico Recente de Ordens de Compra */}
+                              <div className="space-y-3 pt-2">
+                                 <div className="flex justify-between items-center">
+                                    <h4 className="text-xs font-black uppercase text-slate-700 dark:text-gray-300 tracking-wider">
+                                       Histórico de Ordens com este Fornecedor ({supOrders.length})
+                                    </h4>
+                                    {supOrders.length > 0 && (
+                                       <button
+                                          type="button"
+                                          onClick={() => {
+                                             setSearchTerm(sup.name);
+                                             setActiveTab('orders');
+                                          }}
+                                          className="text-[11px] font-bold text-cyan-600 hover:text-cyan-700 dark:text-cyan-400"
+                                       >
+                                          Ver todas no Histórico →
+                                       </button>
+                                    )}
+                                 </div>
+
+                                 {supOrders.length === 0 ? (
+                                    <div className="p-6 bg-slate-50 dark:bg-gray-900/30 rounded-xl border border-dashed border-slate-200 dark:border-gray-700 text-center">
+                                       <p className="text-xs text-slate-400 mb-2">Nenhuma ordem de compra registrada para este fornecedor.</p>
+                                       <button
+                                          type="button"
+                                          onClick={() => {
+                                             setSelectedSupplier(sup.id);
+                                             setActiveTab('new-order');
+                                          }}
+                                          className="px-3 py-1.5 bg-cyan-600 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1"
+                                       >
+                                          <Plus size={13} /> Emitir Primeira Compra
+                                       </button>
+                                    </div>
+                                 ) : (
+                                    <div className="border border-slate-100 dark:border-gray-700 rounded-xl overflow-hidden">
+                                       <table className="w-full text-left text-xs">
+                                          <thead className="bg-slate-50 dark:bg-gray-700/50 text-[10px] font-bold text-slate-400 uppercase">
+                                             <tr>
+                                                <th className="p-3">Ordem</th>
+                                                <th className="p-3">Data</th>
+                                                <th className="p-3">Itens</th>
+                                                <th className="p-3 text-right">Valor Total</th>
+                                                <th className="p-3 text-center">Status</th>
+                                             </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
+                                             {supOrders.slice(0, 5).map(o => (
+                                                <tr
+                                                   key={o.id}
+                                                   onClick={() => setSelectedOrder(o)}
+                                                   className="hover:bg-slate-50 dark:hover:bg-gray-700/40 cursor-pointer transition-colors"
+                                                >
+                                                   <td className="p-3 font-mono font-bold text-cyan-600">{o.id}</td>
+                                                   <td className="p-3 text-slate-600 dark:text-gray-300">{o.date}</td>
+                                                   <td className="p-3 text-slate-600 dark:text-gray-300 truncate max-w-[150px]">
+                                                      {o.items.map(it => it.name).join(', ')}
+                                                   </td>
+                                                   <td className="p-3 text-right font-mono font-bold text-slate-800 dark:text-white">
+                                                      {formatCurrency(o.total)}
+                                                   </td>
+                                                   <td className="p-3 text-center">
+                                                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${getStatusColor(o.status)}`}>
+                                                         {o.status}
+                                                      </span>
+                                                   </td>
+                                                </tr>
+                                             ))}
+                                          </tbody>
+                                       </table>
+                                    </div>
+                                 )}
+                              </div>
+                           </div>
+                        );
+                     })() : (
+                        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 p-12 text-center text-slate-400">
+                           <Users size={40} className="mx-auto mb-3 text-slate-300" />
+                           <h4 className="font-bold text-sm text-slate-700 dark:text-gray-200">Nenhum fornecedor selecionado</h4>
+                           <p className="text-xs text-slate-400 mt-1">Selecione um fornecedor na lista ao lado para ver sua ficha completa e histórico de compras.</p>
+                        </div>
+                     )}
                   </div>
-                  <span className="font-bold text-sm">Adicionar Novo Fornecedor</span>
-               </button>
+               </div>
             </div>
          )}
 
@@ -2347,202 +2145,6 @@ const Purchases = () => {
                         <CheckCircle size={15} /> Confirmar Entrada no Estoque
                      </button>
                   </div>
-               </div>
-            </div>
-         )}
-
-         {/* MODAL: NOVA COTAÇÃO (RFQ) */}
-         {isNewQuotationModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden my-6">
-                  <div className="p-5 border-b dark:border-gray-700 bg-slate-50 dark:bg-gray-800/50 flex justify-between items-center">
-                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-indigo-600 text-white rounded-xl">
-                           <Coins size={18} />
-                        </div>
-                        <div>
-                           <h3 className="font-bold text-base text-slate-900 dark:text-white">Criar Solicitação de Cotação (RFQ)</h3>
-                           <p className="text-xs text-slate-500">Mínimo 3 fornecedores para comparação de preços e prazos</p>
-                        </div>
-                     </div>
-                     <button onClick={() => setIsNewQuotationModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                        <X size={20} />
-                     </button>
-                  </div>
-
-                  <form
-                     onSubmit={(e) => {
-                        e.preventDefault();
-                        const quoteId = `COT-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
-                        const createdQuotation: Quotation = {
-                           id: quoteId,
-                           title: newQuotationForm.title,
-                           date: new Date().toLocaleDateString('pt-BR'),
-                           expiryDate: newQuotationForm.expiryDate,
-                           requestedBy: newQuotationForm.requestedBy,
-                           status: 'Em Cotação',
-                           items: newQuotationForm.items,
-                           supplierQuotes: newQuotationForm.quotes.filter(q => q.supplierName.trim() !== '')
-                        };
-                        setQuotations(prev => [createdQuotation, ...prev]);
-                        addToast(`Cotação #${quoteId} criada com sucesso!`, 'success');
-                        setIsNewQuotationModalOpen(false);
-                     }}
-                  >
-                     <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-                        <div>
-                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Título / Objeto da Cotação</label>
-                           <input
-                              type="text"
-                              placeholder="Ex: Fornecimento de 50 Toneladas de Cimento CP-II"
-                              value={newQuotationForm.title}
-                              onChange={e => setNewQuotationForm({ ...newQuotationForm, title: e.target.value })}
-                              required
-                              className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
-                           />
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                           <div>
-                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Departamento Solicitante</label>
-                              <input
-                                 type="text"
-                                 value={newQuotationForm.requestedBy}
-                                 onChange={e => setNewQuotationForm({ ...newQuotationForm, requestedBy: e.target.value })}
-                                 required
-                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
-                              />
-                           </div>
-                           <div>
-                              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Prazo Limite / Validade</label>
-                              <input
-                                 type="date"
-                                 value={newQuotationForm.expiryDate}
-                                 onChange={e => setNewQuotationForm({ ...newQuotationForm, expiryDate: e.target.value })}
-                                 required
-                                 className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold"
-                              />
-                           </div>
-                        </div>
-
-                        {/* Item */}
-                        <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2">
-                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">Item Cotado</label>
-                           <div className="grid grid-cols-3 gap-2">
-                              <div className="col-span-2">
-                                 <select
-                                    value={newQuotationForm.items[0]?.productId}
-                                    onChange={e => {
-                                       const selected = inventory.find(i => i.id === e.target.value);
-                                       const itms = [...newQuotationForm.items];
-                                       itms[0] = {
-                                          productId: e.target.value,
-                                          productName: selected ? selected.name : 'Insumo',
-                                          quantity: itms[0]?.quantity || 10,
-                                          unit: selected ? selected.unit : 'un'
-                                       };
-                                       setNewQuotationForm({ ...newQuotationForm, items: itms });
-                                    }}
-                                    required
-                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
-                                 >
-                                    <option value="">Selecione o produto do estoque...</option>
-                                    {inventory.map(i => (
-                                       <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>
-                                    ))}
-                                 </select>
-                              </div>
-                              <div>
-                                 <input
-                                    type="number"
-                                    placeholder="Quantidade"
-                                    value={newQuotationForm.items[0]?.quantity}
-                                    onChange={e => {
-                                       const itms = [...newQuotationForm.items];
-                                       itms[0] = { ...itms[0], quantity: Number(e.target.value) };
-                                       setNewQuotationForm({ ...newQuotationForm, items: itms });
-                                    }}
-                                    required
-                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs font-bold"
-                                 />
-                              </div>
-                           </div>
-                        </div>
-
-                        {/* Supplier Quotes (3 Suppliers) */}
-                        <div className="space-y-2.5">
-                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">Propostas dos Fornecedores (Mínimo 3)</label>
-                           {newQuotationForm.quotes.map((q, idx) => (
-                              <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
-                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    <div>
-                                       <select
-                                          value={q.supplierId}
-                                          onChange={e => {
-                                             const sup = suppliers.find(s => s.id === e.target.value);
-                                             const nq = [...newQuotationForm.quotes];
-                                             nq[idx] = { ...nq[idx], supplierId: e.target.value, supplierName: sup ? sup.name : '' };
-                                             setNewQuotationForm({ ...newQuotationForm, quotes: nq });
-                                          }}
-                                          required
-                                          className="w-full bg-white dark:bg-slate-800 border rounded-lg p-2 text-xs font-bold"
-                                       >
-                                          <option value="">Selecione o Fornecedor {idx + 1}...</option>
-                                          {suppliers.map(s => (
-                                             <option key={s.id} value={s.id}>{s.name}</option>
-                                          ))}
-                                       </select>
-                                    </div>
-                                    <div className="flex gap-2">
-                                       <input
-                                          type="number"
-                                          step="0.01"
-                                          placeholder="Preço Unit. (R$)"
-                                          value={q.unitPrice || ''}
-                                          onChange={e => {
-                                             const price = Number(e.target.value);
-                                             const qty = newQuotationForm.items[0]?.quantity || 1;
-                                             const nq = [...newQuotationForm.quotes];
-                                             nq[idx] = { ...nq[idx], unitPrice: price, totalPrice: price * qty };
-                                             setNewQuotationForm({ ...newQuotationForm, quotes: nq });
-                                          }}
-                                          required
-                                          className="w-full bg-white dark:bg-slate-800 border rounded-lg p-2 text-xs font-bold"
-                                       />
-                                       <input
-                                          type="number"
-                                          placeholder="Prazo (dias)"
-                                          value={q.deliveryDays}
-                                          onChange={e => {
-                                             const nq = [...newQuotationForm.quotes];
-                                             nq[idx] = { ...nq[idx], deliveryDays: Number(e.target.value) };
-                                             setNewQuotationForm({ ...newQuotationForm, quotes: nq });
-                                          }}
-                                          className="w-24 bg-white dark:bg-slate-800 border rounded-lg p-2 text-xs font-bold"
-                                       />
-                                    </div>
-                                 </div>
-                              </div>
-                           ))}
-                        </div>
-                     </div>
-
-                     <div className="p-5 bg-slate-50 dark:bg-gray-800/80 border-t dark:border-gray-700 flex gap-3">
-                        <button
-                           type="button"
-                           onClick={() => setIsNewQuotationModalOpen(false)}
-                           className="flex-1 py-2.5 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 transition-colors uppercase"
-                        >
-                           Cancelar
-                        </button>
-                        <button
-                           type="submit"
-                           className="flex-[2] py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow transition-colors flex items-center justify-center gap-2"
-                        >
-                           <Save size={15} /> Salvar Cotação
-                        </button>
-                     </div>
-                  </form>
                </div>
             </div>
          )}
