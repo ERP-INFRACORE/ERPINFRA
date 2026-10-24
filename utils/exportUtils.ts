@@ -19,17 +19,20 @@ export const exportToCSV = (data: any[], fileName: string, customHeaders?: strin
             headers.map(header => {
                 let value = row[header] ?? '';
 
-                // Handle values that might contain semicolon or newlines
-                if (typeof value === 'string') {
+                // Handle numbers: format decimals with comma for PT-BR Excel
+                if (typeof value === 'number') {
+                    value = Number.isInteger(value) ? String(value) : value.toFixed(2).replace('.', ',');
+                } else if (typeof value === 'string') {
+                    // Handle values that might contain semicolon, newlines or quotes
                     value = value.replace(/"/g, '""'); // Escape double quotes
-                    if (value.includes(';') || value.includes('\n') || value.includes('"')) {
+                    if (value.includes(';') || value.includes('\n') || value.includes('"') || value.includes(',')) {
                         value = `"${value}"`;
                     }
-                }
-
-                // Handle arrays (like items in an order)
-                if (Array.isArray(value)) {
-                    value = `"${value.map(v => v.name || v).join(', ')}"`;
+                } else if (Array.isArray(value)) {
+                    // Handle arrays (like items in an order)
+                    value = `"${value.map(v => v.name || v.description || v).join(', ').replace(/"/g, '""')}"`;
+                } else if (typeof value === 'object' && value !== null) {
+                    value = `"${JSON.stringify(value).replace(/"/g, '""')}"`;
                 }
 
                 return value;
@@ -51,15 +54,70 @@ export const exportToCSV = (data: any[], fileName: string, customHeaders?: strin
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 };
 
 export const exportDashboardToExcel = (contextData: any) => {
-    // This is a more complex aggregation for a general report
-    const { transactions, sales, employees, inventory, fleet } = contextData;
+    const { financials, transactions = [], sales = [], employees = [], inventory = [], fleet = [], settings } = contextData || {};
 
-    // We can't easily export multiple tabs into one file without a heavy library like xlsx,
-    // so we provide a selection or export the most important one (Financials/Transactions)
-    exportToCSV(transactions, 'Relatorio_Financeiro_Completo');
+    const companyName = settings?.companyName || 'InfraCore Engenharia e Tecnologia Ltda';
+    const cnpj = settings?.document || '12.345.678/0001-99';
+    const today = new Date().toLocaleDateString('pt-BR');
+    const time = new Date().toLocaleTimeString('pt-BR');
+
+    const totalRevenue = financials?.totalRevenue || transactions.filter((t: any) => t.type === 'Receita').reduce((acc: number, t: any) => acc + (t.amount || 0), 0);
+    const totalExpenses = financials?.totalExpenses || transactions.filter((t: any) => t.type === 'Despesa').reduce((acc: number, t: any) => acc + (t.amount || 0), 0);
+    const currentBalance = financials?.balance ?? (totalRevenue - totalExpenses);
+    const receivables = financials?.receivables || 0;
+    const payables = financials?.payables || 0;
+    const totalInventoryValue = inventory.reduce((sum: number, item: any) => sum + ((item.price || 0) * (item.quantity || 0)), 0);
+
+    const fmt = (val: number) => val.toFixed(2).replace('.', ',');
+
+    const sections = [
+        `# =========================================================================`,
+        `# RELATÓRIO EXECUTIVO CONSOLIDADO (BI DASHBOARD)`,
+        `# Empresa: ${companyName} | CNPJ: ${cnpj}`,
+        `# Data de Emissão: ${today} às ${time}`,
+        `# =========================================================================`,
+        ``,
+        `# --- 1. INDICADORES FINANCEIROS GERAIS ---`,
+        `Métrica;Valor Apurado (R$);Status`,
+        `Faturamento Bruto Consolidado;${fmt(totalRevenue)};Auditado`,
+        `Despesas Operacionais Totais;${fmt(totalExpenses)};Auditado`,
+        `Saldo em Contas / Disponibilidade;${fmt(currentBalance)};Auditado`,
+        `Títulos a Receber Previstos;${fmt(receivables)};Em Aberto`,
+        `Títulos a Pagar Pendentes;${fmt(payables)};Em Aberto`,
+        `Capital de Giro Líquido Estimado;${fmt(currentBalance + receivables - payables)};Calculado`,
+        ``,
+        `# --- 2. SÍNTESE PATRIMONIAL E OPERACIONAL ---`,
+        `Departamento / Ativo;Quantidade;Valor Total (R$)`,
+        `Clientes Cadastrados;${contextData?.clients?.length || 0};-`,
+        `Vendas Registradas;${sales.length};${fmt(sales.reduce((s: number, x: any) => s + (x.amount || 0), 0))}`,
+        `Itens em Catálogo de Estoque;${inventory.length};${fmt(totalInventoryValue)}`,
+        `Veículos da Frota Operacional;${fleet.length};-`,
+        `Quadro de Colaboradores;${employees.length};${fmt(employees.reduce((s: number, e: any) => s + (e.salary || 0), 0))}`,
+        ``,
+        `# --- 3. ÚLTIMAS TRANSAÇÕES FINANCEIRAS ---`,
+        `Data;Descrição;Categoria;Tipo;Valor (R$);Status;Conta`,
+        ...transactions.slice(0, 50).map((t: any) =>
+            `${t.date || ''};"${(t.description || '').replace(/"/g, '""')}";"${(t.ledgerName || t.category || '').replace(/"/g, '""')}";${t.type || ''};${fmt(t.amount || 0)};${t.status || ''};"${(t.account || '').replace(/"/g, '""')}"`
+        )
+    ].join('\n');
+
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + sections], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Resumo_Executivo_BI_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 };
 
 export const printDocument = (title: string, htmlContent: string) => {
@@ -69,15 +127,47 @@ export const printDocument = (title: string, htmlContent: string) => {
         return;
     }
 
+    const trimmed = htmlContent.trim().toLowerCase();
+    const isFullDocument = trimmed.startsWith('<!doctype') || trimmed.startsWith('<html');
+
+    if (isFullDocument) {
+        // If content is already a full HTML document, write it directly and ensure window.print is called
+        let finalHtml = htmlContent;
+        if (!finalHtml.includes('window.print()')) {
+            const printScript = `
+                <script>
+                    window.onload = () => {
+                        setTimeout(() => {
+                            window.print();
+                        }, 500);
+                    };
+                </script>
+            `;
+            if (finalHtml.includes('</body>')) {
+                finalHtml = finalHtml.replace('</body>', `${printScript}</body>`);
+            } else {
+                finalHtml += printScript;
+            }
+        }
+
+        printWindow.document.open();
+        printWindow.document.write(finalHtml);
+        printWindow.document.close();
+        return;
+    }
+
+    // Default template for HTML fragments/snippets (Sales, Purchases, Production, etc.)
+    printWindow.document.open();
     printWindow.document.write(`
         <!DOCTYPE html>
         <html>
         <head>
+            <meta charset="utf-8" />
             <title>${title}</title>
             <style>
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
                 body { 
-                    font-family: 'Inter', sans-serif; 
+                    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
                     padding: 40px; 
                     color: #1e293b; 
                     line-height: 1.5;
@@ -95,7 +185,7 @@ export const printDocument = (title: string, htmlContent: string) => {
                 .doc-info h2 { margin: 0; font-size: 20px; text-transform: uppercase; color: #64748b; }
                 .details-grid { 
                     display: grid; 
-                    grid-template-cols: 1fr 1fr; 
+                    grid-template-columns: 1fr 1fr; 
                     gap: 40px; 
                     margin-bottom: 40px;
                 }
@@ -124,8 +214,8 @@ export const printDocument = (title: string, htmlContent: string) => {
                 }
                 td { 
                     padding: 12px; 
-                    border-bottom: 1px solid #f1f5f9;
-                    font-size: 14px;
+                    border-bottom: 1px solid #f1f5f9; 
+                    font-size: 14px; 
                 }
                 .text-right { text-align: right; }
                 .totals { 
@@ -151,7 +241,7 @@ export const printDocument = (title: string, htmlContent: string) => {
                     border-top: 1px solid #e2e8f0; 
                     padding-top: 20px; 
                     font-size: 10px; 
-                    color: #94a3b8;
+                    color: #94a3b8; 
                     text-align: center; 
                 }
                 @media print {
@@ -170,7 +260,7 @@ export const printDocument = (title: string, htmlContent: string) => {
                     setTimeout(() => {
                         window.print();
                     }, 500);
-                }
+                };
             </script>
         </body>
         </html>

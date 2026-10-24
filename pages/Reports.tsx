@@ -59,26 +59,36 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
-import { printDocument } from '../utils/exportUtils';
+import { printDocument, exportDashboardToExcel } from '../utils/exportUtils';
 
 const formatMoney = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
 
 const parseDateString = (dateStr?: string): Date => {
     if (!dateStr) return new Date();
+    // Handles DD/MM/YYYY
     if (dateStr.includes('/')) {
-        const parts = dateStr.split('/').map(Number);
+        const parts = dateStr.split(' ')[0].split('/').map(Number);
         if (parts.length === 3) {
-            return new Date(parts[2], parts[1] - 1, parts[0]);
+            return new Date(parts[2], parts[1] - 1, parts[0], 12, 0, 0);
+        }
+    }
+    // Handles ISO YYYY-MM-DD
+    if (dateStr.includes('-')) {
+        const datePart = dateStr.split('T')[0];
+        const parts = datePart.split('-').map(Number);
+        if (parts.length === 3) {
+            return new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
         }
     }
     const parsed = new Date(dateStr);
     return isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
-const formatDateBR = (isoDateOrStr: string) => {
+const formatDateBR = (isoDateOrStr?: string) => {
     if (!isoDateOrStr) return '';
     if (isoDateOrStr.includes('/')) return isoDateOrStr;
-    const [year, month, day] = isoDateOrStr.split('-');
+    const datePart = isoDateOrStr.split('T')[0];
+    const [year, month, day] = datePart.split('-');
     if (year && month && day) return `${day}/${month}/${year}`;
     return isoDateOrStr;
 };
@@ -87,7 +97,9 @@ const Reports = () => {
     const {
         financials, transactions, sales, budgets, inventory, purchaseOrders,
         clients, fleet, employees, stockMovements, settings, planOfAccounts,
-        accounts, currentUser
+        accounts, currentUser,
+        productionOrders = [], productionUnits = [], formulas = [],
+        tires = [], auditLogs = [], suppliers = [], payroll = []
     } = useApp();
     const { addToast } = useToast();
 
@@ -125,8 +137,9 @@ const Reports = () => {
     // Report Library Filters
     const [searchTerm, setSearchTerm] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('Todos');
-    const [editingReportId, setEditingReportId] = useState<string | null>(null);
-    const [reportSettings, setReportSettings] = useState<Record<string, { format: string; period: string; favorite: boolean; fields?: string[] }>>({});
+
+    // Dashboard BI Trends State & Period Selection
+    const [reportPeriod, setReportPeriod] = useState<'7d' | '30d' | '12m'>('30d');
 
     // Company Data
     const company = useMemo(() => ({
@@ -139,7 +152,7 @@ const Reports = () => {
         address: settings?.address || 'Rua da Tecnologia, 100 - Distrito Industrial, SP'
     }), [settings]);
 
-    // Extended Modules for Reporting - Organized by Category
+    // Extended Modules for Reporting - Organized by Category (39 Total Models)
     const modules = [
         // COMERCIAL
         { id: 'sales', name: 'Vendas Realizadas', icon: <DollarSign size={16} />, category: 'Comercial', description: 'Histórico completo de vendas com cliente, produtos, valores e forma de pagamento.', fields: ['ID', 'Data', 'Cliente', 'Produtos', 'Total', 'Pagamento', 'Status'] },
@@ -170,6 +183,10 @@ const Reports = () => {
         { id: 'stock_min', name: 'Estoque Mínimo (Ponto de Reposição)', icon: <AlertTriangle size={16} />, category: 'Estoque', description: 'Produtos abaixo do ponto de pedido que necessitam reposição.', fields: ['Produto', 'Estoque Atual', 'Mínimo', 'Faltando', 'Fornecedor', 'Último Pedido'] },
         { id: 'stock_value', name: 'Valorização de Estoque', icon: <DollarSign size={16} />, category: 'Estoque', description: 'Valor financeiro do estoque por custo e preço de venda com margem calculada.', fields: ['Produto', 'Qtd', 'Custo Unit.', 'Custo Total', 'Preço Venda', 'Margem %'] },
 
+        // PRODUÇÃO INDUSTRIAL (NOVO)
+        { id: 'production_orders', name: 'Ordens de Produção e Rendimento', icon: <Factory size={16} />, category: 'Produção', description: 'Controle de fabricação industrial, fórmulas, quantidades e status de avanço.', fields: ['Ordem', 'Produto', 'Qtd Planejada', 'Início', 'Previsão', 'Status', 'Progresso', 'Operador'] },
+        { id: 'production_units', name: 'Desempenho de Usinas e OEE', icon: <Activity size={16} />, category: 'Produção', description: 'Monitoramento das usinas de asfalto/concreto com carga nominal, temperatura e disponibilidade.', fields: ['Usina / Planta', 'Tipo', 'Capacidade Nominal', 'Carga Atual %', 'Temperatura (°C)', 'Potência', 'Status'] },
+
         // CLIENTES & COMPRAS
         { id: 'clients', name: 'Cadastro de Clientes', icon: <Circle size={16} />, category: 'Clientes', description: 'Base completa de clientes cadastrados no ERP.', fields: ['Nome', 'Documento', 'Email', 'Telefone', 'Cidade', 'Status'] },
         { id: 'clients_ranking', name: 'Ranking de Clientes', icon: <TrendingUp size={16} />, category: 'Clientes', description: 'Top clientes por volume financeiro de compras.', fields: ['Posição', 'Cliente', 'Total Compras', 'Faturamento', 'Ticket Médio'] },
@@ -179,13 +196,15 @@ const Reports = () => {
         // FROTA & RH
         { id: 'fleet', name: 'Cadastro de Veículos', icon: <Truck size={16} />, category: 'Frota', description: 'Listagem e status operacional de toda a frota de veículos.', fields: ['Placa', 'Modelo', 'Tipo', 'KM Atual', 'Status', 'Combustível'] },
         { id: 'fleet_costs', name: 'Custos Consolidados da Frota', icon: <DollarSign size={16} />, category: 'Frota', description: 'Custo total por veículo (combustível + manutenção) e custo/km.', fields: ['Placa', 'Modelo', 'Combustível', 'Manutenção', 'Total', 'Custo/KM'] },
+        { id: 'tires_management', name: 'Gestão e Vida Útil de Pneus', icon: <Activity size={16} />, category: 'Frota', description: 'Controle individual de pneus, veículos instalados, KM percorrido e histórico de recapagem.', fields: ['Fogo / Série', 'Marca / Modelo', 'Veículo Instalado', 'Posição', 'KM Rodado', 'Recapagens', 'Status'] },
         { id: 'hr', name: 'Quadro de Colaboradores', icon: <User size={16} />, category: 'RH', description: 'Listagem de funcionários com cargo, departamento e remuneração.', fields: ['Nome', 'Cargo', 'Depto', 'Salário', 'Admissão', 'Status'] },
-        { id: 'hr_payroll', name: 'Folha de Pagamento', icon: <DollarSign size={16} />, category: 'RH', description: 'Demonstrativo de proventos, descontos e salário líquido.', fields: ['Funcionário', 'Salário Base', 'Adicionais', 'Descontos', 'Líquido'] },
+        { id: 'hr_payroll', name: 'Folha de Pagamento', icon: <DollarSign size={16} />, category: 'RH', description: 'Demonstrativo de proventos, descontos de INSS/IRRF e salário líquido apurado.', fields: ['Funcionário', 'Salário Base', 'Adicionais / Benefícios', 'Descontos (INSS/IRRF)', 'Líquido'] },
 
         // CONTÁBIL & GERENCIAL
-        { id: 'dre', name: 'D.R.E. (Demonstração do Resultado)', icon: <Calculator size={16} />, category: 'Contábil', description: 'Demonstração do Resultado do Exercício com EBITDA e lucro líquido.', fields: ['Estrutura Contábil', 'Valor', '% Rec. Bruta', 'Tipo'] },
+        { id: 'dre', name: 'D.R.E. (Demonstração do Resultado)', icon: <Calculator size={16} />, category: 'Contábil', description: 'Demonstração do Resultado do Exercício com EBITDA e lucro líquido segregando CPV de despesas operacionais.', fields: ['Estrutura Contábil', 'Valor', '% Rec. Bruta', 'Tipo'] },
         { id: 'trial_balance', name: 'Balancete de Verificação', icon: <ScrollText size={16} />, category: 'Contábil', description: 'Saldos de débito e crédito por conta do plano de contas.', fields: ['Código', 'Conta Contábil', 'Saldo Anterior', 'Débitos', 'Créditos', 'Saldo Atual'] },
         { id: 'cost_center', name: 'Resultado por Centro de Custo', icon: <PieChartIcon size={16} />, category: 'Contábil', description: 'Receitas, despesas e margem operacional por centro de custo.', fields: ['Centro de Custo', 'Receitas', 'Despesas', 'Resultado Líquido', 'Margem %'] },
+        { id: 'audit_trail', name: 'Trilha de Auditoria e Governança', icon: <ShieldCheck size={16} />, category: 'Gerencial', description: 'Logs de eventos, ações de usuários, severidade de segurança e registros de auditoria.', fields: ['Data/Hora', 'Usuário', 'Ação', 'Módulo', 'Severidade', 'Detalhes', 'IP'] },
         { id: 'dashboard_summary', name: 'Resumo Executivo Gerencial', icon: <PieChartIcon size={16} />, category: 'Gerencial', description: 'Visão consolidada dos principais indicadores de desempenho do ERP.', fields: ['Indicador', 'Valor Apurado', 'Meta Corporativa', 'Variação', 'Status'] }
     ];
 
@@ -194,7 +213,7 @@ const Reports = () => {
         let data: any[] = [];
         const start = new Date(startDate);
         const end = new Date(endDate);
-        end.setHours(23, 59, 59);
+        end.setHours(23, 59, 59, 999);
 
         const isInRange = (dateStr?: string) => {
             if (!dateStr) return true;
@@ -207,7 +226,7 @@ const Reports = () => {
             case 'sales':
                 data = sales.filter(s => isInRange(s.date)).map(s => ({
                     ID: s.id?.slice(-6).toUpperCase(),
-                    Data: s.date,
+                    Data: formatDateBR(s.date),
                     Cliente: s.clientName,
                     'Produtos': s.items?.length || 0,
                     'Forma Pagto': s.paymentMethod || 'Boleto',
@@ -216,7 +235,7 @@ const Reports = () => {
                 }));
                 break;
 
-            case 'sales_by_product':
+            case 'sales_by_product': {
                 const productSales: Record<string, { qty: number, revenue: number, cost: number }> = {};
                 sales.filter(s => isInRange(s.date)).forEach(s => {
                     s.items?.forEach(item => {
@@ -234,8 +253,9 @@ const Reports = () => {
                     'Ticket Médio': d.qty > 0 ? d.revenue / d.qty : 0
                 }));
                 break;
+            }
 
-            case 'sales_by_client':
+            case 'sales_by_client': {
                 const clientSales: Record<string, { count: number, total: number, lastDate: string }> = {};
                 sales.filter(s => isInRange(s.date)).forEach(s => {
                     const name = s.clientName || 'Consumidor Final';
@@ -248,12 +268,13 @@ const Reports = () => {
                     Cliente: name,
                     'Total Compras': d.count,
                     'Valor Total': d.total,
-                    'Última Compra': d.lastDate,
+                    'Última Compra': formatDateBR(d.lastDate),
                     'Ticket Médio': d.count > 0 ? d.total / d.count : 0
                 }));
                 break;
+            }
 
-            case 'sales_by_seller':
+            case 'sales_by_seller': {
                 const sellerSales: Record<string, { sales: number, revenue: number }> = {};
                 sales.filter(s => isInRange(s.date)).forEach(s => {
                     const seller = (s as any).seller || 'Vendedor Comercial';
@@ -269,8 +290,9 @@ const Reports = () => {
                     'Meta %': Math.min(100, Math.round((d.revenue / 50000) * 100)) + '%'
                 }));
                 break;
+            }
 
-            case 'sales_by_payment':
+            case 'sales_by_payment': {
                 const paymentSales: Record<string, { count: number, total: number }> = {};
                 const totalSales = sales.filter(s => isInRange(s.date)).reduce((acc, s) => acc + s.amount, 0);
                 sales.filter(s => isInRange(s.date)).forEach(s => {
@@ -287,15 +309,16 @@ const Reports = () => {
                     'Ticket Médio': d.count > 0 ? d.total / d.count : 0
                 }));
                 break;
+            }
 
             case 'quotes':
-                data = (budgets || []).map(b => {
+                data = (budgets || []).filter(b => isInRange(b.date)).map(b => {
                     const numId = (b as any).budgetNumber
                         ? String((b as any).budgetNumber)
                         : (b.id && /^\d+$/.test(b.id) ? b.id : (b.id?.replace(/\D/g, '') || b.id));
                     return {
                         'Nº': numId,
-                        Data: b.date,
+                        Data: formatDateBR(b.date),
                         Cliente: b.clientName,
                         Valor: b.total,
                         Status: b.status,
@@ -310,7 +333,7 @@ const Reports = () => {
             case 'finance':
                 data = transactions.filter(t => isInRange(t.date)).map(t => ({
                     ID: t.id?.slice(-6).toUpperCase(),
-                    Data: t.date,
+                    Data: formatDateBR(t.date),
                     Descrição: t.description,
                     Categoria: t.ledgerName || t.category,
                     Tipo: t.type,
@@ -321,18 +344,26 @@ const Reports = () => {
                 break;
 
             case 'cashflow': {
-                // Real running cashflow
-                const initialCash = accounts.reduce((acc, a) => acc + (a.balance || 0), 0);
+                // Determine opening balance at startDate
+                // Opening balance = current balance minus net movements occurring AFTER start
+                const movementsAfterStart = transactions.filter(t => {
+                    if (t.status === 'Cancelado') return false;
+                    const tDate = parseDateString(t.date);
+                    return tDate >= start;
+                });
+                const netAfterStart = movementsAfterStart.reduce((acc, t) => acc + (t.type === 'Receita' ? t.amount : -t.amount), 0);
+                const balanceAtStart = financials.balance - netAfterStart;
+
                 const sortedTxs = [...transactions]
                     .filter(t => isInRange(t.date) && t.status !== 'Cancelado')
                     .sort((a, b) => parseDateString(a.date).getTime() - parseDateString(b.date).getTime());
 
-                let running = initialCash;
+                let running = balanceAtStart;
                 data = sortedTxs.map(t => {
                     const isReceita = t.type === 'Receita';
                     running += isReceita ? t.amount : -t.amount;
                     return {
-                        Data: t.date,
+                        Data: formatDateBR(t.date),
                         Descrição: t.description,
                         Categoria: t.ledgerName || t.category,
                         Conta: t.account || '-',
@@ -406,7 +437,7 @@ const Reports = () => {
                     const net = d.in - d.out;
                     const finalBal = running + net;
                     const row = {
-                        Data: d.dateStr,
+                        Data: formatDateBR(d.dateStr),
                         'Saldo Inicial': running,
                         Entradas: d.in,
                         Saídas: d.out,
@@ -426,7 +457,7 @@ const Reports = () => {
                         'Nº': t.documentNumber || t.id?.slice(-6).toUpperCase(),
                         Cliente: t.partnerName || t.description,
                         Valor: t.amount,
-                        Vencimento: t.dueDate || t.date,
+                        Vencimento: formatDateBR(t.dueDate || t.date),
                         'Forma Pagto': t.paymentMethod || 'A Prazo',
                         'Dias em Aberto': diffDays < 0 ? `${Math.abs(diffDays)} dias em atraso` : `${diffDays} dias a vencer`,
                         Status: t.status
@@ -466,7 +497,7 @@ const Reports = () => {
                         'Nº': t.id?.slice(-6).toUpperCase(),
                         Fornecedor: t.partnerName || t.description,
                         Valor: t.amount,
-                        Vencimento: t.dueDate || t.date,
+                        Vencimento: formatDateBR(t.dueDate || t.date),
                         'Dias para Vencimento': diffDays < 0 ? `${Math.abs(diffDays)} dias em atraso` : `${diffDays} dias a vencer`,
                         Status: t.status
                     };
@@ -505,7 +536,7 @@ const Reports = () => {
                         Cliente: t.partnerName || t.description,
                         Documento: t.documentNumber || t.id?.slice(-6).toUpperCase(),
                         Valor: t.amount,
-                        Vencimento: t.dueDate || t.date,
+                        Vencimento: formatDateBR(t.dueDate || t.date),
                         'Dias Atraso': days,
                         Telefone: clients.find(c => c.name === t.partnerName)?.phone || '-'
                     };
@@ -514,7 +545,7 @@ const Reports = () => {
 
             case 'bank_statements': {
                 data = transactions.filter(t => isInRange(t.date)).map(t => ({
-                    Data: t.date,
+                    Data: formatDateBR(t.date),
                     'Conta Bancária': t.account || 'Caixa Geral',
                     Histórico: t.description,
                     Documento: t.documentNumber || t.id?.slice(-6).toUpperCase(),
@@ -590,14 +621,33 @@ const Reports = () => {
 
             // CONTÁBIL
             case 'dre': {
-                const grossRev = transactions.filter(t => t.type === 'Receita' && isInRange(t.date)).reduce((acc, t) => acc + t.amount, 0);
-                const totalExpenses = transactions.filter(t => t.type === 'Despesa' && isInRange(t.date)).reduce((acc, t) => acc + t.amount, 0);
+                const grossRev = transactions.filter(t => t.type === 'Receita' && isInRange(t.date) && t.status !== 'Cancelado').reduce((acc, t) => acc + t.amount, 0);
+                const expTxs = transactions.filter(t => t.type === 'Despesa' && isInRange(t.date) && t.status !== 'Cancelado');
+                const totalExpenses = expTxs.reduce((acc, t) => acc + t.amount, 0);
+
+                // Segregate CPV from Operating Expenses using accounts structure
+                let cpv = 0;
+                let operatingExp = 0;
+                expTxs.forEach(t => {
+                    const cat = (t.ledgerName || t.category || '').toLowerCase();
+                    const code = (t.ledgerCode || '').toLowerCase();
+                    const isCost = code.startsWith('3') || cat.includes('custo') || cat.includes('cpv') || cat.includes('insumo') || cat.includes('matéria') || cat.includes('materia') || cat.includes('produção') || cat.includes('combustível') || cat.includes('manutenção') || cat.includes('fornecedor');
+                    if (isCost) {
+                        cpv += t.amount;
+                    } else {
+                        operatingExp += t.amount;
+                    }
+                });
+
+                if (cpv === 0 && totalExpenses > 0) {
+                    cpv = totalExpenses * 0.45;
+                    operatingExp = totalExpenses * 0.55;
+                }
+
                 const taxRate = (settings?.technical?.defaultTaxRate || 6) / 100;
                 const deductions = grossRev * taxRate;
                 const netRev = grossRev - deductions;
-                const cpv = totalExpenses * 0.45; // Cost of production
                 const grossProfit = netRev - cpv;
-                const operatingExp = totalExpenses * 0.55;
                 const ebitda = grossProfit - operatingExp;
                 const taxesIRPJ = Math.max(0, ebitda * 0.15);
                 const netProfit = ebitda - taxesIRPJ;
@@ -674,7 +724,7 @@ const Reports = () => {
 
             case 'stock_movements':
                 data = stockMovements.filter(m => isInRange(m.date)).map(m => ({
-                    Data: new Date(m.date).toLocaleDateString('pt-BR'),
+                    Data: formatDateBR(m.date),
                     Hora: new Date(m.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
                     Produto: m.itemName,
                     Tipo: m.type,
@@ -690,7 +740,7 @@ const Reports = () => {
                     'Estoque Atual': i.quantity,
                     Mínimo: i.minStock || 10,
                     Faltando: Math.max(0, (i.minStock || 10) - i.quantity),
-                    Fornecedor: i.supplierId || '-',
+                    Fornecedor: suppliers.find(s => s.id === i.supplierId)?.name || i.supplierId || 'Almoxarifado Geral',
                     'Último Pedido': '-'
                 }));
                 break;
@@ -709,6 +759,32 @@ const Reports = () => {
                 });
                 break;
 
+            // PRODUÇÃO INDUSTRIAL (NOVOS MÓDULOS)
+            case 'production_orders':
+                data = (productionOrders || []).filter(p => isInRange(p.startDate || p.dueDate)).map(p => ({
+                    Ordem: p.orderNumber || p.id?.slice(-6).toUpperCase(),
+                    Produto: p.productName,
+                    'Qtd Planejada': p.quantity,
+                    'Início': formatDateBR(p.startDate),
+                    'Previsão': formatDateBR(p.dueDate),
+                    Status: p.status,
+                    Progresso: `${p.progress || 0}%`,
+                    Operador: p.operator || 'Geral'
+                }));
+                break;
+
+            case 'production_units':
+                data = (productionUnits || []).map(u => ({
+                    'Usina / Planta': u.name,
+                    Tipo: u.type,
+                    'Capacidade Nominal': u.capacity,
+                    'Carga Atual %': `${u.currentLoad || 0}%`,
+                    'Temperatura (°C)': `${u.temp || 0}°C`,
+                    'Potência': u.power || '-',
+                    Status: u.status
+                }));
+                break;
+
             // CLIENTES & COMPRAS
             case 'clients':
                 data = clients.map(c => ({
@@ -724,8 +800,8 @@ const Reports = () => {
             case 'clients_ranking': {
                 const clientTotals = clients.map(c => ({
                     ...c,
-                    total: sales.filter(s => s.clientId === c.id).reduce((acc, s) => acc + s.amount, 0),
-                    count: sales.filter(s => s.clientId === c.id).length
+                    total: sales.filter(s => s.clientId === c.id && isInRange(s.date)).reduce((acc, s) => acc + s.amount, 0),
+                    count: sales.filter(s => s.clientId === c.id && isInRange(s.date)).length
                 })).sort((a, b) => b.total - a.total);
 
                 data = clientTotals.slice(0, 20).map((c, i) => ({
@@ -739,23 +815,23 @@ const Reports = () => {
             }
 
             case 'purchases':
-                data = purchaseOrders.map(p => ({
+                data = purchaseOrders.filter(p => isInRange(p.date)).map(p => ({
                     'Nº': p.id?.slice(-6).toUpperCase(),
-                    Data: p.date,
+                    Data: formatDateBR(p.date),
                     Fornecedor: p.supplierName,
-                    Valor: p.items?.reduce((acc: number, i: any) => acc + (i.price * i.quantity), 0) || 0,
+                    Valor: p.items?.reduce((acc: number, i: any) => acc + (i.price * i.quantity), 0) || p.total || 0,
                     Status: p.status,
-                    'Prazo Entrega': (p as any).deliveryDate || '-'
+                    'Prazo Entrega': (p as any).deliveryDate ? formatDateBR((p as any).deliveryDate) : '-'
                 }));
                 break;
 
             case 'purchases_by_supplier': {
                 const supplierPurchases: Record<string, { count: number, total: number, lastDate: string }> = {};
-                purchaseOrders.forEach(p => {
-                    const name = p.supplierName;
+                purchaseOrders.filter(p => isInRange(p.date)).forEach(p => {
+                    const name = p.supplierName || 'Fornecedor';
                     if (!supplierPurchases[name]) supplierPurchases[name] = { count: 0, total: 0, lastDate: '' };
                     supplierPurchases[name].count++;
-                    supplierPurchases[name].total += p.items?.reduce((acc: number, i: any) => acc + (i.price * i.quantity), 0) || 0;
+                    supplierPurchases[name].total += p.items?.reduce((acc: number, i: any) => acc + (i.price * i.quantity), 0) || p.total || 0;
                     supplierPurchases[name].lastDate = p.date;
                 });
                 data = Object.entries(supplierPurchases).map(([name, d]) => ({
@@ -763,7 +839,7 @@ const Reports = () => {
                     'Total Pedidos': d.count,
                     'Valor Total': d.total,
                     'Prazo Médio': '7 dias',
-                    'Última Compra': d.lastDate
+                    'Última Compra': formatDateBR(d.lastDate)
                 }));
                 break;
             }
@@ -795,24 +871,59 @@ const Reports = () => {
                 });
                 break;
 
+            case 'tires_management':
+                data = (tires || []).map(t => {
+                    const vehicle = fleet.find(f => f.id === t.currentVehicleId);
+                    return {
+                        'Fogo / Série': t.serialNumber,
+                        'Marca / Modelo': `${t.brand} ${t.model}`,
+                        'Veículo Instalado': vehicle ? `${vehicle.plate} (${vehicle.name || vehicle.model})` : 'Almoxarifado / Estoque',
+                        Posição: t.position || 'Sobressalente',
+                        'KM Rodado': t.currentKm ? `${t.currentKm.toLocaleString('pt-BR')} km` : '0 km',
+                        'Recapagens': t.recapCount || 0,
+                        Status: t.status
+                    };
+                });
+                break;
+
             case 'hr':
                 data = employees.map(e => ({
                     Nome: e.name,
                     Cargo: e.role,
                     Depto: e.department,
                     Salário: e.salary,
-                    Admissão: e.admissionDate,
+                    Admissão: formatDateBR(e.admissionDate),
                     Status: e.status
                 }));
                 break;
 
             case 'hr_payroll':
-                data = employees.filter(e => e.status === 'Ativo').map(e => ({
-                    Funcionário: e.name,
-                    'Salário Base': e.salary,
-                    Adicionais: e.salary * 0.1,
-                    Descontos: e.salary * 0.15,
-                    Líquido: e.salary + (e.salary * 0.1) - (e.salary * 0.15)
+                data = employees.filter(e => e.status === 'Ativo').map(e => {
+                    const empPayroll = (payroll || []).find((p: any) => p.employeeId === e.id);
+                    const base = empPayroll?.baseSalary || e.salary;
+                    const add = empPayroll?.additions || empPayroll?.overtime || (base * 0.08);
+                    const discounts = empPayroll?.discounts || (base * 0.11);
+                    const net = empPayroll?.totalNet || (base + add - discounts);
+
+                    return {
+                        Funcionário: e.name,
+                        'Salário Base': base,
+                        'Adicionais / Benefícios': add,
+                        'Descontos (INSS/IRRF)': discounts,
+                        Líquido: net
+                    };
+                });
+                break;
+
+            case 'audit_trail':
+                data = (auditLogs || []).map(l => ({
+                    'Data/Hora': l.timestamp,
+                    'Usuário': l.userName,
+                    'Ação': l.action,
+                    'Módulo': l.module,
+                    'Severidade': l.severity?.toUpperCase() || 'INFO',
+                    'Detalhes': l.details,
+                    'IP': l.ip || '127.0.0.1'
                 }));
                 break;
 
@@ -831,7 +942,7 @@ const Reports = () => {
                 data = [{ Mensagem: 'Selecione um relatório para visualizar os dados.' }];
         }
         return data;
-    }, [selectedModule, startDate, endDate, sales, transactions, inventory, clients, fleet, employees, stockMovements, purchaseOrders, financials, settings, accounts]);
+    }, [selectedModule, startDate, endDate, sales, transactions, inventory, clients, fleet, employees, stockMovements, purchaseOrders, financials, settings, accounts, productionOrders, productionUnits, tires, auditLogs, suppliers, payroll]);
 
     // =========================================================================
     // EXPORTAÇÃO DE RELATÓRIOS GERENCIAIS COM CABEÇALHO CORPORATIVO
@@ -1172,7 +1283,7 @@ const Reports = () => {
 
         const corporateMetadataHeader = [
             `# =========================================================================`,
-            `# INFRAGORE ERP - RELATÓRIO GERENCIAL OFICIAL`,
+            `# INFRACORE ERP - RELATÓRIO GERENCIAL OFICIAL`,
             `# Razão Social: ${company.companyName} | CNPJ: ${company.document}`,
             `# Inscrição Estadual: ${company.stateRegistry} | Endereço: ${company.address}`,
             `# Relatório: ${reportTitle} | Categoria: ${categoryName}`,
@@ -1188,7 +1299,7 @@ const Reports = () => {
             ...reportData.map(row =>
                 headers.map(h => {
                     let val = row[h] ?? '';
-                    if (typeof val === 'number' && (h.includes('Valor') || h.includes('Total') || h.includes('Faturamento') || h.includes('Receita') || h.includes('Salário'))) {
+                    if (typeof val === 'number') {
                         val = val.toFixed(2).replace('.', ',');
                     }
                     if (typeof val === 'string' && (val.includes(';') || val.includes('\n') || val.includes('"'))) {
@@ -1203,16 +1314,66 @@ const Reports = () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `relatorio_${selectedModule}_${new Date().toISOString().split('T')[0]}.csv`;
+        a.download = `relatorio_${selectedModule || 'gerencial'}_${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
         URL.revokeObjectURL(url);
         addToast(`Relatório exportado em formato CSV corporativo com sucesso!`, 'success');
     };
 
-    // Print Chart of Accounts with Corporate Header
+    // Print Chart of Accounts with Corporate Header (Renders complete tree regardless of UI state)
     const handlePrintPoaReport = () => {
         const poaTitle = 'PLANO DE CONTAS ESTRUTURADO';
         const poaProtocol = `POA-${Date.now().toString().slice(-8)}`;
+
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+
+        const getGroupTotal = (node: any): number => {
+            const selfTotal = transactions
+                .filter(t => (t.ledgerCode === node.code || t.category === node.name || t.ledgerName === node.name) && t.status !== 'Cancelado')
+                .filter(t => {
+                    const txDate = parseDateString(t.date);
+                    return txDate >= start && txDate <= end;
+                })
+                .reduce((acc, t) => acc + t.amount, 0);
+
+            const childrenTotal = (node.children || []).reduce((acc: number, c: any) => acc + getGroupTotal(c), 0);
+            return selfTotal + childrenTotal;
+        };
+
+        let poaRowsHtml = '';
+        planOfAccounts.forEach(group => {
+            const groupTotal = getGroupTotal(group);
+            const isRev = group.type === 'Receita';
+            const color = isRev ? '#16a34a' : '#dc2626';
+
+            poaRowsHtml += `
+                <tr style="background-color: #f1f5f9; font-weight: 800; border-top: 2px solid #cbd5e1;">
+                    <td style="padding: 8px 10px; font-family: monospace; color: ${color}; width: 120px;">${group.code}</td>
+                    <td style="padding: 8px 10px; text-transform: uppercase;"><strong>${group.name}</strong> <span style="font-size: 9px; color: #64748b; font-weight: normal;">(Sintética)</span></td>
+                    <td style="padding: 8px 10px; text-align: right; font-family: monospace; color: ${color}; width: 150px;">${formatMoney(groupTotal)}</td>
+                </tr>
+            `;
+
+            (group.children || []).forEach((child: any) => {
+                const childTotal = transactions
+                    .filter(t => (t.ledgerCode === child.code || t.category === child.name || t.ledgerName === child.name) && t.status !== 'Cancelado')
+                    .filter(t => {
+                        const txDate = parseDateString(t.date);
+                        return txDate >= start && txDate <= end;
+                    })
+                    .reduce((acc, t) => acc + t.amount, 0);
+
+                poaRowsHtml += `
+                    <tr style="border-bottom: 1px solid #f1f5f9;">
+                        <td style="padding: 6px 10px 6px 28px; font-family: monospace; color: #64748b;">${child.code}</td>
+                        <td style="padding: 6px 10px; color: #334155;">${child.name} <span style="font-size: 8px; color: #94a3b8;">(Analítica)</span></td>
+                        <td style="padding: 6px 10px; text-align: right; font-family: monospace; font-weight: 600;">${formatMoney(childTotal)}</td>
+                    </tr>
+                `;
+            });
+        });
 
         const html = `
             <!DOCTYPE html>
@@ -1247,6 +1408,21 @@ const Reports = () => {
                         font-size: 10px;
                         color: #475569;
                     }
+                    table.poa-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-size: 10px;
+                        margin-bottom: 30px;
+                    }
+                    table.poa-table thead th {
+                        background: #0f172a;
+                        color: #ffffff;
+                        font-weight: 800;
+                        text-transform: uppercase;
+                        font-size: 9px;
+                        padding: 8px 10px;
+                        text-align: left;
+                    }
                     .signatures-block {
                         margin-top: 40px;
                         display: grid;
@@ -1259,7 +1435,6 @@ const Reports = () => {
                     .signature-line { border-bottom: 1px solid #475569; margin-bottom: 6px; height: 35px; }
                     .signature-item p { margin: 0; font-size: 10px; font-weight: 700; }
                     .signature-item span { font-size: 9px; color: #64748b; }
-                    .content-wrapper { margin-bottom: 30px; }
                 </style>
             </head>
             <body>
@@ -1276,13 +1451,22 @@ const Reports = () => {
                         </span>
                         <h2 style="font-size: 16px; margin: 6px 0 2px 0;">${poaTitle}</h2>
                         <p style="margin: 2px 0; font-family: monospace; color: #0891b2; font-weight: bold;">Protocolo: ${poaProtocol}</p>
-                        <p style="margin: 2px 0; font-size: 10px; color: #64748b;">Emissão: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</p>
+                        <p style="margin: 2px 0; font-size: 10px; color: #64748b;">Período: ${formatDateBR(startDate)} até ${formatDateBR(endDate)}</p>
                     </div>
                 </div>
 
-                <div class="content-wrapper">
-                    ${document.getElementById('poa-report-content')?.innerHTML || ''}
-                </div>
+                <table class="poa-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 120px;">Código</th>
+                            <th>Conta Contábil / Descrição</th>
+                            <th style="text-align: right; width: 150px;">Saldo do Período</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${poaRowsHtml}
+                    </tbody>
+                </table>
 
                 <div class="signatures-block">
                     <div class="signature-item">
@@ -1303,33 +1487,107 @@ const Reports = () => {
         printDocument(poaTitle, html);
     };
 
-    // Dashboard BI Trends
-    const [reportPeriod, setReportPeriod] = useState('30d');
+    // Export Official Consolidated Dashboard to CSV
+    const handleExportDashboard = () => {
+        exportDashboardToExcel({
+            financials,
+            transactions,
+            sales,
+            employees,
+            inventory,
+            fleet,
+            settings,
+            clients
+        });
+        addToast("Relatório Executivo Consolidado exportado com sucesso!", 'success');
+    };
+
+    // =========================================================================
+    // DINÂMICA DE BI: CÁLCULOS DINÂMICOS DO DASHBOARD CONECTADOS AO PERÍODO
+    // =========================================================================
+
+    const periodDays = reportPeriod === '7d' ? 7 : reportPeriod === '30d' ? 30 : 365;
+    const now = new Date();
+    const periodCutoff = useMemo(() => new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000), [periodDays]);
+    const prevPeriodCutoff = useMemo(() => new Date(now.getTime() - periodDays * 2 * 24 * 60 * 60 * 1000), [periodDays]);
+
+    const periodTransactions = useMemo(() => {
+        return transactions.filter(t => {
+            const d = parseDateString(t.date);
+            return d >= periodCutoff && d <= now && t.status !== 'Cancelado';
+        });
+    }, [transactions, periodCutoff]);
+
+    const prevPeriodTransactions = useMemo(() => {
+        return transactions.filter(t => {
+            const d = parseDateString(t.date);
+            return d >= prevPeriodCutoff && d < periodCutoff && t.status !== 'Cancelado';
+        });
+    }, [transactions, prevPeriodCutoff, periodCutoff]);
+
+    const periodRevenue = useMemo(() => {
+        return periodTransactions.filter(t => t.type === 'Receita').reduce((sum, t) => sum + t.amount, 0);
+    }, [periodTransactions]);
+
+    const prevPeriodRevenue = useMemo(() => {
+        return prevPeriodTransactions.filter(t => t.type === 'Receita').reduce((sum, t) => sum + t.amount, 0);
+    }, [prevPeriodTransactions]);
+
+    const revenueTrend = useMemo(() => {
+        if (prevPeriodRevenue === 0) return periodRevenue > 0 ? '+100%' : '0%';
+        const diff = ((periodRevenue - prevPeriodRevenue) / prevPeriodRevenue) * 100;
+        return (diff >= 0 ? '+' : '') + diff.toFixed(1) + '%';
+    }, [periodRevenue, prevPeriodRevenue]);
+
+    const periodSales = useMemo(() => {
+        return sales.filter(s => {
+            const d = parseDateString(s.date);
+            return d >= periodCutoff && d <= now;
+        });
+    }, [sales, periodCutoff]);
+
+    const avgTicket = useMemo(() => {
+        const totalSalesVal = periodSales.reduce((acc, s) => acc + s.amount, 0);
+        return periodSales.length > 0 ? totalSalesVal / periodSales.length : 0;
+    }, [periodSales]);
+
+    const calculatedOEE = useMemo(() => {
+        if (productionUnits.length > 0) {
+            const avgLoad = productionUnits.reduce((acc, u) => acc + (u.currentLoad || 0), 0) / productionUnits.length;
+            return Math.max(10, Math.min(100, avgLoad));
+        }
+        if (productionOrders.length > 0) {
+            const finished = productionOrders.filter(p => p.status === 'Finalizado').length;
+            return Math.round((finished / productionOrders.length) * 100);
+        }
+        return 94.2;
+    }, [productionUnits, productionOrders]);
 
     const financialHistory = useMemo(() => {
-        const last7 = transactions.slice(-7).map(tx => ({
-            name: tx.date?.split('/')[0] || '1',
-            receita: tx.type === 'Receita' ? tx.amount : 0,
-            despesa: tx.type === 'Despesa' ? tx.amount : 0,
-        }));
+        const dayMap: Record<string, { name: string; receita: number; despesa: number; time: number }> = {};
 
-        if (last7.length === 0) {
-            return [
-                { name: '18', receita: 4000, despesa: 2400 },
-                { name: '19', receita: 3000, despesa: 1398 },
-                { name: '20', receita: 2000, despesa: 9800 },
-                { name: '21', receita: 2780, despesa: 3908 },
-                { name: '22', receita: 1890, despesa: 4800 },
-                { name: '23', receita: 2390, despesa: 3800 },
-                { name: 'Hoje', receita: financials.totalRevenue / 10, despesa: financials.totalExpenses / 10 },
-            ];
-        }
-        return last7;
-    }, [transactions, financials]);
+        periodTransactions.forEach(tx => {
+            const dateObj = parseDateString(tx.date);
+            const dayKey = `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+            if (!dayMap[dayKey]) {
+                dayMap[dayKey] = { name: dayKey, receita: 0, despesa: 0, time: dateObj.getTime() };
+            }
+            if (tx.type === 'Receita') dayMap[dayKey].receita += tx.amount;
+            else dayMap[dayKey].despesa += tx.amount;
+        });
+
+        const sorted = Object.values(dayMap).sort((a, b) => a.time - b.time);
+        if (sorted.length > 0) return sorted;
+
+        return [
+            { name: 'Início', receita: 0, despesa: 0 },
+            { name: 'Hoje', receita: periodRevenue, despesa: periodTransactions.filter(t => t.type === 'Despesa').reduce((s, t) => s + t.amount, 0) }
+        ];
+    }, [periodTransactions, periodRevenue]);
 
     const categoryData = useMemo(() => {
         const categories: Record<string, number> = {};
-        transactions.forEach(tx => {
+        periodTransactions.forEach(tx => {
             if (tx.type === 'Despesa') {
                 const cat = tx.ledgerName || tx.category || 'Geral';
                 categories[cat] = (categories[cat] || 0) + tx.amount;
@@ -1338,18 +1596,15 @@ const Reports = () => {
 
         const data = Object.entries(categories).map(([name, value]) => ({ name, value }));
         return data.length > 0 ? data : [
-            { name: 'Insumos', value: 45000 },
-            { name: 'Logística', value: 12000 },
-            { name: 'Manutenção', value: 8000 },
-            { name: 'Pessoal', value: 35000 },
+            { name: 'Sem despesas no período', value: 1 }
         ];
-    }, [transactions]);
+    }, [periodTransactions]);
 
     const formatBRL = (val: number) => new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL',
         maximumFractionDigits: 0
-    }).format(val);
+    }).format(val || 0);
 
     const formatBRLCompact = (val: number) => {
         if (val >= 1000000) return `R$ ${(val / 1000000).toFixed(1)}M`;
@@ -1372,9 +1627,9 @@ const Reports = () => {
                     </h1>
                     <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 font-medium">
                         {activeTab === 'dashboard'
-                            ? 'Insights operacionais e financeiros estratégicos em tempo real.'
+                            ? 'Insights operacionais e financeiros estratégicos apurados em tempo real.'
                             : activeTab === 'chart_of_accounts'
-                                ? 'Demonstrativo e consolidação analítica por plano de contas.'
+                                ? 'Demonstrativo e consolidação analítica oficial por plano de contas.'
                                 : 'Exportação de relatórios gerenciais e demonstrativos oficiais com cabeçalho corporativo homologado.'}
                     </p>
                 </div>
@@ -1407,7 +1662,7 @@ const Reports = () => {
                     {/* Period Selector & Dashboard Tools */}
                     <div className="flex justify-end gap-4">
                         <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl">
-                            {['7d', '30d', '12m'].map(p => (
+                            {(['7d', '30d', '12m'] as const).map(p => (
                                 <button
                                     key={p}
                                     onClick={() => setReportPeriod(p)}
@@ -1418,9 +1673,9 @@ const Reports = () => {
                             ))}
                         </div>
                         <button
-                            onClick={handleExportCorporateCSV}
+                            onClick={handleExportDashboard}
                             className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors"
-                            title="Exportar Resumo Oficial"
+                            title="Exportar Resumo Executivo Oficial (Excel/CSV)"
                         >
                             <FileText size={18} />
                         </button>
@@ -1438,10 +1693,10 @@ const Reports = () => {
                     {/* Smart KPIs */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {[
-                            { label: 'RECEITA BRUTA OPERACIONAL', value: financials.totalRevenue, trend: '+12.5%', icon: <DollarSign />, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-900/10' },
+                            { label: `RECEITA (${reportPeriod.toUpperCase()})`, value: periodRevenue, trend: revenueTrend, icon: <DollarSign />, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-900/10' },
                             { label: 'SALDO REAL DISPONÍVEL', value: financials.balance, trend: '+4.2%', icon: <TrendingUp />, color: 'text-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-900/10' },
-                            { label: 'TICKET MÉDIO DE VENDAS', value: sales.length > 0 ? financials.totalRevenue / sales.length : 0, trend: '-1.8%', icon: <Activity />, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/10' },
-                            { label: 'EFICIÊNCIA OPERACIONAL (OEE)', value: 94.2, trend: '+2.1%', icon: <Factory />, color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/10' },
+                            { label: 'TICKET MÉDIO DE VENDAS', value: avgTicket, trend: periodSales.length > 0 ? `${periodSales.length} vendas` : 'Sem vendas', icon: <Activity />, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/10' },
+                            { label: 'EFICIÊNCIA OPERACIONAL (OEE)', value: calculatedOEE, trend: productionUnits.length > 0 ? `${productionUnits.length} Usinas` : 'Estimado', icon: <Factory />, color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/10' },
                         ].map((kpi, i) => (
                             <div key={i} className="bg-white dark:bg-slate-800 p-8 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700 group hover:shadow-xl transition-all duration-300">
                                 <div className="flex justify-between items-start mb-6">
@@ -1463,7 +1718,7 @@ const Reports = () => {
                     {/* Charts Section */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
-                            <h3 className="text-base font-black text-slate-900 dark:text-white mb-6">Evolução Diária de Entradas e Saídas</h3>
+                            <h3 className="text-base font-black text-slate-900 dark:text-white mb-6">Evolução Diária de Entradas e Saídas ({reportPeriod.toUpperCase()})</h3>
                             <div className="h-[350px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart data={financialHistory} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
@@ -1480,7 +1735,7 @@ const Reports = () => {
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 700 }} dy={10} />
                                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                                        <Tooltip />
+                                        <Tooltip formatter={(v: any) => formatMoney(Number(v))} />
                                         <Area type="monotone" dataKey="receita" stroke="#06b6d4" strokeWidth={3} fillOpacity={1} fill="url(#colorInc)" name="Receitas" />
                                         <Area type="monotone" dataKey="despesa" stroke="#f472b6" strokeWidth={3} fillOpacity={1} fill="url(#colorExp)" name="Despesas" />
                                     </AreaChart>
@@ -1489,7 +1744,7 @@ const Reports = () => {
                         </div>
 
                         <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
-                            <h3 className="text-base font-black text-slate-900 dark:text-white mb-6">Distribuição de Gastos por Categoria</h3>
+                            <h3 className="text-base font-black text-slate-900 dark:text-white mb-6">Distribuição de Gastos ({reportPeriod.toUpperCase()})</h3>
                             <div className="h-[350px] w-full relative">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
@@ -1503,7 +1758,9 @@ const Reports = () => {
                                 </ResponsiveContainer>
                                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Despesa Total</span>
-                                    <span className="text-xl font-black text-slate-800 dark:text-white">{formatBRL(financials.totalExpenses).split(',')[0]}</span>
+                                    <span className="text-xl font-black text-slate-800 dark:text-white">
+                                        {formatBRL(periodTransactions.filter(t => t.type === 'Despesa').reduce((s, t) => s + t.amount, 0)).split(',')[0]}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -1567,12 +1824,12 @@ const Reports = () => {
                             {planOfAccounts.map(group => {
                                 const getGroupTotal = (node: any): number => {
                                     const selfTotal = transactions
-                                        .filter(t => (t.ledgerCode === node.code || t.category === node.name) && t.status !== 'Cancelado')
+                                        .filter(t => (t.ledgerCode === node.code || t.category === node.name || t.ledgerName === node.name) && t.status !== 'Cancelado')
                                         .filter(t => {
                                             const txDate = parseDateString(t.date);
                                             const start = new Date(startDate);
                                             const end = new Date(endDate);
-                                            end.setHours(23, 59, 59);
+                                            end.setHours(23, 59, 59, 999);
                                             return txDate >= start && txDate <= end;
                                         })
                                         .reduce((acc, t) => acc + t.amount, 0);
@@ -1585,8 +1842,8 @@ const Reports = () => {
 
                                 const matchesSearch = (node: any): boolean => {
                                     if (!poaSearchTerm) return true;
-                                    const nameMatch = node.name.toLowerCase().includes(poaSearchTerm.toLowerCase());
-                                    const codeMatch = node.code.toLowerCase().includes(poaSearchTerm.toLowerCase());
+                                    const nameMatch = node.name?.toLowerCase().includes(poaSearchTerm.toLowerCase());
+                                    const codeMatch = node.code?.toLowerCase().includes(poaSearchTerm.toLowerCase());
                                     const childrenMatch = (node.children || []).some((c: any) => matchesSearch(c));
                                     return nameMatch || codeMatch || childrenMatch;
                                 };
@@ -1628,7 +1885,7 @@ const Reports = () => {
                                                             const txDate = parseDateString(t.date);
                                                             const start = new Date(startDate);
                                                             const end = new Date(endDate);
-                                                            end.setHours(23, 59, 59);
+                                                            end.setHours(23, 59, 59, 999);
                                                             return txDate >= start && txDate <= end;
                                                         })
                                                         .reduce((acc, t) => acc + t.amount, 0);
@@ -1677,7 +1934,7 @@ const Reports = () => {
                             )}
                         </div>
                         <div className="flex gap-2 flex-wrap">
-                            {['Todos', 'Comercial', 'Financeiro', 'Estoque', 'Clientes', 'Compras', 'Frota', 'RH', 'Contábil', 'Gerencial'].map(cat => (
+                            {['Todos', 'Comercial', 'Financeiro', 'Estoque', 'Produção', 'Clientes', 'Compras', 'Frota', 'RH', 'Contábil', 'Gerencial'].map(cat => (
                                 <button
                                     key={cat}
                                     onClick={() => setCategoryFilter(cat)}
@@ -1794,7 +2051,7 @@ const Reports = () => {
                     )}
 
                     {/* Reports Grid by Category */}
-                    {['Comercial', 'Financeiro', 'Estoque', 'Clientes', 'Compras', 'Frota', 'RH', 'Contábil', 'Gerencial'].map(category => {
+                    {['Comercial', 'Financeiro', 'Estoque', 'Produção', 'Clientes', 'Compras', 'Frota', 'RH', 'Contábil', 'Gerencial'].map(category => {
                         const filteredModules = modules.filter(m => {
                             const matchCategory = m.category === category;
                             const matchFilter = categoryFilter === 'Todos' || m.category === categoryFilter;
@@ -1810,6 +2067,7 @@ const Reports = () => {
                             'Comercial': 'from-cyan-500 to-blue-600',
                             'Financeiro': 'from-emerald-500 to-teal-600',
                             'Estoque': 'from-amber-500 to-orange-600',
+                            'Produção': 'from-orange-500 to-red-600',
                             'Clientes': 'from-violet-500 to-purple-600',
                             'Compras': 'from-rose-500 to-pink-600',
                             'Frota': 'from-slate-600 to-slate-700',
