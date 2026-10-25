@@ -1655,7 +1655,7 @@ const Sales = () => {
       budget.total,
       getBudgetDisplayId(budget)
     );
-    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=0&data=${encodeURIComponent(pixPayload || pixKey)}`;
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&margin=0&data=${encodeURIComponent(pixPayload || pixKey)}`;
 
     let clientAddressStr = 'Não Informado';
     if (client && client.address) {
@@ -1679,7 +1679,7 @@ const Sales = () => {
     
     @page {
       size: A4 portrait;
-      margin: 12mm 15mm 15mm 15mm;
+      margin: 10mm 12mm 12mm 12mm;
     }
     
     * {
@@ -1689,13 +1689,13 @@ const Sales = () => {
     }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       color: #0f172a;
       background: #ffffff;
       margin: 0;
       padding: 0;
-      font-size: 11px;
-      line-height: 1.45;
+      font-size: 10.5px;
+      line-height: 1.4;
     }
 
     .container {
@@ -1706,23 +1706,23 @@ const Sales = () => {
 
     .header-table {
       width: 100%;
-      border-bottom: 3px solid #0891b2;
-      padding-bottom: 12px;
-      margin-bottom: 16px;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
     }
 
     .company-name {
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 900;
-      color: #0891b2;
+      color: #0f172a;
       letter-spacing: -0.02em;
-      margin: 0 0 3px 0;
+      margin: 0 0 2px 0;
       text-transform: uppercase;
     }
 
     .company-sub {
-      font-size: 10px;
-      color: #475569;
+      font-size: 9.5px;
+      color: #334155;
       margin: 1px 0;
     }
 
@@ -1734,59 +1734,59 @@ const Sales = () => {
       display: inline-block;
       background: #0f172a;
       color: #ffffff;
-      font-size: 11px;
-      font-weight: 900;
+      font-size: 10px;
+      font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      padding: 4px 12px;
-      border-radius: 4px;
-      margin-bottom: 6px;
+      padding: 3px 10px;
+      border-radius: 3px;
+      margin-bottom: 4px;
     }
 
     .doc-id {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 900;
       color: #0f172a;
-      margin: 2px 0;
+      margin: 1px 0;
     }
 
     .doc-date {
-      font-size: 10px;
-      color: #64748b;
-      margin: 2px 0;
+      font-size: 9.5px;
+      color: #475569;
+      margin: 1px 0;
     }
 
     .card-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 16px;
+      gap: 10px;
+      margin-bottom: 12px;
       page-break-inside: avoid;
     }
 
     .card {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      padding: 10px 14px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 8px 12px;
     }
 
     .card-title {
-      font-size: 9px;
-      font-weight: 900;
+      font-size: 8.5px;
+      font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: #0891b2;
+      letter-spacing: 0.05em;
+      color: #0f172a;
       border-bottom: 1px solid #e2e8f0;
-      padding-bottom: 4px;
-      margin: 0 0 8px 0;
+      padding-bottom: 3px;
+      margin: 0 0 6px 0;
       display: flex;
       justify-content: space-between;
     }
 
     .card-row {
-      margin: 3px 0;
-      font-size: 10.5px;
+      margin: 2.5px 0;
+      font-size: 10px;
       color: #334155;
     }
 
@@ -1797,30 +1797,30 @@ const Sales = () => {
 
     .badge-status {
       display: inline-block;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 9px;
-      font-weight: 800;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 8.5px;
+      font-weight: 700;
       text-transform: uppercase;
-      background: #e0f2fe;
-      color: #0369a1;
+      border: 1px solid #94a3b8;
+      color: #0f172a;
     }
 
     .items-table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       page-break-inside: auto;
     }
 
     .items-table thead th {
       background: #0f172a;
       color: #ffffff;
-      font-size: 9px;
+      font-size: 8.5px;
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      padding: 7px 8px;
+      padding: 6px 8px;
       text-align: left;
     }
 
@@ -1838,141 +1838,149 @@ const Sales = () => {
     }
 
     .items-table tbody tr:nth-child(even) {
-      background: #f8fafc;
+      background: #fbfcfe;
     }
 
     .items-table tbody td {
-      padding: 7px 8px;
-      font-size: 10px;
-      color: #1e293b;
+      padding: 6px 8px;
+      font-size: 9.5px;
+      color: #0f172a;
       vertical-align: middle;
     }
 
-    .summary-section {
-      display: flex;
-      justify-content: flex-end;
-      margin-bottom: 16px;
-      page-break-inside: avoid;
-    }
-
-    .summary-box {
-      width: 280px;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      background: #f8fafc;
-      padding: 10px 14px;
-    }
-
-    .summary-row {
-      display: flex;
-      justify-content: space-between;
-      margin: 4px 0;
-      font-size: 11px;
-      color: #475569;
-    }
-
-    .summary-row.total-row {
-      border-top: 2px solid #0f172a;
-      padding-top: 6px;
-      margin-top: 6px;
-      font-size: 14px;
-      font-weight: 900;
-      color: #0f172a;
-    }
-
-    .financial-box {
-      background: #ffffff;
-      border: 1.5px solid #0891b2;
-      border-radius: 6px;
-      padding: 10px 14px;
-      margin-bottom: 16px;
+    .financial-totals-block {
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
       page-break-inside: avoid;
       display: grid;
-      grid-template-columns: 120px 1fr;
+      grid-template-columns: 1fr 1.1fr;
       gap: 16px;
       align-items: center;
     }
 
-    .qr-container {
-      text-align: center;
-    }
-
-    .qr-container img {
-      width: 105px;
-      height: 105px;
-      display: block;
-      margin: 0 auto;
-      border: 1px solid #cbd5e1;
-      border-radius: 4px;
-      padding: 4px;
-      background: #fff;
-    }
-
-    .qr-label {
-      font-size: 8px;
-      font-weight: 800;
-      text-transform: uppercase;
-      color: #0891b2;
-      margin-top: 4px;
-    }
-
-    .bank-info h4 {
-      margin: 0 0 6px 0;
-      font-size: 11px;
+    .bank-details-clean h4 {
+      margin: 0 0 4px 0;
+      font-size: 9px;
       font-weight: 800;
       color: #0f172a;
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
 
-    .pix-payload-box {
-      margin-top: 6px;
-      padding: 5px 8px;
-      background: #f1f5f9;
-      border-radius: 4px;
-      font-family: monospace;
-      font-size: 8px;
-      word-break: break-all;
+    .bank-grid-clean {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 10px;
+      font-size: 9.5px;
       color: #334155;
-      border: 1px dashed #cbd5e1;
     }
 
-    .terms-card {
-      background: #fbfcfe;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      padding: 10px 14px;
-      margin-bottom: 20px;
+    .pix-copia-cola-line {
+      margin-top: 5px;
+      font-size: 8px;
+      font-family: monospace;
+      color: #475569;
+      background: #f8fafc;
+      padding: 3px 6px;
+      border-radius: 3px;
+      border: 1px dashed #cbd5e1;
+      word-break: break-all;
+    }
+
+    .totals-and-qr-box {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 14px;
+      border-left: 1px solid #e2e8f0;
+      padding-left: 14px;
+    }
+
+    .qr-discreet {
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .qr-discreet img {
+      width: 55px;
+      height: 55px;
+      display: block;
+      margin: 0 auto;
+      border: 1px solid #94a3b8;
+      border-radius: 3px;
+      padding: 2px;
+      background: #ffffff;
+    }
+
+    .qr-discreet-label {
+      font-size: 7.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #0f172a;
+      margin-top: 2px;
+    }
+
+    .totals-column {
+      min-width: 180px;
+      text-align: right;
+    }
+
+    .totals-row-clean {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9.5px;
+      color: #475569;
+      margin: 2px 0;
+    }
+
+    .totals-final-clean {
+      display: flex;
+      justify-content: space-between;
+      border-top: 1.5px solid #0f172a;
+      padding-top: 4px;
+      margin-top: 4px;
+      font-size: 13px;
+      font-weight: 900;
+      color: #0f172a;
+    }
+
+    .terms-card-clean {
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 8px 12px;
+      margin-bottom: 16px;
       page-break-inside: avoid;
     }
 
-    .terms-card h4 {
-      margin: 0 0 6px 0;
-      font-size: 9px;
-      font-weight: 900;
+    .terms-card-clean h4 {
+      margin: 0 0 4px 0;
+      font-size: 8.5px;
+      font-weight: 800;
       text-transform: uppercase;
-      color: #475569;
-      letter-spacing: 0.05em;
+      color: #0f172a;
+      letter-spacing: 0.04em;
     }
 
-    .terms-card ol {
+    .terms-card-clean ol {
       margin: 0;
-      padding-left: 16px;
-      font-size: 9px;
+      padding-left: 14px;
+      font-size: 8.5px;
       color: #475569;
-      line-height: 1.45;
+      line-height: 1.35;
     }
 
-    .terms-card li {
-      margin-bottom: 3px;
+    .terms-card-clean li {
+      margin-bottom: 2px;
     }
 
-    .signatures-grid {
+    .signatures-grid-clean {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 30px;
-      margin-top: 30px;
-      padding-top: 15px;
+      margin-top: 24px;
+      padding-top: 10px;
       page-break-inside: avoid;
     }
 
@@ -1981,13 +1989,13 @@ const Sales = () => {
     }
 
     .signature-line {
-      border-bottom: 1.5px solid #0f172a;
-      margin-bottom: 6px;
+      border-bottom: 1px solid #0f172a;
+      margin-bottom: 4px;
       height: 1px;
     }
 
     .signature-name {
-      font-size: 10px;
+      font-size: 9.5px;
       font-weight: 800;
       color: #0f172a;
       text-transform: uppercase;
@@ -1995,17 +2003,17 @@ const Sales = () => {
     }
 
     .signature-title {
-      font-size: 8.5px;
+      font-size: 8px;
       color: #64748b;
-      margin: 2px 0 0 0;
+      margin: 1px 0 0 0;
     }
 
-    .footer {
-      margin-top: 25px;
-      padding-top: 8px;
-      border-top: 1px solid #e2e8f0;
-      font-size: 8px;
-      color: #94a3b8;
+    .footer-clean {
+      margin-top: 18px;
+      padding-top: 6px;
+      border-top: 1px solid #cbd5e1;
+      font-size: 7.5px;
+      color: #64748b;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -2015,7 +2023,7 @@ const Sales = () => {
 </head>
 <body>
   <div class="container">
-    <!-- CABEÇALHO -->
+    <!-- CABEÇALHO LIMPO -->
     <table class="header-table">
       <tr>
         <td style="vertical-align: top;">
@@ -2030,8 +2038,8 @@ const Sales = () => {
             <span class="doc-type-pill">Proposta Comercial</span>
             <div class="doc-id">Nº ${getBudgetDisplayId(budget)}</div>
             <div class="doc-date">Emissão: <strong>${budget.date}</strong></div>
-            <div class="doc-date" style="color: #c2410c;">Validade: <strong>${budget.expiryDate}</strong></div>
-            <div style="margin-top: 5px;">
+            <div class="doc-date">Validade: <strong>${budget.expiryDate}</strong></div>
+            <div style="margin-top: 3px;">
               <span class="badge-status">${budget.status}</span>
             </div>
           </div>
@@ -2043,14 +2051,14 @@ const Sales = () => {
     <div class="card-grid">
       <div class="card">
         <div class="card-title">
-          <span>Identificação do Cliente / Proponente</span>
+          <span>Cliente Destinatário</span>
           <span>Cód: ${budget.clientId || 'N/A'}</span>
         </div>
-        <p class="card-row"><strong>Nome / Razão Social:</strong> ${budget.clientName}</p>
+        <p class="card-row"><strong>Nome / Razão:</strong> ${budget.clientName}</p>
         <p class="card-row"><strong>CPF / CNPJ:</strong> ${client?.document || 'Não Informado'}</p>
-        <p class="card-row"><strong>Telefone / WhatsApp:</strong> ${client?.phone || 'Não Informado'}</p>
+        <p class="card-row"><strong>Telefone:</strong> ${client?.phone || 'Não Informado'}</p>
         <p class="card-row"><strong>E-mail:</strong> ${client?.email || 'Não Informado'}</p>
-        <p class="card-row"><strong>Endereço de Entrega:</strong> ${clientAddressStr}</p>
+        <p class="card-row"><strong>Entrega:</strong> ${clientAddressStr}</p>
       </div>
 
       <div class="card">
@@ -2058,27 +2066,26 @@ const Sales = () => {
           <span>Condições Comerciais e Logística</span>
           <span>InfraCore BETA</span>
         </div>
-        <p class="card-row"><strong>Modalidade de Frete:</strong> ${freightLabel}</p>
-        <p class="card-row"><strong>Prazo Estimado de Entrega:</strong> ${deliveryTerm}</p>
-        <p class="card-row"><strong>Condição de Pagamento:</strong> ${paymentLabel} (${numInstallments})</p>
-        <p class="card-row"><strong>Gestor Comercial:</strong> Administrador / Atendimento</p>
-        ${commercialNotes ? `<p class="card-row" style="color: #0369a1;"><strong>Obs. Comercial:</strong> ${commercialNotes}</p>` : ''}
+        <p class="card-row"><strong>Frete:</strong> ${freightLabel}</p>
+        <p class="card-row"><strong>Prazo de Entrega:</strong> ${deliveryTerm}</p>
+        <p class="card-row"><strong>Pagamento:</strong> ${paymentLabel} (${numInstallments})</p>
+        <p class="card-row"><strong>Responsável:</strong> Administrador</p>
+        ${commercialNotes ? `<p class="card-row"><strong>Obs:</strong> ${commercialNotes}</p>` : ''}
       </div>
     </div>
 
-    <!-- DADOS TÉCNICOS / PESAGEM (SE HOUVER) -->
+    <!-- PESAGEM SE HOUVER -->
     ${budget.netWeight ? `
-    <div class="card" style="margin-bottom: 16px; background: #f0fdfa; border-color: #99f6e4;">
-      <div class="card-title" style="color: #0d9488; border-color: #99f6e4;">
-        <span>Especificação Técnica de Carga e Balança Rodoviária</span>
-        <span>Pesagem Integrada</span>
+    <div class="card" style="margin-bottom: 12px;">
+      <div class="card-title">
+        <span>Pesagem Rodoviária Integrada</span>
       </div>
-      <div style="display: flex; gap: 24px; font-size: 11px; font-family: monospace;">
-        <span><strong>Tara (Entrada):</strong> ${budget.tareWeight || 0} kg</span>
-        <span><strong>Bruto (Saída):</strong> ${budget.grossWeight || 0} kg</span>
-        <span><strong>Líquido Faturado:</strong> <span style="background: #ccfbf1; padding: 2px 6px; border-radius: 4px; font-weight: bold; color: #0f766e;">${budget.netWeight} kg</span></span>
+      <div style="display: flex; gap: 20px; font-size: 9.5px; font-family: monospace;">
+        <span><strong>Tara:</strong> ${budget.tareWeight || 0} kg</span>
+        <span><strong>Bruto:</strong> ${budget.grossWeight || 0} kg</span>
+        <span><strong>Líquido Faturado:</strong> <strong>${budget.netWeight} kg</strong></span>
       </div>
-      ${budget.weightNotes ? `<p style="margin: 6px 0 0 0; font-size: 10px; color: #0f766e; font-style: italic;"><strong>Observações da Pesagem:</strong> ${budget.weightNotes}</p>` : ''}
+      ${budget.weightNotes ? `<p style="margin: 4px 0 0 0; font-size: 9px; color: #475569; font-style: italic;"><strong>Obs. Pesagem:</strong> ${budget.weightNotes}</p>` : ''}
     </div>
     ` : ''}
 
@@ -2088,10 +2095,10 @@ const Sales = () => {
         <tr>
           <th style="width: 25px;" class="text-center">#</th>
           <th>Descrição do Material / Serviço</th>
-          <th style="width: 50px;" class="text-center">UN</th>
-          <th style="width: 65px;" class="text-right">QTD</th>
-          <th style="width: 85px;" class="text-right">Preço Unit.</th>
-          <th style="width: 95px;" class="text-right">Subtotal</th>
+          <th style="width: 45px;" class="text-center">UN</th>
+          <th style="width: 60px;" class="text-right">QTD</th>
+          <th style="width: 80px;" class="text-right">Preço Unit.</th>
+          <th style="width: 90px;" class="text-right">Subtotal</th>
         </tr>
       </thead>
       <tbody>
@@ -2099,93 +2106,91 @@ const Sales = () => {
           <tr>
             <td class="text-center" style="font-weight: 700; color: #64748b;">${idx + 1}</td>
             <td>
-              <div style="font-weight: 700; color: #0f172a;">${item.name}</div>
-              ${item.detail ? `<div style="font-size: 9px; color: #64748b;">${item.detail}</div>` : ''}
+              <div style="font-weight: 700;">${item.name}</div>
+              ${item.detail ? `<div style="font-size: 8.5px; color: #64748b;">${item.detail}</div>` : ''}
             </td>
-            <td class="text-center" style="font-weight: 600;">${item.unit || 'UN'}</td>
-            <td class="text-right" style="font-weight: 700; font-family: monospace;">${item.quantity}</td>
+            <td class="text-center">${item.unit || 'UN'}</td>
+            <td class="text-right" style="font-family: monospace; font-weight: 600;">${item.quantity}</td>
             <td class="text-right" style="font-family: monospace;">${formatMoney(item.price)}</td>
-            <td class="text-right" style="font-weight: 800; font-family: monospace; color: #0f172a;">${formatMoney(item.price * item.quantity)}</td>
+            <td class="text-right" style="font-weight: 700; font-family: monospace;">${formatMoney(item.price * item.quantity)}</td>
           </tr>
         `).join('')}
       </tbody>
     </table>
 
-    <!-- TOTALIZADORES -->
-    <div class="summary-section">
-      <div class="summary-box">
-        <div class="summary-row">
-          <span>Subtotal dos Produtos:</span>
-          <span style="font-weight: 700; font-family: monospace;">${formatMoney(budget.subtotal)}</span>
-        </div>
-        ${budget.discount > 0 ? `
-        <div class="summary-row" style="color: #dc2626;">
-          <span>Desconto Comercial Concedido:</span>
-          <span style="font-weight: 700; font-family: monospace;">- ${formatMoney(budget.discount)}</span>
-        </div>
-        ` : ''}
-        <div class="summary-row">
-          <span>Frete (${freight}):</span>
-          <span style="font-weight: 700;">${freight === 'CIF' ? 'Incluso' : 'Por conta do cliente'}</span>
-        </div>
-        <div class="summary-row total-row">
-          <span>VALOR TOTAL DA PROPOSTA:</span>
-          <span style="color: #0891b2; font-family: monospace;">${formatMoney(budget.total)}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- DADOS BANCÁRIOS E PIX -->
-    <div class="financial-box">
-      <div class="qr-container">
-        <img src="${qrCodeUrl}" alt="QR Code PIX para Pagamento" />
-        <div class="qr-label">QR CODE PIX OFICIAL</div>
-      </div>
-      <div class="bank-info">
-        <h4>Instruções Financeiras para Faturamento e Quitação</h4>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 10px; color: #334155;">
+    <!-- BLOCO FINANCEIRO INTEGRADO COM TOTAL E QR CODE ULTRA-DISCRETO (55x55) -->
+    <div class="financial-totals-block">
+      <div class="bank-details-clean">
+        <h4>Dados Bancários para Quitação</h4>
+        <div class="bank-grid-clean">
           <div><strong>Banco:</strong> ${bank.bankName || 'A Combinar'}</div>
           <div><strong>Agência:</strong> ${bank.agency || '0001'} | <strong>Conta:</strong> ${bank.account || '00000-0'}</div>
-          <div><strong>Favorecido:</strong> ${company.companyName}</div>
-          <div><strong>Chave PIX (${bank.pixType || 'Chave'}):</strong> <span style="font-family: monospace; font-weight: 700; color: #0891b2;">${pixKey}</span></div>
+          <div style="grid-column: span 2;"><strong>Favorecido:</strong> ${company.companyName}</div>
+          <div style="grid-column: span 2;"><strong>Chave PIX:</strong> <span style="font-family: monospace; font-weight: 700;">${pixKey}</span></div>
         </div>
-        <div style="margin-top: 6px;">
-          <span style="font-size: 8.5px; font-weight: 700; color: #475569;">Código PIX Copia e Cola (Pagamento / Sinal):</span>
-          <div class="pix-payload-box">${pixPayload || pixKey}</div>
+        <div class="pix-copia-cola-line">
+          <strong>PIX Copia e Cola:</strong> ${pixPayload || pixKey}
+        </div>
+      </div>
+
+      <div class="totals-and-qr-box">
+        <div class="qr-discreet">
+          <img src="${qrCodeUrl}" alt="QR Code PIX (55x55)" />
+          <div class="qr-discreet-label">PIX INSTANTÂNEO</div>
+        </div>
+        <div class="totals-column">
+          <div class="totals-row-clean">
+            <span>Subtotal:</span>
+            <span style="font-family: monospace;">${formatMoney(budget.subtotal)}</span>
+          </div>
+          ${budget.discount > 0 ? `
+          <div class="totals-row-clean">
+            <span>Desconto:</span>
+            <span style="font-family: monospace;">- ${formatMoney(budget.discount)}</span>
+          </div>
+          ` : ''}
+          <div class="totals-row-clean">
+            <span>Frete:</span>
+            <span>${freight === 'CIF' ? 'Incluso' : 'Destinatário'}</span>
+          </div>
+          <div class="totals-final-clean">
+            <span>TOTAL:</span>
+            <span style="font-family: monospace;">${formatMoney(budget.total)}</span>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- TERMOS E CLÁUSULAS GERAIS DE FORNECIMENTO -->
-    <div class="terms-card">
-      <h4>Termos Gerais de Fornecimento e Condições de Fornecimento</h4>
+    <!-- TERMOS E CLÁUSULAS -->
+    <div class="terms-card-clean">
+      <h4>Termos Gerais de Fornecimento</h4>
       <ol>
-        <li><strong>Validade da Proposta:</strong> Os preços e condições apresentados são válidos impreterivelmente até <strong>${budget.expiryDate}</strong>. Após esta data, os itens estão sujeitos a reajuste e confirmação de estoque.</li>
-        <li><strong>Logística e Descarga:</strong> Conforme modalidade <strong>${freight}</strong>, o descarregamento no destino corre sob responsabilidade exclusiva do comprador, ressalvado acordo prévio formal.</li>
-        <li><strong>Faturamento e Títulos:</strong> Operações a prazo sujeitas a prévia análise de crédito. Títulos não liquidados até o vencimento incorrem em juros legais e encargos previstos em lei.</li>
-        <li><strong>Garantia de Qualidade:</strong> Produtos fornecidos com garantia de fábrica e em conformidade estrita com as normas técnicas pertinentes.</li>
+        <li><strong>Validade:</strong> Proposta válida impreterivelmente até <strong>${budget.expiryDate}</strong>, sujeita à confirmação de estoque e crédito.</li>
+        <li><strong>Logística:</strong> Conforme modalidade <strong>${freight}</strong>, a descarga é de responsabilidade do comprador, ressalvado acordo formal.</li>
+        <li><strong>Pagamento:</strong> Faturamento conforme condições aprovadas (${paymentLabel}). Vencimentos sujeitos a juros legais após prazo.</li>
+        <li><strong>Garantia:</strong> Materiais fornecidos com garantia legal de qualidade e conformidade técnica.</li>
       </ol>
     </div>
 
-    <!-- ASSINATURAS E DE ACORDO -->
-    <div class="signatures-grid">
+    <!-- ASSINATURAS -->
+    <div class="signatures-grid-clean">
       <div class="signature-block">
         <div class="signature-line"></div>
         <p class="signature-name">${company.tradeName || company.companyName}</p>
-        <p class="signature-title">Departamento Comercial / Emissor Autorizado</p>
+        <p class="signature-title">Emissor Autorizado</p>
       </div>
 
       <div class="signature-block">
         <div class="signature-line"></div>
         <p class="signature-name">${budget.clientName}</p>
-        <p class="signature-title">De Acordo do Cliente / Carimbo e Assinatura (Data: ____/____/________)</p>
+        <p class="signature-title">De Acordo do Cliente (Data: ____/____/________)</p>
       </div>
     </div>
 
     <!-- RODAPÉ -->
-    <div class="footer">
-      <span>InfraCore ERP Beta • Gestão Comercial e Faturamento Integrado</span>
-      <span>Documento gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}</span>
+    <div class="footer-clean">
+      <span>InfraCore ERP Beta • Gestão Comercial</span>
+      <span>Emissão: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</span>
       <span>Autenticação: INFRA-${budget.id}-${Date.now().toString(36).toUpperCase()}</span>
     </div>
   </div>
@@ -3833,9 +3838,9 @@ const Sales = () => {
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => updateCatalogQty(product.id, -1)}
-                              className="w-6 h-6 flex items-center justify-center rounded-lg bg-white dark:bg-slate-800 text-slate-400 hover:text-red-500 shadow-sm border dark:border-slate-700 transition-colors"
+                              className="w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center rounded-lg bg-white dark:bg-slate-800 text-slate-400 hover:text-red-500 shadow-sm border dark:border-slate-700 transition-colors active:scale-95"
                             >
-                              <Minus size={12} />
+                              <Minus size={14} />
                             </button>
                             <input
                               type="number"
@@ -3845,9 +3850,9 @@ const Sales = () => {
                             />
                             <button
                               onClick={() => updateCatalogQty(product.id, 1)}
-                              className="w-6 h-6 flex items-center justify-center rounded-lg bg-white dark:bg-slate-800 text-slate-400 hover:text-cyan-600 shadow-sm border dark:border-slate-700 transition-colors"
+                              className="w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center rounded-lg bg-white dark:bg-slate-800 text-slate-400 hover:text-cyan-600 shadow-sm border dark:border-slate-700 transition-colors active:scale-95"
                             >
-                              <Plus size={12} />
+                              <Plus size={14} />
                             </button>
                           </div>
 
@@ -3856,7 +3861,7 @@ const Sales = () => {
                               addToCart(product, currentQty);
                               setCatalogQtys(prev => ({ ...prev, [product.id]: 1 }));
                             }}
-                            className="w-9 h-9 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl flex items-center justify-center shadow-lg shadow-cyan-600/20 active:scale-95 transition-all"
+                            className="w-10 h-10 sm:w-9 sm:h-9 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl flex items-center justify-center shadow-lg shadow-cyan-600/20 active:scale-95 transition-all"
                             title="Adicionar ao Carrinho"
                           >
                             <Plus size={18} strokeWidth={3} />
@@ -3867,6 +3872,22 @@ const Sales = () => {
                   })
                 )}
               </div>
+
+              {/* Botão Flutuante de Resumo do Carrinho no Mobile */}
+              {cart.length > 0 && (
+                <div className="lg:hidden sticky bottom-1 mx-2 p-2.5 bg-slate-900/95 dark:bg-black/95 backdrop-blur-md text-white rounded-2xl flex items-center justify-between shadow-2xl border border-white/20 z-30 animate-in slide-in-from-bottom-2">
+                  <div className="flex flex-col pl-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{cart.length} {cart.length === 1 ? 'item' : 'itens'} no carrinho</span>
+                    <span className="text-sm font-black text-cyan-400">{formatMoney(subtotal)}</span>
+                  </div>
+                  <button
+                    onClick={() => setMobileTab('checkout')}
+                    className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-cyan-600/30 active:scale-95 transition-all"
+                  >
+                    <ShoppingCart size={15} /> Ver Carrinho
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Checkout - 68% width */}
@@ -3987,77 +4008,63 @@ const Sales = () => {
                         <button onClick={() => setShowCheckout(false)} className="text-xs font-bold text-cyan-600 hover:underline uppercase tracking-wide">Voltar ao Carrinho</button>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto pr-3 custom-scrollbar space-y-5">
-                        <div className="space-y-4">
-                          {/* Seletor de Cliente com botão de Cadastro Rápido */}
-                          <div>
-                            <div className="flex items-center justify-between mb-2 pl-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cliente Destinatário *</label>
-                              <button
-                                type="button"
-                                onClick={() => setIsQuickClientOpen(true)}
-                                className="text-[10px] font-black text-cyan-600 hover:text-cyan-700 uppercase tracking-wider flex items-center gap-1 hover:underline cursor-pointer"
-                              >
-                                <UserPlus size={12} /> + Novo Cliente
-                              </button>
-                            </div>
-                            <div className="relative">
-                              <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                              <select
-                                value={selectedClient}
-                                onChange={e => setSelectedClient(e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-gray-700 border-slate-200 dark:border-gray-600 rounded-xl text-sm font-bold shadow-sm focus:ring-2 focus:ring-cyan-500"
-                              >
-                                <option value="">Selecione o Cliente...</option>
-                                {(clients || []).map(c => (
-                                  <option key={c.id} value={c.id}>
-                                    {c.name} {c.document ? `(${c.document})` : ''}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            {selectedClientData && (
-                              <div className="mt-1.5 flex items-center justify-between text-[10px] font-bold text-slate-500 px-1">
-                                <span>Doc: {selectedClientData.document || 'Não informado'}</span>
-                                {selectedClientData.creditLimit !== undefined && selectedClientData.creditLimit > 0 && (
-                                  <span className="text-emerald-600">Limite: {formatMoney(selectedClientData.creditLimit)}</span>
-                                )}
-                                <span className={selectedClientData.status === 'Ativo' ? 'text-emerald-600' : 'text-rose-500 font-bold'}>
-                                  Status: {selectedClientData.status}
-                                </span>
+                      <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          {/* BLOCO 1: IDENTIFICAÇÃO DO CLIENTE & CONTA FINANCEIRA */}
+                          <div className="p-4 bg-slate-50/90 dark:bg-gray-700/40 rounded-2xl border border-slate-200/80 dark:border-gray-600/70 space-y-3.5 flex flex-col justify-between">
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2 pb-2 border-b border-slate-200/60 dark:border-gray-600/50">
+                                <User size={15} className="text-cyan-600" />
+                                <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">1. Cliente & Faturamento</span>
                               </div>
-                            )}
-                          </div>
 
-                          {/* Forma de Pagamento */}
-                          <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest pl-1">Forma de Pagamento</label>
-                            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                              {['money', 'pix', 'transfer', 'credit', 'boleto', 'prazo'].map((method) => (
-                                <button
-                                  key={method}
-                                  onClick={() => setPaymentMethod(method)}
-                                  className={`p-3 rounded-xl border-2 font-black text-[9px] flex flex-col items-center justify-center gap-2 transition-all ${paymentMethod === method ? 'border-cyan-500 bg-cyan-50 text-cyan-600 dark:bg-cyan-900/20' : 'border-slate-100 dark:border-gray-700 text-slate-400 hover:bg-slate-50'}`}
-                                >
-                                  {method === 'money' && <><Banknote size={20} />DINHEIRO</>}
-                                  {method === 'pix' && <><QrCode size={20} />PIX</>}
-                                  {method === 'transfer' && <><ArrowLeftRight size={20} />TRANSFER.</>}
-                                  {method === 'credit' && <><CreditCard size={20} />CARTÃO</>}
-                                  {method === 'boleto' && <><Barcode size={20} />BOLETO</>}
-                                  {method === 'prazo' && <><Calendar size={20} />A PRAZO</>}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="p-4 bg-slate-50 dark:bg-gray-700/30 rounded-xl border border-slate-100 dark:border-gray-600 space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {/* Seletor de Cliente com botão de Cadastro Rápido */}
                               <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Conta Financeira (Recebimento) *</label>
+                                <div className="flex items-center justify-between mb-1.5 pl-0.5">
+                                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Cliente Destinatário *</label>
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsQuickClientOpen(true)}
+                                    className="text-[10px] font-black text-cyan-600 hover:text-cyan-700 uppercase tracking-wider flex items-center gap-1 hover:underline cursor-pointer"
+                                  >
+                                    <UserPlus size={12} /> + Novo Cliente
+                                  </button>
+                                </div>
+                                <div className="relative">
+                                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                  <select
+                                    value={selectedClient}
+                                    onChange={e => setSelectedClient(e.target.value)}
+                                    className="w-full pl-9 pr-3 py-2.5 sm:py-2 bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold shadow-sm focus:ring-2 focus:ring-cyan-500 min-h-[42px] sm:min-h-0"
+                                  >
+                                    <option value="">Selecione o Cliente...</option>
+                                    {(clients || []).map(c => (
+                                      <option key={c.id} value={c.id}>
+                                        {c.name} {c.document ? `(${c.document})` : ''}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                {selectedClientData && (
+                                  <div className="mt-2 p-2 bg-white/80 dark:bg-gray-800/80 rounded-lg border border-slate-200/60 dark:border-gray-600/60 flex flex-wrap items-center justify-between text-[10px] font-bold text-slate-500 gap-1">
+                                    <span>Doc: <strong className="text-slate-700 dark:text-slate-200">{selectedClientData.document || 'Não informado'}</strong></span>
+                                    {selectedClientData.creditLimit !== undefined && selectedClientData.creditLimit > 0 && (
+                                      <span className="text-emerald-600">Limite: {formatMoney(selectedClientData.creditLimit)}</span>
+                                    )}
+                                    <span className={selectedClientData.status === 'Ativo' ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded' : 'text-rose-500 font-bold bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.5 rounded'}>
+                                      {selectedClientData.status}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Conta Financeira de Recebimento */}
+                              <div>
+                                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5 tracking-widest pl-0.5">Conta Financeira (Recebimento) *</label>
                                 <select
                                   value={account}
                                   onChange={e => setAccount(e.target.value)}
-                                  className="w-full p-2.5 bg-white dark:bg-gray-600 border border-slate-200 dark:border-gray-500 rounded-lg text-xs font-bold"
+                                  className="w-full p-2.5 sm:p-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-800 dark:text-white min-h-[42px] sm:min-h-0"
                                 >
                                   <option value="">Selecione a conta...</option>
                                   {financialAccounts.map(acc => (
@@ -4065,59 +4072,95 @@ const Sales = () => {
                                   ))}
                                 </select>
                               </div>
+                            </div>
+                          </div>
+
+                          {/* BLOCO 2: CONDIÇÕES DE PAGAMENTO & DESCONTO */}
+                          <div className="p-4 bg-slate-50/90 dark:bg-gray-700/40 rounded-2xl border border-slate-200/80 dark:border-gray-600/70 space-y-3.5">
+                            <div className="flex items-center gap-2 pb-2 border-b border-slate-200/60 dark:border-gray-600/50">
+                              <CreditCard size={15} className="text-cyan-600" />
+                              <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">2. Pagamento & Condições</span>
+                            </div>
+
+                            {/* Forma de Pagamento */}
+                            <div>
+                              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5 tracking-widest pl-0.5">Forma de Pagamento</label>
+                              <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-3 gap-1.5">
+                                {['money', 'pix', 'transfer', 'credit', 'boleto', 'prazo'].map((method) => (
+                                  <button
+                                    key={method}
+                                    onClick={() => setPaymentMethod(method)}
+                                    className={`p-2 rounded-xl border-2 font-black text-[9px] flex flex-col items-center justify-center gap-1 transition-all min-h-[48px] sm:min-h-[42px] active:scale-95 ${paymentMethod === method ? 'border-cyan-500 bg-cyan-50 text-cyan-600 dark:bg-cyan-900/30 font-bold' : 'border-slate-100 dark:border-gray-700 text-slate-400 bg-white dark:bg-gray-800 hover:bg-slate-50'}`}
+                                  >
+                                    {method === 'money' && <><Banknote size={16} />DINHEIRO</>}
+                                    {method === 'pix' && <><QrCode size={16} />PIX</>}
+                                    {method === 'transfer' && <><ArrowLeftRight size={16} />TRANSF.</>}
+                                    {method === 'credit' && <><CreditCard size={16} />CARTÃO</>}
+                                    {method === 'boleto' && <><Barcode size={16} />BOLETO</>}
+                                    {method === 'prazo' && <><Calendar size={16} />A PRAZO</>}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                               <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Desconto (R$)</label>
+                                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest pl-0.5">Desconto (R$)</label>
                                 <input
                                   type="number"
                                   min="0"
                                   step="0.01"
                                   value={discount}
                                   onChange={e => setDiscount(e.target.value)}
-                                  className="w-full p-2.5 bg-white dark:bg-gray-600 border border-slate-200 dark:border-gray-500 rounded-lg text-xs font-bold text-rose-600"
+                                  className="w-full p-2.5 sm:p-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-rose-600 min-h-[42px] sm:min-h-0"
                                   placeholder="0,00"
                                 />
                               </div>
+
+                              {!['money', 'pix', 'transfer'].includes(paymentMethod) ? (
+                                <div>
+                                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest pl-0.5">
+                                    {['prazo', 'boleto'].includes(paymentMethod) ? 'Parcelamento' : 'Parcelamento'}
+                                  </label>
+                                  <select
+                                    value={installments}
+                                    onChange={e => setInstallments(Number(e.target.value))}
+                                    className="w-full p-2.5 sm:p-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold min-h-[42px] sm:min-h-0"
+                                  >
+                                    {[1, 2, 3, 4, 5, 6, 10, 12].map(n => (
+                                      <option key={n} value={n}>
+                                        {['prazo', 'boleto'].includes(paymentMethod)
+                                          ? `${n}x (${n === 1 ? '30 dias' : Array.from({ length: n }, (_, i) => (i + 1) * 30).join('/') + ' dias'})`
+                                          : `${n}x ${n > 1 ? 'sem juros' : 'à vista'}`}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              ) : (
+                                <div className="flex items-center text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/20 p-2 rounded-xl border border-emerald-100 dark:border-emerald-800/40">
+                                  <span>✓ Pagamento à Vista</span>
+                                </div>
+                              )}
                             </div>
 
-                            {!['money', 'pix', 'transfer'].includes(paymentMethod) && (
-                              <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">
-                                  {['prazo', 'boleto'].includes(paymentMethod) ? 'Condição / Parcelamento' : 'Parcelamento'}
-                                </label>
-                                <select
-                                  value={installments}
-                                  onChange={e => setInstallments(Number(e.target.value))}
-                                  className="w-full p-2.5 bg-white dark:bg-gray-600 border border-slate-200 dark:border-gray-500 rounded-lg text-xs font-bold"
-                                >
-                                  {[1, 2, 3, 4, 5, 6, 10, 12].map(n => (
-                                    <option key={n} value={n}>
-                                      {['prazo', 'boleto'].includes(paymentMethod)
-                                        ? `${n}x (${n === 1 ? '30 dias' : Array.from({ length: n }, (_, i) => (i + 1) * 30).join('/') + ' dias'})`
-                                        : `${n}x ${n > 1 ? 'sem juros' : 'à vista'}`}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            )}
-
                             {!['money', 'pix', 'transfer'].includes(paymentMethod) && customDueDates.length > 0 && (
-                              <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">
+                              <div className="pt-2 border-t border-slate-200/60 dark:border-gray-600/60">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 pl-0.5">
                                   {installments > 1 ? 'Vencimento das Parcelas' : 'Vencimento do Título'}
                                 </label>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-24 overflow-y-auto pr-1">
                                   {customDueDates.map((date, idx) => (
                                     <div key={idx}>
                                       {installments > 1 && (
-                                        <span className="text-[9px] font-bold text-slate-400 block mb-0.5">
-                                          Parcela {idx + 1}/{installments}
+                                        <span className="text-[8px] font-bold text-slate-400 block mb-0.5">
+                                          P{idx + 1}/{installments}
                                         </span>
                                       )}
                                       <input
                                         type="date"
                                         value={date}
                                         onChange={(e) => updateDueDate(idx, e.target.value)}
-                                        className="w-full p-1.5 bg-white dark:bg-gray-600 rounded border border-slate-200 dark:border-gray-500 text-[10px] font-bold font-mono"
+                                        className="w-full p-1.5 bg-white dark:bg-gray-800 rounded-lg border border-slate-200 dark:border-gray-600 text-[10px] font-bold font-mono"
                                       />
                                     </div>
                                   ))}
@@ -4126,15 +4169,17 @@ const Sales = () => {
                             )}
                           </div>
 
-                          {/* Logística e Despacho */}
-                          <div className="bg-slate-50 dark:bg-gray-700/30 p-4 rounded-xl border border-slate-200 dark:border-gray-600 space-y-4">
-                            <div className="flex items-center justify-between">
-                              <h4 className="font-bold text-slate-700 dark:text-slate-300 text-sm flex items-center gap-2">
-                                <Truck size={16} /> Logística e Despacho
-                              </h4>
+                          {/* BLOCO 3: LOGÍSTICA, FRETE & PESAGEM */}
+                          <div className="col-span-1 lg:col-span-2 p-4 bg-slate-50/90 dark:bg-gray-700/40 rounded-2xl border border-slate-200/80 dark:border-gray-600/70 space-y-3.5">
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-gray-600/50">
                               <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-slate-500">Requer Pesagem?</span>
+                                <Truck size={15} className="text-cyan-600" />
+                                <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">3. Logística, Frete & Pesagem</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-bold text-slate-500">Requer Pesagem?</span>
                                 <button
+                                  type="button"
                                   onClick={() => setRequiresWeighing(!requiresWeighing)}
                                   className={`w-10 h-6 rounded-full p-1 transition-colors ${requiresWeighing ? 'bg-cyan-600' : 'bg-slate-300'}`}
                                 >
@@ -4143,13 +4188,38 @@ const Sales = () => {
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                               <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Veículo (Frota)</label>
+                                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest pl-0.5">Modalidade de Frete</label>
+                                <select
+                                  value={freightType}
+                                  onChange={e => setFreightType(e.target.value as 'CIF' | 'FOB' | 'Sem Frete')}
+                                  className="w-full p-2.5 sm:p-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-800 dark:text-white min-h-[42px] sm:min-h-0"
+                                >
+                                  <option value="FOB">FOB (Destinatário)</option>
+                                  <option value="CIF">CIF (Emitente - Incluso)</option>
+                                  <option value="Sem Frete">Sem Frete / Retirada</option>
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest pl-0.5">Prazo de Entrega (Dias Úteis)</label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={deliveryDays}
+                                  onChange={e => setDeliveryDays(Math.max(0, parseInt(e.target.value) || 0))}
+                                  className="w-full p-2.5 sm:p-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-800 dark:text-white min-h-[42px] sm:min-h-0"
+                                  placeholder="Ex: 5"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest pl-0.5">Veículo (Frota)</label>
                                 <select
                                   value={selectedVehicle}
                                   onChange={e => setSelectedVehicle(e.target.value)}
-                                  className="w-full p-2.5 bg-white dark:bg-gray-600 border border-slate-200 dark:border-gray-500 rounded-lg text-xs font-bold"
+                                  className="w-full p-2.5 sm:p-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold min-h-[42px] sm:min-h-0"
                                 >
                                   <option value="">Veículo Próprio / Terceiro</option>
                                   {(fleet || []).map(v => (
@@ -4157,65 +4227,40 @@ const Sales = () => {
                                   ))}
                                 </select>
                               </div>
+
                               <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Motorista</label>
+                                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest pl-0.5">Motorista</label>
                                 <input
                                   type="text"
                                   value={driverName}
                                   onChange={e => setDriverName(e.target.value)}
-                                  className="w-full p-2.5 bg-white dark:bg-gray-600 border border-slate-200 dark:border-gray-500 rounded-lg text-xs font-bold"
+                                  className="w-full p-2.5 sm:p-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold min-h-[42px] sm:min-h-0"
                                   placeholder="Nome do Condutor"
                                 />
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-gray-600">
-                              <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Modalidade de Frete</label>
-                                <select
-                                  value={freightType}
-                                  onChange={e => setFreightType(e.target.value as 'CIF' | 'FOB' | 'Sem Frete')}
-                                  className="w-full p-2.5 bg-white dark:bg-gray-600 border border-slate-200 dark:border-gray-500 rounded-lg text-xs font-bold text-slate-800 dark:text-white"
-                                >
-                                  <option value="FOB">FOB (Destinatário)</option>
-                                  <option value="CIF">CIF (Emitente - Incluso)</option>
-                                  <option value="Sem Frete">Sem Frete / Retirada</option>
-                                </select>
-                              </div>
-                              <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Prazo de Entrega (Dias Úteis)</label>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={deliveryDays}
-                                  onChange={e => setDeliveryDays(Math.max(0, parseInt(e.target.value) || 0))}
-                                  className="w-full p-2.5 bg-white dark:bg-gray-600 border border-slate-200 dark:border-gray-500 rounded-lg text-xs font-bold text-slate-800 dark:text-white"
-                                  placeholder="Ex: 5"
-                                />
-                              </div>
-                            </div>
-
                             <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Condições Comerciais / Observações da Proposta</label>
+                              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest pl-0.5">Condições Comerciais / Observações da Proposta</label>
                               <input
                                 type="text"
                                 value={commercialNotes}
                                 onChange={e => setCommercialNotes(e.target.value)}
-                                className="w-full p-2.5 bg-white dark:bg-gray-600 border border-slate-200 dark:border-gray-500 rounded-lg text-xs font-bold text-slate-800 dark:text-white"
+                                className="w-full p-2.5 sm:p-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-800 dark:text-white min-h-[42px] sm:min-h-0"
                                 placeholder="Ex: Entrada 50% + saldo na entrega. Descarga por conta do cliente..."
                               />
                             </div>
 
                             {requiresWeighing && (
-                              <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-dashed border-cyan-200 dark:border-cyan-900/50 space-y-3 animate-in fade-in zoom-in duration-300">
-                                <div className="flex justify-between items-center mb-2">
+                              <div className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-dashed border-cyan-200 dark:border-cyan-900/50 space-y-3 animate-in fade-in zoom-in duration-300">
+                                <div className="flex justify-between items-center mb-1">
                                   <label className="text-[10px] font-black text-cyan-600 uppercase flex items-center gap-1">
-                                    <Scale size={12} /> Balança Rodoviária
+                                    <Scale size={12} /> Balança Rodoviária Integrada
                                   </label>
-                                  <span className="text-[9px] bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded font-bold">CONECTADO</span>
+                                  <span className="text-[9px] bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300 px-2 py-0.5 rounded font-bold">CONECTADO</span>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-2 gap-3">
                                   <div className="space-y-1">
                                     <p className="text-[10px] text-slate-500 font-bold uppercase">Tara (Entrada)</p>
                                     <div className="flex gap-2">
@@ -4223,9 +4268,9 @@ const Sales = () => {
                                         type="number"
                                         value={tareWeight}
                                         onChange={e => setTareWeight(Number(e.target.value))}
-                                        className="w-full p-1.5 text-right font-mono text-sm font-bold border rounded bg-slate-50 dark:bg-slate-700/50"
+                                        className="w-full p-2 sm:p-1.5 text-right font-mono text-sm font-bold border rounded-lg bg-slate-50 dark:bg-slate-700/50"
                                       />
-                                      <button onClick={() => setTareWeight(Number((Math.random() * 5000 + 2000).toFixed(0)))} className="px-2 bg-slate-200 dark:bg-slate-600 rounded hover:bg-cyan-200 text-[10px] font-black uppercase">Ler</button>
+                                      <button onClick={() => setTareWeight(Number((Math.random() * 5000 + 2000).toFixed(0)))} className="px-2.5 bg-slate-200 dark:bg-slate-600 rounded-lg hover:bg-cyan-200 text-[10px] font-black uppercase">Ler</button>
                                     </div>
                                   </div>
                                   <div className="space-y-1">
@@ -4235,32 +4280,32 @@ const Sales = () => {
                                         type="number"
                                         value={grossWeight}
                                         onChange={e => setGrossWeight(Number(e.target.value))}
-                                        className="w-full p-1.5 text-right font-mono text-sm font-bold border rounded bg-slate-50 dark:bg-slate-700/50"
+                                        className="w-full p-2 sm:p-1.5 text-right font-mono text-sm font-bold border rounded-lg bg-slate-50 dark:bg-slate-700/50"
                                       />
-                                      <button onClick={() => setGrossWeight(Number((tareWeight + Math.random() * 10000).toFixed(0)))} className="px-2 bg-slate-200 dark:bg-slate-600 rounded hover:bg-cyan-200 text-[10px] font-black uppercase">Ler</button>
+                                      <button onClick={() => setGrossWeight(Number((tareWeight + Math.random() * 10000).toFixed(0)))} className="px-2.5 bg-slate-200 dark:bg-slate-600 rounded-lg hover:bg-cyan-200 text-[10px] font-black uppercase">Ler</button>
                                     </div>
                                   </div>
                                 </div>
 
-                                <div className="mt-2">
+                                <div>
                                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Observações de Pesagem</label>
                                   <textarea
                                     value={weightNotes}
                                     onChange={e => setWeightNotes(e.target.value)}
-                                    className="w-full p-2 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-gray-600 rounded-lg text-xs font-bold resize-none h-16 outline-none focus:border-cyan-500 transition-colors"
+                                    className="w-full p-2 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-gray-600 rounded-lg text-xs font-bold resize-none h-14 outline-none focus:border-cyan-500 transition-colors"
                                     placeholder="Ex: Carga molhada, Placa do reboque, Condições do veículo..."
                                   />
                                 </div>
 
                                 {weighingCalculations && (
-                                  <div className="mt-3 p-3 bg-cyan-50 dark:bg-cyan-900/10 rounded-xl border border-cyan-100 dark:border-cyan-800/50">
+                                  <div className="p-2.5 bg-cyan-50 dark:bg-cyan-900/10 rounded-xl border border-cyan-100 dark:border-cyan-800/50">
                                     <div className="flex items-center gap-2 text-cyan-700 dark:text-cyan-400 font-bold text-[10px] uppercase mb-1">
                                       <AlertTriangle size={12} /> Detalhes da Conversão
                                     </div>
                                     <p className="text-xs font-mono text-cyan-600 dark:text-cyan-300 leading-relaxed">
                                       {weighingCalculations.explanation}
                                     </p>
-                                    <div className="mt-2 flex justify-between items-center text-[10px] font-black text-cyan-800 dark:text-cyan-200">
+                                    <div className="mt-1.5 flex justify-between items-center text-[10px] font-black text-cyan-800 dark:text-cyan-200">
                                       <span>EQUIVALÊNCIA:</span>
                                       <span className="bg-cyan-200 dark:bg-cyan-800 px-2 py-0.5 rounded">
                                         {weighingCalculations.convertedQty.toFixed(3)} {weighingCalculations.bulkItem?.unit}
@@ -4271,20 +4316,20 @@ const Sales = () => {
                               </div>
                             )}
                           </div>
+                        </div>
 
-                          {/* Total Box */}
-                          <div className="flex justify-between items-end p-5 bg-slate-900 dark:bg-black rounded-2xl text-white mt-4 shadow-xl border border-white/10">
-                            <div className="flex flex-col">
-                              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total do Pedido</span>
-                              <div className="flex items-baseline gap-2">
-                                <span className="text-4xl font-black text-cyan-400">{formatMoney(total).split(',')[0]}</span>
-                                <span className="text-xl font-bold opacity-50">,{formatMoney(total).split(',')[1]}</span>
-                              </div>
+                        {/* Total Box */}
+                        <div className="flex justify-between items-end p-4 sm:p-5 bg-slate-900 dark:bg-black rounded-2xl text-white mt-3 shadow-xl border border-white/10">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total do Pedido</span>
+                            <div className="flex items-baseline gap-1.5">
+                              <span className="text-3xl sm:text-4xl font-black text-cyan-400">{formatMoney(total).split(',')[0]}</span>
+                              <span className="text-lg sm:text-xl font-bold opacity-50">,{formatMoney(total).split(',')[1]}</span>
                             </div>
-                            <div className="text-right">
-                              <span className="text-[10px] font-bold text-slate-500 block">Itens: {cart.length}</span>
-                              <span className="text-xs font-black text-emerald-400 uppercase">Pronto para Finalizar</span>
-                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] font-bold text-slate-500 block">Itens: {cart.length}</span>
+                            <span className="text-xs font-black text-emerald-400 uppercase">Pronto para Finalizar</span>
                           </div>
                         </div>
                       </div>

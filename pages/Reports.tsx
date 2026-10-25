@@ -2016,6 +2016,30 @@ const Reports = () => {
         }).sort((a, b) => b.gross - a.gross);
     }, [dreCalculations]);
 
+    const dreCostCenterTotals = useMemo(() => {
+        let totalGross = 0;
+        let totalCpv = 0;
+        let totalOpex = 0;
+        let totalResult = 0;
+        dreByCostCenter.forEach(c => {
+            totalGross += c.gross;
+            totalCpv += c.cpv;
+            totalOpex += c.opex;
+            totalResult += c.result;
+        });
+        const totalNetRev = totalGross * 0.94;
+        const totalMarginPct = totalGross > 0 ? (totalResult / totalGross) * 100 : 0;
+        return {
+            totalGross,
+            totalCpv,
+            totalOpex,
+            totalResult,
+            totalNetRev,
+            totalMarginPct: `${totalMarginPct.toFixed(1)}%`,
+            count: dreByCostCenter.length
+        };
+    }, [dreByCostCenter]);
+
     // Print Official DRE Report with Letterhead and Auditing Signatures
     const handlePrintOfficialDre = () => {
         const title = `DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO (${dreViewMode.toUpperCase()})`;
@@ -2806,37 +2830,172 @@ const Reports = () => {
                             </div>
                         ) : (
                             /* MODEL 4: DRE POR CENTRO DE CUSTO */
-                            <div className="space-y-4 overflow-x-auto custom-scrollbar">
-                                <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">
-                                    Resultado Econômico Discriminado por Centro de Custo / Linha de Negócio
-                                </h3>
+                            <div className="space-y-6 animate-in fade-in duration-300">
+                                {/* Header com Descrição */}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div>
+                                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                            Resultado Econômico Discriminado por Centro de Custo / Obras & Usinas
+                                        </h3>
+                                        <p className="text-xs text-slate-400 mt-0.5">
+                                            Apropriação e rateio operacional de receitas diretas, CPV fabril e despesas alocadas por projeto.
+                                        </p>
+                                    </div>
+                                    <div className="text-xs font-bold px-3 py-1.5 bg-slate-100 dark:bg-slate-900 rounded-xl text-slate-600 dark:text-slate-300 w-fit">
+                                        {dreCostCenterTotals.count} Centros Ativos
+                                    </div>
+                                </div>
 
-                                <table className="w-full text-xs">
-                                    <thead className="bg-slate-50 dark:bg-slate-900 uppercase font-black text-slate-400 text-[10px]">
-                                        <tr>
-                                            <th className="px-4 py-3 text-left">Centro de Custo / Unidade</th>
-                                            <th className="px-4 py-3 text-right">Receita Direta</th>
-                                            <th className="px-4 py-3 text-right">Custos Diretos (CPV)</th>
-                                            <th className="px-4 py-3 text-right">Despesas Alocadas</th>
-                                            <th className="px-4 py-3 text-right">Resultado Operacional</th>
-                                            <th className="px-4 py-3 text-right">Margem %</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700 font-medium">
-                                        {dreByCostCenter.map((c, idx) => (
-                                            <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                                <td className="px-4 py-3 font-bold text-slate-900 dark:text-white uppercase">{c.center}</td>
-                                                <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">{formatMoney(c.gross)}</td>
-                                                <td className="px-4 py-3 text-right font-mono text-rose-500">-{formatMoney(c.cpv)}</td>
-                                                <td className="px-4 py-3 text-right font-mono text-rose-500">-{formatMoney(c.opex)}</td>
-                                                <td className={`px-4 py-3 text-right font-mono font-black ${c.result >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                    {formatMoney(c.result)}
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-mono font-bold">{c.margin}</td>
+                                {/* KPIs Executivos de Centros de Custo */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Receita Direta Total</span>
+                                        <strong className="text-xl font-black font-mono text-cyan-600">{formatMoney(dreCostCenterTotals.totalGross)}</strong>
+                                        <span className="text-[11px] text-slate-500 block mt-1">100% da Receita de Obras</span>
+                                    </div>
+                                    <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Custos Diretos (CPV)</span>
+                                        <strong className="text-xl font-black font-mono text-rose-600">-{formatMoney(dreCostCenterTotals.totalCpv)}</strong>
+                                        <span className="text-[11px] text-slate-500 block mt-1">Insumos, Mão de Obra e Frota</span>
+                                    </div>
+                                    <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Despesas Alocadas</span>
+                                        <strong className="text-xl font-black font-mono text-purple-600">-{formatMoney(dreCostCenterTotals.totalOpex)}</strong>
+                                        <span className="text-[11px] text-slate-500 block mt-1">Rateio Administrativo</span>
+                                    </div>
+                                    <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Resultado Consolidado</span>
+                                        <strong className={`text-xl font-black font-mono ${dreCostCenterTotals.totalResult >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                            {formatMoney(dreCostCenterTotals.totalResult)}
+                                        </strong>
+                                        <span className="text-[11px] font-bold text-slate-500 block mt-1">Margem Ponderada: {dreCostCenterTotals.totalMarginPct}</span>
+                                    </div>
+                                </div>
+
+                                {/* Gráfico Comparativo Recharts BarChart */}
+                                {dreByCostCenter.length > 0 && (
+                                    <div className="p-5 bg-slate-50/60 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h4 className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                                                <BarChart3 size={16} className="text-cyan-600" />
+                                                Comparativo de Desempenho por Centro de Custo
+                                            </h4>
+                                            <span className="text-[11px] text-slate-400">Receita vs Custos Totais vs Resultado</span>
+                                        </div>
+                                        <div className="h-64 w-full">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <BarChart
+                                                    data={dreByCostCenter.map(c => ({
+                                                        name: c.center.length > 18 ? c.center.substring(0, 18) + '...' : c.center,
+                                                        Receita: c.gross,
+                                                        Gastos: c.cpv + c.opex,
+                                                        Resultado: c.result
+                                                    }))}
+                                                    margin={{ top: 10, right: 10, left: 10, bottom: 25 }}
+                                                >
+                                                    <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                                                    <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-15} textAnchor="end" />
+                                                    <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                                                    <Tooltip formatter={(value: number) => [formatMoney(value), '']} />
+                                                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                                                    <Bar dataKey="Receita" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                                                    <Bar dataKey="Gastos" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                                                    <Bar dataKey="Resultado" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Tabela Estruturada com Rodapé Totalizador */}
+                                <div className="overflow-x-auto custom-scrollbar rounded-2xl border border-slate-200 dark:border-slate-700">
+                                    <table className="w-full text-xs">
+                                        <thead className="bg-slate-50 dark:bg-slate-900 uppercase font-black text-slate-400 text-[10px]">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left">Centro de Custo / Unidade</th>
+                                                <th className="px-4 py-3 text-right">Receita Direta</th>
+                                                <th className="px-4 py-3 text-right">Custos Diretos (CPV)</th>
+                                                <th className="px-4 py-3 text-right">Despesas Alocadas</th>
+                                                <th className="px-4 py-3 text-right">Resultado Operacional</th>
+                                                <th className="px-4 py-3 text-right">Margem %</th>
+                                                <th className="px-4 py-3 text-center w-36">Desempenho</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700 font-medium bg-white dark:bg-slate-800">
+                                            {dreByCostCenter.map((c, idx) => {
+                                                const marginNum = parseFloat(c.margin);
+                                                const isSuperavit = !isNaN(marginNum) && marginNum >= 20;
+                                                const isHealthy = !isNaN(marginNum) && marginNum >= 10 && marginNum < 20;
+                                                const isTight = !isNaN(marginNum) && marginNum >= 0 && marginNum < 10;
+                                                const isDeficit = !isNaN(marginNum) && marginNum < 0;
+
+                                                return (
+                                                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                                        <td className="px-4 py-3 font-bold text-slate-900 dark:text-white uppercase flex items-center gap-2">
+                                                            <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
+                                                            {c.center}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">{formatMoney(c.gross)}</td>
+                                                        <td className="px-4 py-3 text-right font-mono text-rose-500">-{formatMoney(c.cpv)}</td>
+                                                        <td className="px-4 py-3 text-right font-mono text-rose-500">-{formatMoney(c.opex)}</td>
+                                                        <td className={`px-4 py-3 text-right font-mono font-black ${c.result >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                            {formatMoney(c.result)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-mono font-bold">{c.margin}</td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase ${
+                                                                isSuperavit
+                                                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                                                    : isHealthy
+                                                                    ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300'
+                                                                    : isTight
+                                                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                                                    : isDeficit
+                                                                    ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                                                                    : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                                                            }`}>
+                                                                {isSuperavit ? 'Superavitária' : isHealthy ? 'Saudável' : isTight ? 'Margem Estreita' : isDeficit ? 'Déficit' : 'N/A'}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                        {/* Rodapé Totalizador Consolidado */}
+                                        <tfoot className="bg-slate-900 text-white font-black text-xs border-t-2 border-cyan-500">
+                                            <tr>
+                                                <td className="px-4 py-3.5 uppercase tracking-wide flex items-center gap-2">
+                                                    <CheckCircle size={14} className="text-cyan-400" />
+                                                    CONSOLIDADO GERAL (TOTAL EMPRESA)
+                                                </td>
+                                                <td className="px-4 py-3.5 text-right font-mono text-emerald-400">
+                                                    {formatMoney(dreCostCenterTotals.totalGross)}
+                                                </td>
+                                                <td className="px-4 py-3.5 text-right font-mono text-rose-300">
+                                                    -{formatMoney(dreCostCenterTotals.totalCpv)}
+                                                </td>
+                                                <td className="px-4 py-3.5 text-right font-mono text-rose-300">
+                                                    -{formatMoney(dreCostCenterTotals.totalOpex)}
+                                                </td>
+                                                <td className={`px-4 py-3.5 text-right font-mono text-sm ${dreCostCenterTotals.totalResult >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                    {formatMoney(dreCostCenterTotals.totalResult)}
+                                                </td>
+                                                <td className="px-4 py-3.5 text-right font-mono text-cyan-300 text-sm">
+                                                    {dreCostCenterTotals.totalMarginPct}
+                                                </td>
+                                                <td className="px-4 py-3.5 text-center">
+                                                    <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase ${
+                                                        dreCostCenterTotals.totalResult >= 0
+                                                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                                            : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                                    }`}>
+                                                        {dreCostCenterTotals.totalResult >= 0 ? 'Resultado Positivo' : 'Resultado Negativo'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
                             </div>
                         )}
                     </div>
