@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, isOnline, onNetworkStatusChange } from '../lib/supabase';
 import {
     Client, Supplier, Employee, InventoryItem, Transaction, Sale, Budget,
     PurchaseOrder, FleetVehicle, VehicleMaintenance, Tire, PayrollRecord,
@@ -6,6 +6,9 @@ import {
     ProductionOrder, User, AppRole, AppSettings, AuditLog
 } from '../../types';
 
+// ============================================
+// VALIDAÇÃO E GERAÇÃO DE UUIDs
+// ============================================
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const isValidUUID = (val: any): boolean =>
@@ -45,6 +48,9 @@ export const toDeterministicUUID = (input: any): string => {
     return `${p1}-${p2}-${p3}-${p4}-${p5}`.toLowerCase();
 };
 
+// ============================================
+// CONVERSORES DE DATAS (ISO <-> pt-BR)
+// ============================================
 export const toIsoDate = (dateStr?: string): string | null => {
     if (!dateStr) return null;
     if (dateStr.includes('-')) {
@@ -77,6 +83,9 @@ export const toLocaleDate = (dateStr?: string): string => {
     return isNaN(d.getTime()) ? dateStr : d.toLocaleDateString('pt-BR');
 };
 
+// ============================================
+// SANITIZAÇÃO DE PAYLOAD E CONTRATOS DE DADOS
+// ============================================
 export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) => {
     if (!item || typeof item !== 'object') return item;
     const cleaned: Record<string, any> = { ...item };
@@ -89,7 +98,7 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
         delete cleaned.id;
     }
 
-    // Specific mapping for transactions (PostgreSQL schema compatibility)
+    // Mapeamento específico para transações (compatibilidade de schema PostgreSQL)
     if (table === 'transactions') {
         const mapped: Record<string, any> = {
             date: toIsoDate(cleaned.date) || new Date().toISOString().split('T')[0],
@@ -114,7 +123,7 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
         return mapped;
     }
 
-    // Specific mapping for sales (PostgreSQL schema compatibility)
+    // Mapeamento específico para vendas
     if (table === 'sales') {
         const mapped: Record<string, any> = {
             date: toIsoDate(cleaned.date) || new Date().toISOString().split('T')[0],
@@ -140,7 +149,7 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
         return mapped;
     }
 
-    // Specific mapping for budgets (PostgreSQL schema compatibility)
+    // Mapeamento específico para orçamentos
     if (table === 'budgets') {
         const mapped: Record<string, any> = {
             client_id: cleaned.clientId && isValidUUID(cleaned.clientId) ? cleaned.clientId : (cleaned.client_id && isValidUUID(cleaned.client_id) ? cleaned.client_id : null),
@@ -159,7 +168,7 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
         return mapped;
     }
 
-    // Specific table cleanups: strip relations / columns that don't exist in Supabase tables
+    // Limpeza de campos relacionais locais que não residem na tabela física
     if (table === 'fleet') {
         delete cleaned.maintenanceHistory;
         delete cleaned.fuelLogs;
@@ -171,7 +180,7 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
             return;
         }
 
-        // documentId in stock_movements is VARCHAR(100), not a UUID foreign key
+        // documentId em stock_movements é VARCHAR(100), não UUID FK
         if (key === 'documentId') return;
 
         if (key.endsWith('Id')) {
@@ -189,23 +198,305 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
     return cleaned;
 };
 
-// Generic Fetch
+// ============================================
+// ESTRUTURA DE SYNC QUEUE E CACHE LOCAL (Offline-First)
+// ============================================
+export interface SyncQueueItem {
+    id: string;
+    table: string;
+    operation: 'insert' | 'update' | 'delete';
+    targetId: string;
+    payload?: any;
+    timestamp: number;
+    retryCount: number;
+}
+
+const SYNC_QUEUE_KEY = 'infracore_sync_queue';
+const CACHE_PREFIX = 'infracore_cache_table_';
+
+type SyncStatusListener = (status: { isSyncing: boolean; pendingCount: number }) => void;
+const syncListeners: Set<SyncStatusListener> = new Set();
+let isSyncing = false;
+
+export const subscribeToSyncStatus = (listener: SyncStatusListener): (() => void) => {
+    syncListeners.add(listener);
+    listener({ isSyncing, pendingCount: getSyncQueue().length });
+    return () => {
+        syncListeners.delete(listener);
+    };
+};
+
+const notifySyncStatus = () => {
+    const pendingCount = getSyncQueue().length;
+    syncListeners.forEach(listener => {
+        try {
+            listener({ isSyncing, pendingCount });
+        } catch (e) {
+            console.error('Error in sync status listener:', e);
+        }
+    });
+};
+
+export const getSyncQueue = (): SyncQueueItem[] => {
+    if (typeof localStorage === 'undefined') return [];
+    try {
+        const raw = localStorage.getItem(SYNC_QUEUE_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch {
+        return [];
+    }
+};
+
+const saveSyncQueue = (queue: SyncQueueItem[]) => {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
+        notifySyncStatus();
+    } catch (e) {
+        console.warn('Failed to persist sync queue:', e);
+    }
+};
+
+const enqueueMutation = (
+    table: string,
+    operation: 'insert' | 'update' | 'delete',
+    targetId: string,
+    payload?: any
+) => {
+    const queue = getSyncQueue();
+    // Se já houver mutação pendente para o mesmo targetId, reconcilia para evitar overhead
+    const existingIndex = queue.findIndex(item => item.table === table && item.targetId === targetId);
+
+    if (existingIndex >= 0) {
+        const existing = queue[existingIndex];
+        if (existing.operation === 'insert' && operation === 'update') {
+            // Incorpora updates no payload de criação original
+            queue[existingIndex] = {
+                ...existing,
+                payload: { ...existing.payload, ...payload },
+                timestamp: Date.now()
+            };
+            saveSyncQueue(queue);
+            return;
+        } else if (existing.operation === 'insert' && operation === 'delete') {
+            // Se foi criado offline e deletado antes de sincronizar, basta remover da fila
+            queue.splice(existingIndex, 1);
+            saveSyncQueue(queue);
+            return;
+        } else if (operation === 'delete') {
+            // Sobrescreve para delete direto
+            queue[existingIndex] = {
+                id: generateUUID(),
+                table,
+                operation: 'delete',
+                targetId,
+                timestamp: Date.now(),
+                retryCount: 0
+            };
+            saveSyncQueue(queue);
+            return;
+        }
+    }
+
+    queue.push({
+        id: generateUUID(),
+        table,
+        operation,
+        targetId,
+        payload,
+        timestamp: Date.now(),
+        retryCount: 0
+    });
+    saveSyncQueue(queue);
+};
+
+// Gerenciamento de Cache Local por Tabela
+const getLocalTableCache = <T>(table: string): T[] => {
+    if (typeof localStorage === 'undefined') return [];
+    try {
+        const raw = localStorage.getItem(`${CACHE_PREFIX}${table}`);
+        if (raw) return JSON.parse(raw);
+
+        // Fallback para o snapshot consolidado infracore_erp_data
+        const appRaw = localStorage.getItem('infracore_erp_data');
+        if (appRaw) {
+            const parsed = JSON.parse(appRaw);
+            if (Array.isArray(parsed[table])) return parsed[table];
+        }
+    } catch (e) {
+        console.warn(`Failed to read cache for table ${table}:`, e);
+    }
+    return [];
+};
+
+const saveLocalTableCache = (table: string, data: any[]) => {
+    if (typeof localStorage === 'undefined' || !Array.isArray(data)) return;
+    try {
+        localStorage.setItem(`${CACHE_PREFIX}${table}`, JSON.stringify(data));
+    } catch (e) {
+        console.warn(`Failed to persist cache for table ${table}:`, e);
+    }
+};
+
+const updateItemInLocalCache = (table: string, targetId: string, updatedData: any) => {
+    const current = getLocalTableCache<any>(table);
+    const index = current.findIndex(item => item.id === targetId);
+    if (index >= 0) {
+        current[index] = { ...current[index], ...updatedData };
+    } else {
+        current.unshift({ id: targetId, ...updatedData });
+    }
+    saveLocalTableCache(table, current);
+};
+
+const removeItemFromLocalCache = (table: string, targetId: string) => {
+    const current = getLocalTableCache<any>(table);
+    const filtered = current.filter(item => item.id !== targetId);
+    saveLocalTableCache(table, filtered);
+};
+
+// ============================================
+// PROCESSAMENTO DA SYNC QUEUE (Last-Write-Wins)
+// ============================================
+export const processSyncQueue = async (): Promise<{ processed: number; failed: number }> => {
+    if (isSyncing) return { processed: 0, failed: 0 };
+    if (!isOnline() || !isSupabaseConfigured()) return { processed: 0, failed: 0 };
+
+    isSyncing = true;
+    notifySyncStatus();
+
+    let processedCount = 0;
+    let failedCount = 0;
+
+    try {
+        const queue = getSyncQueue();
+        if (queue.length === 0) return { processed: 0, failed: 0 };
+
+        const remainingQueue: SyncQueueItem[] = [];
+
+        for (const item of queue) {
+            // Se perdeu conectividade no meio do processamento, preserva o restante
+            if (!isOnline()) {
+                remainingQueue.push(item);
+                continue;
+            }
+
+            try {
+                if (item.operation === 'delete') {
+                    const { error } = await supabase.from(item.table).delete().eq('id', item.targetId);
+                    if (error && error.code !== 'PGRST116') {
+                        throw error;
+                    }
+                    processedCount++;
+                } else if (item.operation === 'insert') {
+                    // Verifica se o registro já existe no banco
+                    const { data: remoteExisting } = await supabase
+                        .from(item.table)
+                        .select('id, updated_at')
+                        .eq('id', item.targetId)
+                        .maybeSingle();
+
+                    if (remoteExisting) {
+                        // Resolução de conflito Last-Write-Wins
+                        const remoteTime = remoteExisting.updated_at ? new Date(remoteExisting.updated_at).getTime() : 0;
+                        if (remoteTime > item.timestamp) {
+                            console.warn(`[Conflict] Remote record is newer for ${item.table} (id: ${item.targetId}). Discarding local mutation.`);
+                        } else {
+                            await supabase.from(item.table).update(item.payload).eq('id', item.targetId);
+                        }
+                    } else {
+                        await supabase.from(item.table).insert({ ...item.payload, id: item.targetId });
+                    }
+                    processedCount++;
+                } else if (item.operation === 'update') {
+                    // Last-Write-Wins: Compara updated_at remoto com timestamp local
+                    const { data: remoteExisting } = await supabase
+                        .from(item.table)
+                        .select('id, updated_at')
+                        .eq('id', item.targetId)
+                        .maybeSingle();
+
+                    if (remoteExisting && remoteExisting.updated_at) {
+                        const remoteTime = new Date(remoteExisting.updated_at).getTime();
+                        if (remoteTime > item.timestamp) {
+                            console.warn(`[Conflict] Discarding local update on ${item.table} (id: ${item.targetId}) - Server is more recent.`);
+                            processedCount++;
+                            continue;
+                        }
+                    }
+
+                    const { error } = await supabase.from(item.table).update(item.payload).eq('id', item.targetId);
+                    if (error) throw error;
+                    processedCount++;
+                }
+            } catch (err: any) {
+                console.error(`Failed to sync item ${item.id} (${item.operation} on ${item.table}):`, err);
+                // Erro transitório de rede: mantém na fila e incrementa retry
+                if (isNetworkError(err) || !isOnline()) {
+                    item.retryCount = (item.retryCount || 0) + 1;
+                    remainingQueue.push(item);
+                } else {
+                    // Erro fatal (ex: payload irrecuperável): descarta para não bloquear a fila indefinidamente
+                    console.error(`Discarding poison sync item ${item.id} due to non-network error:`, err);
+                    failedCount++;
+                }
+            }
+        }
+
+        saveSyncQueue(remainingQueue);
+    } finally {
+        isSyncing = false;
+        notifySyncStatus();
+    }
+
+    return { processed: processedCount, failed: failedCount };
+};
+
+const isNetworkError = (error: any): boolean => {
+    if (!error) return false;
+    const msg = String(error.message || error.details || error).toLowerCase();
+    return (
+        msg.includes('failed to fetch') ||
+        msg.includes('network') ||
+        msg.includes('offline') ||
+        msg.includes('timeout') ||
+        msg.includes('connection')
+    );
+};
+
+// ============================================
+// OPERAÇÕES CRUD RESILIENTES (GENERIC APIS)
+// ============================================
+
+// Leitura Genérica com Fallback de Cache
 export const fetchData = async <T>(table: string): Promise<T[]> => {
+    if (!isSupabaseConfigured() || !isOnline()) {
+        const cached = getLocalTableCache<T>(table);
+        return transformFetchedData<T>(table, cached);
+    }
+
     try {
         const { data, error } = await supabase.from(table).select('*').order('created_at', { ascending: false });
         if (error) {
-            // Fallback without ordering if table doesn't have created_at
+            // Fallback sem ordenação de created_at se a tabela não tiver
             const fallback = await supabase.from(table).select('*');
             if (fallback.error) {
-                console.error(`Error fetching ${table}:`, fallback.error);
-                return [];
+                console.warn(`Query failed for ${table}, falling back to local cache:`, fallback.error);
+                const cached = getLocalTableCache<T>(table);
+                return transformFetchedData<T>(table, cached);
             }
-            return transformFetchedData<T>(table, fallback.data);
+            const transformed = transformFetchedData<T>(table, fallback.data);
+            saveLocalTableCache(table, transformed);
+            return transformed;
         }
-        return transformFetchedData<T>(table, data);
+
+        const transformed = transformFetchedData<T>(table, data);
+        saveLocalTableCache(table, transformed);
+        return transformed;
     } catch (e) {
-        console.error(`Unexpected error fetching ${table}:`, e);
-        return [];
+        console.warn(`Network exception fetching ${table}, recovering from local cache:`, e);
+        const cached = getLocalTableCache<T>(table);
+        return transformFetchedData<T>(table, cached);
     }
 };
 
@@ -260,56 +551,171 @@ const transformFetchedData = <T>(table: string, data: any[] | null): T[] => {
     return data as T[];
 };
 
-// Generic Create
+// Criação com Fallback Resiliente e Sync Queue
 export const createItem = async <T>(table: string, item: any): Promise<T> => {
     const cleanItem = sanitizeDbPayload(table, item, true);
+    const targetId = cleanItem.id;
 
-    const { data, error } = await supabase.from(table).insert(cleanItem).select().single();
-    if (error) {
-        console.error(`Error creating item in ${table}:`, error, cleanItem);
-        throw error;
+    // Se estiver offline ou sem Supabase configurado, enfileira e retorna otimista
+    if (!isSupabaseConfigured() || !isOnline()) {
+        enqueueMutation(table, 'insert', targetId, cleanItem);
+        updateItemInLocalCache(table, targetId, cleanItem);
+        return cleanItem as T;
     }
-    return data as T;
+
+    try {
+        const { data, error } = await supabase.from(table).insert(cleanItem).select().single();
+        if (error) {
+            if (isNetworkError(error)) {
+                enqueueMutation(table, 'insert', targetId, cleanItem);
+                updateItemInLocalCache(table, targetId, cleanItem);
+                return cleanItem as T;
+            }
+            console.error(`Error creating item in ${table}:`, error, cleanItem);
+            throw error;
+        }
+
+        const result = (data || cleanItem) as T;
+        updateItemInLocalCache(table, targetId, result);
+        return result;
+    } catch (e: any) {
+        if (isNetworkError(e)) {
+            enqueueMutation(table, 'insert', targetId, cleanItem);
+            updateItemInLocalCache(table, targetId, cleanItem);
+            return cleanItem as T;
+        }
+        throw e;
+    }
 };
 
-// Generic Update
+// Atualização com Fallback Resiliente e Sync Queue
 export const updateItem = async <T>(table: string, id: string, updates: any): Promise<T> => {
     const targetId = isValidUUID(id) ? id : toDeterministicUUID(id);
     const cleanUpdates = sanitizeDbPayload(table, updates, false);
-    const { data, error } = await supabase.from(table).update(cleanUpdates).eq('id', targetId).select().single();
-    if (error) {
-        console.error(`Error updating item in ${table} (id: ${targetId}):`, error, cleanUpdates);
-        throw error;
+    const optimisticMerged = { id: targetId, ...cleanUpdates };
+
+    if (!isSupabaseConfigured() || !isOnline()) {
+        enqueueMutation(table, 'update', targetId, cleanUpdates);
+        updateItemInLocalCache(table, targetId, optimisticMerged);
+        return optimisticMerged as T;
     }
-    return data as T;
+
+    try {
+        const { data, error } = await supabase.from(table).update(cleanUpdates).eq('id', targetId).select().single();
+        if (error) {
+            if (isNetworkError(error)) {
+                enqueueMutation(table, 'update', targetId, cleanUpdates);
+                updateItemInLocalCache(table, targetId, optimisticMerged);
+                return optimisticMerged as T;
+            }
+            console.error(`Error updating item in ${table} (id: ${targetId}):`, error, cleanUpdates);
+            throw error;
+        }
+
+        const result = (data || optimisticMerged) as T;
+        updateItemInLocalCache(table, targetId, result);
+        return result;
+    } catch (e: any) {
+        if (isNetworkError(e)) {
+            enqueueMutation(table, 'update', targetId, cleanUpdates);
+            updateItemInLocalCache(table, targetId, optimisticMerged);
+            return optimisticMerged as T;
+        }
+        throw e;
+    }
 };
 
-// Generic Delete
+// Remoção com Fallback Resiliente e Sync Queue
 export const deleteItem = async (table: string, id: string): Promise<boolean> => {
     const targetId = isValidUUID(id) ? id : toDeterministicUUID(id);
-    const { error } = await supabase.from(table).delete().eq('id', targetId);
-    if (error) {
-        console.error(`Error deleting item from ${table} (id: ${targetId}):`, error);
-        throw error;
+
+    if (!isSupabaseConfigured() || !isOnline()) {
+        enqueueMutation(table, 'delete', targetId);
+        removeItemFromLocalCache(table, targetId);
+        return true;
     }
-    return true;
+
+    try {
+        const { error } = await supabase.from(table).delete().eq('id', targetId);
+        if (error) {
+            if (isNetworkError(error)) {
+                enqueueMutation(table, 'delete', targetId);
+                removeItemFromLocalCache(table, targetId);
+                return true;
+            }
+            console.error(`Error deleting item from ${table} (id: ${targetId}):`, error);
+            throw error;
+        }
+        removeItemFromLocalCache(table, targetId);
+        return true;
+    } catch (e: any) {
+        if (isNetworkError(e)) {
+            enqueueMutation(table, 'delete', targetId);
+            removeItemFromLocalCache(table, targetId);
+            return true;
+        }
+        throw e;
+    }
 };
 
-// Specific Settings Update (Single Row)
+// Atualização de Configurações do Sistema
 export const updateSettings = async (settings: AppSettings) => {
-    const { data: existing } = await supabase.from('settings').select('id').limit(1).single();
+    if (!isSupabaseConfigured() || !isOnline()) {
+        enqueueMutation('settings', 'update', 'system_settings', settings);
+        return settings;
+    }
 
-    if (existing) {
-        return updateItem('settings', existing.id, settings);
-    } else {
-        return createItem('settings', settings);
+    try {
+        const { data: existing } = await supabase.from('settings').select('id').limit(1).single();
+        if (existing) {
+            return updateItem('settings', existing.id, settings);
+        } else {
+            return createItem('settings', settings);
+        }
+    } catch (e) {
+        if (isNetworkError(e)) {
+            enqueueMutation('settings', 'update', 'system_settings', settings);
+            return settings;
+        }
+        throw e;
     }
 };
 
-// Permission / Role Helper
+// Helper de Permissões e Roles
 export const fetchRoles = async (): Promise<AppRole[]> => {
-    const { data, error } = await supabase.from('app_roles').select('*');
-    if (error) return [];
-    return (data as AppRole[]) || [];
+    if (!isSupabaseConfigured() || !isOnline()) {
+        return getLocalTableCache<AppRole>('app_roles');
+    }
+    try {
+        const { data, error } = await supabase.from('app_roles').select('*');
+        if (error) return getLocalTableCache<AppRole>('app_roles');
+        const roles = (data as AppRole[]) || [];
+        saveLocalTableCache('app_roles', roles);
+        return roles;
+    } catch {
+        return getLocalTableCache<AppRole>('app_roles');
+    }
 };
 
+// ============================================
+// AUTO-INICIALIZAÇÃO DE SINCRONIZAÇÃO
+// ============================================
+if (typeof window !== 'undefined') {
+    onNetworkStatusChange((online) => {
+        if (online) {
+            console.log('🌐 Conexão restaurada! Iniciando drenagem da fila de sincronização...');
+            processSyncQueue().then(({ processed, failed }) => {
+                if (processed > 0 || failed > 0) {
+                    console.log(`✅ Fila sincronizada com sucesso: ${processed} processados, ${failed} falhas.`);
+                }
+            });
+        }
+    });
+
+    // Tentativa inicial se já estiver online ao inicializar o script
+    if (isOnline() && isSupabaseConfigured()) {
+        setTimeout(() => {
+            processSyncQueue().catch(err => console.warn('Erro ao processar fila inicial:', err));
+        }, 1500);
+    }
+}

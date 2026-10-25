@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     BarChart,
     Bar,
@@ -26,6 +26,7 @@ import {
     Printer,
     Mail,
     ChevronDown,
+    ChevronUp,
     Loader,
     ArrowUpRight,
     ArrowDownRight,
@@ -55,24 +56,28 @@ import {
     Maximize2,
     Minimize2,
     CheckCircle,
-    ShieldCheck
+    ShieldCheck,
+    SlidersHorizontal,
+    ArrowUpDown,
+    CheckSquare,
+    Square,
+    Eye,
+    EyeOff
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
-import { printDocument, exportDashboardToExcel } from '../utils/exportUtils';
+import { printDocument, exportDashboardToExcel, exportCustomTableToCSV } from '../utils/exportUtils';
 
 const formatMoney = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
 
 const parseDateString = (dateStr?: string): Date => {
     if (!dateStr) return new Date();
-    // Handles DD/MM/YYYY
     if (dateStr.includes('/')) {
         const parts = dateStr.split(' ')[0].split('/').map(Number);
         if (parts.length === 3) {
             return new Date(parts[2], parts[1] - 1, parts[0], 12, 0, 0);
         }
     }
-    // Handles ISO YYYY-MM-DD
     if (dateStr.includes('-')) {
         const datePart = dateStr.split('T')[0];
         const parts = datePart.split('-').map(Number);
@@ -93,6 +98,15 @@ const formatDateBR = (isoDateOrStr?: string) => {
     return isoDateOrStr;
 };
 
+interface ReportPreferences {
+    visibleColumns: string[];
+    sortField?: string;
+    sortOrder?: 'asc' | 'desc';
+    statusFilter?: string;
+    orientation?: 'portrait' | 'landscape';
+    showSignatures?: boolean;
+}
+
 const Reports = () => {
     const {
         financials, transactions, sales, budgets, inventory, purchaseOrders,
@@ -103,7 +117,11 @@ const Reports = () => {
     } = useApp();
     const { addToast } = useToast();
 
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'generator' | 'chart_of_accounts'>('generator');
+    // Main 4 Navigation Tabs: 'dashboard' | 'dre' | 'chart_of_accounts' | 'generator'
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'dre' | 'chart_of_accounts' | 'generator'>('generator');
+
+    // DRE View Selector: 'gerencial' | 'contabil' | 'mensal' | 'centro_custo'
+    const [dreViewMode, setDreViewMode] = useState<'gerencial' | 'contabil' | 'mensal' | 'centro_custo'>('gerencial');
 
     // Chart of Accounts State
     const [poaSearchTerm, setPoaSearchTerm] = useState('');
@@ -134,9 +152,18 @@ const Reports = () => {
     const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
     const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
 
-    // Report Library Filters
+    // Report Library Filters & Customization Toolbar State
     const [searchTerm, setSearchTerm] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('Todos');
+    const [showCustomizer, setShowCustomizer] = useState(false);
+
+    // Active Customization State per Report
+    const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
+    const [sortField, setSortField] = useState<string | null>(null);
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const [statusFilter, setStatusFilter] = useState<string>('Todos');
+    const [printOrientation, setPrintOrientation] = useState<'portrait' | 'landscape'>('portrait');
+    const [printShowSignatures, setPrintShowSignatures] = useState<boolean>(true);
 
     // Dashboard BI Trends State & Period Selection
     const [reportPeriod, setReportPeriod] = useState<'7d' | '30d' | '12m'>('30d');
@@ -153,12 +180,12 @@ const Reports = () => {
     }), [settings]);
 
     // Extended Modules for Reporting - Organized by Category (39 Total Models)
-    const modules = [
+    const modules = useMemo(() => [
         // COMERCIAL
-        { id: 'sales', name: 'Vendas Realizadas', icon: <DollarSign size={16} />, category: 'Comercial', description: 'Histórico completo de vendas com cliente, produtos, valores e forma de pagamento.', fields: ['ID', 'Data', 'Cliente', 'Produtos', 'Total', 'Pagamento', 'Status'] },
+        { id: 'sales', name: 'Vendas Realizadas', icon: <DollarSign size={16} />, category: 'Comercial', description: 'Histórico completo de vendas com cliente, produtos, valores e forma de pagamento.', fields: ['ID', 'Data', 'Cliente', 'Produtos', 'Total', 'Forma Pagto', 'Status'] },
         { id: 'sales_by_product', name: 'Vendas por Produto', icon: <Package size={16} />, category: 'Comercial', description: 'Ranking de produtos mais vendidos com quantidade e faturamento.', fields: ['Produto', 'Qtd Vendida', 'Faturamento', 'Margem %', 'Ticket Médio'] },
         { id: 'sales_by_client', name: 'Vendas por Cliente', icon: <User size={16} />, category: 'Comercial', description: 'Análise de faturamento por cliente com frequência de compra.', fields: ['Cliente', 'Total Compras', 'Valor Total', 'Última Compra', 'Ticket Médio'] },
-        { id: 'sales_by_seller', name: 'Vendas por Vendedor', icon: <User size={16} />, category: 'Comercial', description: 'Performance individual de vendedores com metas e comissões.', fields: ['Vendedor', 'Vendas', 'Faturamento', 'Comissão', 'Meta %'] },
+        { id: 'sales_by_seller', name: 'Vendas por Vendedor', icon: <User size={16} />, category: 'Comercial', description: 'Performance individual de vendedores com metas e comissões.', fields: ['Vendedor', 'Vendas', 'Faturamento', 'Comissão (5%)', 'Meta %'] },
         { id: 'sales_by_payment', name: 'Vendas por Forma de Pagamento', icon: <DollarSign size={16} />, category: 'Comercial', description: 'Distribuição de vendas por método de pagamento (PIX, cartão, boleto).', fields: ['Forma Pagto', 'Qtd Vendas', 'Valor Total', '% do Total', 'Ticket Médio'] },
         { id: 'quotes', name: 'Orçamentos Emitidos', icon: <FileText size={16} />, category: 'Comercial', description: 'Listagem de orçamentos com taxa de conversão.', fields: ['Nº', 'Data', 'Cliente', 'Valor', 'Status', 'Convertido'] },
 
@@ -183,7 +210,7 @@ const Reports = () => {
         { id: 'stock_min', name: 'Estoque Mínimo (Ponto de Reposição)', icon: <AlertTriangle size={16} />, category: 'Estoque', description: 'Produtos abaixo do ponto de pedido que necessitam reposição.', fields: ['Produto', 'Estoque Atual', 'Mínimo', 'Faltando', 'Fornecedor', 'Último Pedido'] },
         { id: 'stock_value', name: 'Valorização de Estoque', icon: <DollarSign size={16} />, category: 'Estoque', description: 'Valor financeiro do estoque por custo e preço de venda com margem calculada.', fields: ['Produto', 'Qtd', 'Custo Unit.', 'Custo Total', 'Preço Venda', 'Margem %'] },
 
-        // PRODUÇÃO INDUSTRIAL (NOVO)
+        // PRODUÇÃO INDUSTRIAL
         { id: 'production_orders', name: 'Ordens de Produção e Rendimento', icon: <Factory size={16} />, category: 'Produção', description: 'Controle de fabricação industrial, fórmulas, quantidades e status de avanço.', fields: ['Ordem', 'Produto', 'Qtd Planejada', 'Início', 'Previsão', 'Status', 'Progresso', 'Operador'] },
         { id: 'production_units', name: 'Desempenho de Usinas e OEE', icon: <Activity size={16} />, category: 'Produção', description: 'Monitoramento das usinas de asfalto/concreto com carga nominal, temperatura e disponibilidade.', fields: ['Usina / Planta', 'Tipo', 'Capacidade Nominal', 'Carga Atual %', 'Temperatura (°C)', 'Potência', 'Status'] },
 
@@ -206,10 +233,103 @@ const Reports = () => {
         { id: 'cost_center', name: 'Resultado por Centro de Custo', icon: <PieChartIcon size={16} />, category: 'Contábil', description: 'Receitas, despesas e margem operacional por centro de custo.', fields: ['Centro de Custo', 'Receitas', 'Despesas', 'Resultado Líquido', 'Margem %'] },
         { id: 'audit_trail', name: 'Trilha de Auditoria e Governança', icon: <ShieldCheck size={16} />, category: 'Gerencial', description: 'Logs de eventos, ações de usuários, severidade de segurança e registros de auditoria.', fields: ['Data/Hora', 'Usuário', 'Ação', 'Módulo', 'Severidade', 'Detalhes', 'IP'] },
         { id: 'dashboard_summary', name: 'Resumo Executivo Gerencial', icon: <PieChartIcon size={16} />, category: 'Gerencial', description: 'Visão consolidada dos principais indicadores de desempenho do ERP.', fields: ['Indicador', 'Valor Apurado', 'Meta Corporativa', 'Variação', 'Status'] }
-    ];
+    ], []);
+
+    // Load and Persist Preferences in LocalStorage when selectedModule changes
+    useEffect(() => {
+        if (!selectedModule) return;
+        const mod = modules.find(m => m.id === selectedModule);
+        const defaultFields = mod?.fields || [];
+
+        try {
+            const saved = localStorage.getItem(`infracore_report_prefs_${selectedModule}`);
+            if (saved) {
+                const prefs: ReportPreferences = JSON.parse(saved);
+                setVisibleColumns(prefs.visibleColumns && prefs.visibleColumns.length > 0 ? prefs.visibleColumns : defaultFields);
+                setSortField(prefs.sortField || null);
+                setSortOrder(prefs.sortOrder || 'asc');
+                setStatusFilter(prefs.statusFilter || 'Todos');
+                setPrintOrientation(prefs.orientation || 'portrait');
+                setPrintShowSignatures(prefs.showSignatures !== undefined ? prefs.showSignatures : true);
+                return;
+            }
+        } catch (e) {
+            console.error('Error loading report preferences:', e);
+        }
+
+        // Defaults
+        setVisibleColumns(defaultFields);
+        setSortField(null);
+        setSortOrder('asc');
+        setStatusFilter('Todos');
+        setPrintOrientation('portrait');
+        setPrintShowSignatures(true);
+    }, [selectedModule, modules]);
+
+    const persistPreferences = (updates: Partial<ReportPreferences>) => {
+        if (!selectedModule) return;
+        const mod = modules.find(m => m.id === selectedModule);
+        const current: ReportPreferences = {
+            visibleColumns: updates.visibleColumns !== undefined ? updates.visibleColumns : visibleColumns,
+            sortField: updates.sortField !== undefined ? updates.sortField : (sortField || undefined),
+            sortOrder: updates.sortOrder !== undefined ? updates.sortOrder : sortOrder,
+            statusFilter: updates.statusFilter !== undefined ? updates.statusFilter : statusFilter,
+            orientation: updates.orientation !== undefined ? updates.orientation : printOrientation,
+            showSignatures: updates.showSignatures !== undefined ? updates.showSignatures : printShowSignatures
+        };
+
+        try {
+            localStorage.setItem(`infracore_report_prefs_${selectedModule}`, JSON.stringify(current));
+        } catch (e) {
+            console.error('Error saving report preferences:', e);
+        }
+    };
+
+    // Toggle Column Visibility
+    const toggleColumn = (col: string) => {
+        const next = visibleColumns.includes(col)
+            ? visibleColumns.filter(c => c !== col)
+            : [...visibleColumns, col];
+
+        if (next.length === 0) {
+            addToast("Pelo menos uma coluna deve permanecer visível.", 'warning');
+            return;
+        }
+
+        setVisibleColumns(next);
+        persistPreferences({ visibleColumns: next });
+    };
+
+    // Toggle Sorting Column
+    const handleSort = (col: string) => {
+        let nextOrder: 'asc' | 'desc' = 'asc';
+        if (sortField === col) {
+            nextOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+        }
+        setSortField(col);
+        setSortOrder(nextOrder);
+        persistPreferences({ sortField: col, sortOrder: nextOrder });
+    };
+
+    // Preset Date Ranges
+    const setDatePreset = (preset: 'thisMonth' | 'lastQuarter' | 'thisYear') => {
+        const d = new Date();
+        if (preset === 'thisMonth') {
+            setStartDate(new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]);
+            setEndDate(new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]);
+        } else if (preset === 'lastQuarter') {
+            const currentQuarter = Math.floor(d.getMonth() / 3);
+            const quarterStartMonth = (currentQuarter - 1) * 3;
+            setStartDate(new Date(d.getFullYear(), quarterStartMonth, 1).toISOString().split('T')[0]);
+            setEndDate(new Date(d.getFullYear(), quarterStartMonth + 3, 0).toISOString().split('T')[0]);
+        } else if (preset === 'thisYear') {
+            setStartDate(new Date(d.getFullYear(), 0, 1).toISOString().split('T')[0]);
+            setEndDate(new Date(d.getFullYear(), 11, 31).toISOString().split('T')[0]);
+        }
+    };
 
     // Data Filtering and Calculation Engine
-    const reportData = useMemo(() => {
+    const reportDataRaw = useMemo(() => {
         let data: any[] = [];
         const start = new Date(startDate);
         const end = new Date(endDate);
@@ -327,9 +447,7 @@ const Reports = () => {
                 });
                 break;
 
-            // =========================================================================
             // FINANCEIRO
-            // =========================================================================
             case 'finance':
                 data = transactions.filter(t => isInRange(t.date)).map(t => ({
                     ID: t.id?.slice(-6).toUpperCase(),
@@ -344,8 +462,6 @@ const Reports = () => {
                 break;
 
             case 'cashflow': {
-                // Determine opening balance at startDate
-                // Opening balance = current balance minus net movements occurring AFTER start
                 const movementsAfterStart = transactions.filter(t => {
                     if (t.status === 'Cancelado') return false;
                     const tDate = parseDateString(t.date);
@@ -625,7 +741,6 @@ const Reports = () => {
                 const expTxs = transactions.filter(t => t.type === 'Despesa' && isInRange(t.date) && t.status !== 'Cancelado');
                 const totalExpenses = expTxs.reduce((acc, t) => acc + t.amount, 0);
 
-                // Segregate CPV from Operating Expenses using accounts structure
                 let cpv = 0;
                 let operatingExp = 0;
                 expTxs.forEach(t => {
@@ -759,7 +874,7 @@ const Reports = () => {
                 });
                 break;
 
-            // PRODUÇÃO INDUSTRIAL (NOVOS MÓDULOS)
+            // PRODUÇÃO INDUSTRIAL
             case 'production_orders':
                 data = (productionOrders || []).filter(p => isInRange(p.startDate || p.dueDate)).map(p => ({
                     Ordem: p.orderNumber || p.id?.slice(-6).toUpperCase(),
@@ -944,8 +1059,108 @@ const Reports = () => {
         return data;
     }, [selectedModule, startDate, endDate, sales, transactions, inventory, clients, fleet, employees, stockMovements, purchaseOrders, financials, settings, accounts, productionOrders, productionUnits, tires, auditLogs, suppliers, payroll]);
 
+    // Unique Status list for contextual filtering
+    const availableStatuses = useMemo(() => {
+        if (!reportDataRaw || reportDataRaw.length === 0) return [];
+        const statusSet = new Set<string>();
+        reportDataRaw.forEach(row => {
+            const st = row['Status'] || row['Situação'];
+            if (st && typeof st === 'string') statusSet.add(st);
+        });
+        return Array.from(statusSet);
+    }, [reportDataRaw]);
+
+    // Filtered, Sorted and Column-Filtered Data according to user preferences
+    const reportData = useMemo(() => {
+        if (!reportDataRaw || reportDataRaw.length === 0) return [];
+        if (reportDataRaw[0]?.Mensagem) return reportDataRaw;
+
+        let filtered = [...reportDataRaw];
+
+        // 1. Contextual Status Filter
+        if (statusFilter && statusFilter !== 'Todos') {
+            filtered = filtered.filter(row => {
+                const st = row['Status'] || row['Situação'];
+                return st === statusFilter;
+            });
+        }
+
+        // 2. Dynamic Sorting
+        if (sortField) {
+            filtered.sort((a, b) => {
+                let valA = a[sortField];
+                let valB = b[sortField];
+
+                if (valA === undefined || valA === null) return 1;
+                if (valB === undefined || valB === null) return -1;
+
+                if (typeof valA === 'number' && typeof valB === 'number') {
+                    return sortOrder === 'asc' ? valA - valB : valB - valA;
+                }
+
+                const strA = String(valA).toLowerCase();
+                const strB = String(valB).toLowerCase();
+                return sortOrder === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+            });
+        }
+
+        // 3. Dynamic Column Selection
+        if (visibleColumns && visibleColumns.length > 0) {
+            filtered = filtered.map(row => {
+                const pruned: Record<string, any> = {};
+                visibleColumns.forEach(col => {
+                    if (row[col] !== undefined) {
+                        pruned[col] = row[col];
+                    }
+                });
+                return pruned;
+            });
+        }
+
+        return filtered;
+    }, [reportDataRaw, statusFilter, sortField, sortOrder, visibleColumns]);
+
+    // Badges and cell formatting
+    const renderCellContent = (colKey: string, val: any) => {
+        if (val === undefined || val === null || val === '') return <span className="text-slate-300">-</span>;
+
+        const isStatusCol = colKey === 'Status' || colKey === 'Situação' || colKey === 'Convertido';
+        if (isStatusCol && typeof val === 'string') {
+            const clean = val.toLowerCase();
+            let badgeStyle = 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200 border-slate-200';
+            if (clean.includes('pago') || clean.includes('conciliado') || clean.includes('ativo') || clean.includes('conforme') || clean.includes('operando') || clean.includes('aprovado') || clean.includes('sim') || clean.includes('positiva') || clean.includes('atingido') || clean.includes('saudável') || clean.includes('baixo risco') || clean.includes('excelente')) {
+                badgeStyle = 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200';
+            } else if (clean.includes('pendente') || clean.includes('aberto') || clean.includes('atenção') || clean.includes('alerta') || clean.includes('produção') || clean.includes('aguardando')) {
+                badgeStyle = 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200';
+            } else if (clean.includes('vencido') || clean.includes('cancelado') || clean.includes('crítico') || clean.includes('parado') || clean.includes('reprovado') || clean.includes('não') || clean.includes('negativo')) {
+                badgeStyle = 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200';
+            }
+
+            return (
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeStyle}`}>
+                    {val}
+                </span>
+            );
+        }
+
+        const isMoney = typeof val === 'number' && (colKey.includes('Valor') || colKey.includes('Total') || colKey.includes('Preço') || colKey.includes('Salário') || colKey.includes('Faturamento') || colKey.includes('Entrada') || colKey.includes('Saída') || colKey.includes('Saldo') || colKey.includes('Receita') || colKey.includes('Despesa') || colKey.includes('Líquido') || colKey.includes('Comissão'));
+        if (isMoney) {
+            return (
+                <span className={`font-mono font-semibold ${val < 0 ? 'text-rose-600' : 'text-slate-800 dark:text-slate-200'}`}>
+                    {formatMoney(val)}
+                </span>
+            );
+        }
+
+        if (typeof val === 'number') {
+            return <span className="font-mono">{val.toLocaleString('pt-BR')}</span>;
+        }
+
+        return <span className="truncate">{val}</span>;
+    };
+
     // =========================================================================
-    // EXPORTAÇÃO DE RELATÓRIOS GERENCIAIS COM CABEÇALHO CORPORATIVO
+    // EXPORTAÇÃO E IMPRESSÃO DE RELATÓRIOS GERENCIAIS COM PERSONALIZAÇÃO
     // =========================================================================
 
     const handlePrintReport = () => {
@@ -960,7 +1175,6 @@ const Reports = () => {
 
         const headers = Object.keys(reportData[0]);
 
-        // Compute numeric totals for numeric columns
         const numericTotals: Record<string, number> = {};
         let grandMonetaryTotal = 0;
 
@@ -997,35 +1211,35 @@ const Reports = () => {
                     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
                     body {
                         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                        padding: 30px;
+                        padding: ${printOrientation === 'landscape' ? '20px' : '30px'};
                         color: #0f172a;
                         background: #ffffff;
                         line-height: 1.4;
-                        font-size: 11px;
+                        font-size: 10px;
                     }
                     @page {
-                        size: A4 portrait;
-                        margin: 15mm;
+                        size: A4 ${printOrientation};
+                        margin: 12mm;
                     }
                     .corporate-header {
                         border-bottom: 3px solid #0891b2;
-                        padding-bottom: 15px;
-                        margin-bottom: 20px;
+                        padding-bottom: 12px;
+                        margin-bottom: 16px;
                         display: flex;
                         justify-content: space-between;
                         align-items: flex-start;
                     }
                     .company-info h1 {
-                        font-size: 20px;
+                        font-size: 18px;
                         font-weight: 900;
                         color: #0f172a;
-                        margin: 0 0 3px 0;
+                        margin: 0 0 2px 0;
                         text-transform: uppercase;
                         letter-spacing: -0.5px;
                     }
                     .company-info p {
-                        margin: 1.5px 0;
-                        font-size: 10px;
+                        margin: 1px 0;
+                        font-size: 9px;
                         color: #475569;
                     }
                     .report-meta {
@@ -1033,46 +1247,44 @@ const Reports = () => {
                     }
                     .report-badge {
                         display: inline-block;
-                        padding: 4px 10px;
+                        padding: 3px 8px;
                         background: #ecfeff;
                         color: #0891b2;
                         border: 1px solid #cffafe;
-                        font-size: 10px;
+                        font-size: 9px;
                         font-weight: 800;
                         border-radius: 6px;
                         text-transform: uppercase;
-                        letter-spacing: 0.5px;
                     }
                     .report-title {
-                        font-size: 16px;
+                        font-size: 15px;
                         font-weight: 900;
                         color: #0f172a;
-                        margin: 6px 0 3px 0;
+                        margin: 4px 0 2px 0;
                         text-transform: uppercase;
                     }
                     .kpi-grid {
                         display: grid;
                         grid-template-columns: repeat(4, 1fr);
-                        gap: 12px;
-                        margin-bottom: 20px;
+                        gap: 10px;
+                        margin-bottom: 16px;
                     }
                     .kpi-card {
                         background: #f8fafc;
                         border: 1px solid #e2e8f0;
-                        border-radius: 10px;
-                        padding: 10px 14px;
+                        border-radius: 8px;
+                        padding: 8px 12px;
                     }
                     .kpi-card span {
-                        font-size: 9px;
+                        font-size: 8px;
                         font-weight: 700;
                         color: #64748b;
                         text-transform: uppercase;
-                        letter-spacing: 0.5px;
                         display: block;
-                        margin-bottom: 3px;
+                        margin-bottom: 2px;
                     }
                     .kpi-card strong {
-                        font-size: 14px;
+                        font-size: 13px;
                         font-weight: 900;
                         color: #0f172a;
                         font-family: monospace;
@@ -1080,22 +1292,22 @@ const Reports = () => {
                     table.data-table {
                         width: 100%;
                         border-collapse: collapse;
-                        margin-bottom: 30px;
-                        font-size: 10px;
+                        margin-bottom: 24px;
+                        font-size: 9px;
                     }
                     table.data-table thead th {
                         background: #0f172a;
                         color: #ffffff;
                         font-weight: 800;
                         text-transform: uppercase;
-                        font-size: 9px;
+                        font-size: 8.5px;
                         letter-spacing: 0.5px;
-                        padding: 8px 10px;
+                        padding: 6px 8px;
                         border: 1px solid #0f172a;
                         text-align: left;
                     }
                     table.data-table tbody td {
-                        padding: 6px 10px;
+                        padding: 5px 8px;
                         border: 1px solid #f1f5f9;
                         color: #1e293b;
                     }
@@ -1106,7 +1318,7 @@ const Reports = () => {
                         background: #f1f5f9;
                         border-top: 2px solid #0f172a;
                         font-weight: 900;
-                        padding: 8px 10px;
+                        padding: 6px 8px;
                         color: #0f172a;
                         font-family: monospace;
                     }
@@ -1116,11 +1328,11 @@ const Reports = () => {
                         font-weight: 600;
                     }
                     .signatures-block {
-                        margin-top: 40px;
+                        margin-top: 30px;
                         display: grid;
                         grid-template-columns: repeat(3, 1fr);
-                        gap: 30px;
-                        padding-top: 20px;
+                        gap: 25px;
+                        padding-top: 15px;
                         border-top: 1px dashed #cbd5e1;
                     }
                     .signature-item {
@@ -1128,22 +1340,22 @@ const Reports = () => {
                     }
                     .signature-line {
                         border-bottom: 1px solid #475569;
-                        margin-bottom: 6px;
-                        height: 35px;
+                        margin-bottom: 4px;
+                        height: 28px;
                     }
                     .signature-item p {
                         margin: 0;
-                        font-size: 10px;
+                        font-size: 9px;
                         font-weight: 700;
                         color: #0f172a;
                     }
                     .signature-item span {
-                        font-size: 9px;
+                        font-size: 8px;
                         color: #64748b;
                     }
                     .compliance-footer {
-                        margin-top: 30px;
-                        padding-top: 15px;
+                        margin-top: 25px;
+                        padding-top: 12px;
                         border-top: 1px solid #e2e8f0;
                         display: flex;
                         justify-content: space-between;
@@ -1153,27 +1365,24 @@ const Reports = () => {
                 </style>
             </head>
             <body>
-                <!-- Corporate Letterhead -->
                 <div class="corporate-header">
                     <div class="company-info">
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                            <div style="width: 28px; height: 28px; background: #0891b2; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 14px;">IC</div>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 3px;">
+                            <div style="width: 24px; height: 24px; background: #0891b2; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 12px;">IC</div>
                             <h1>${company.companyName}</h1>
                         </div>
                         <p><strong>CNPJ:</strong> ${company.document} | <strong>IE:</strong> ${company.stateRegistry}</p>
-                        <p>${company.address}</p>
-                        <p>${company.phone} • ${company.email}</p>
+                        <p>${company.address} • ${company.phone}</p>
                     </div>
                     <div class="report-meta">
                         <span class="report-badge">${categoryName}</span>
                         <div class="report-title">${reportTitle}</div>
                         <p style="margin: 2px 0; font-family: monospace; font-weight: bold; color: #0891b2;">Protocolo: ${protocolNumber}</p>
                         <p style="margin: 2px 0; color: #475569;">Período: <strong>${formatDateBR(startDate)} até ${formatDateBR(endDate)}</strong></p>
-                        <p style="margin: 2px 0; color: #64748b; font-size: 9px;">Emissão: ${issueDate} às ${issueTime}</p>
+                        <p style="margin: 2px 0; color: #64748b; font-size: 8px;">Emissão: ${issueDate} às ${issueTime}</p>
                     </div>
                 </div>
 
-                <!-- KPI Summary Cards -->
                 <div class="kpi-grid">
                     <div class="kpi-card">
                         <span>Total de Registros</span>
@@ -1185,15 +1394,14 @@ const Reports = () => {
                     </div>
                     <div class="kpi-card">
                         <span>Emissor Responsável</span>
-                        <strong style="font-size: 11px;">${currentUser?.name || 'Administrador'}</strong>
+                        <strong style="font-size: 10px;">${currentUser?.name || 'Administrador'}</strong>
                     </div>
                     <div class="kpi-card">
                         <span>Homologação</span>
-                        <strong style="color: #16a34a; font-size: 11px;">✓ AUDITADO</strong>
+                        <strong style="color: #16a34a; font-size: 10px;">✓ AUDITADO</strong>
                     </div>
                 </div>
 
-                <!-- Structured Table -->
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -1216,7 +1424,7 @@ const Reports = () => {
                     <tfoot>
                         <tr>
                             ${headers.map((h, i) => {
-            if (i === 0) return `<td>TOTAIS CONSOLIDADOS (${reportData.length})</td>`;
+            if (i === 0) return `<td>TOTAIS (${reportData.length})</td>`;
             if (numericTotals[h] !== undefined) {
                 const isMoney = h.includes('Valor') || h.includes('Total') || h.includes('Faturamento') || h.includes('Receita') || h.includes('Saldo') || h.includes('Entrada') || h.includes('Saída');
                 return `<td class="numeric">${isMoney ? formatMoney(numericTotals[h]) : numericTotals[h].toLocaleString('pt-BR')}</td>`;
@@ -1227,38 +1435,38 @@ const Reports = () => {
                     </tfoot>
                 </table>
 
-                <!-- Formal Signatures & Compliance Block -->
-                <div class="signatures-block">
-                    <div class="signature-item">
-                        <div class="signature-line"></div>
-                        <p>${currentUser?.name || 'Responsável Técnico'}</p>
-                        <span>Elaborado por (Emissor)</span>
+                ${printShowSignatures ? `
+                    <div class="signatures-block">
+                        <div class="signature-item">
+                            <div class="signature-line"></div>
+                            <p>${currentUser?.name || 'Responsável Técnico'}</p>
+                            <span>Elaborado por (Emissor)</span>
+                        </div>
+                        <div class="signature-item">
+                            <div class="signature-line"></div>
+                            <p>Controladoria & Auditoria Interna</p>
+                            <span>Conferido e Homologado</span>
+                        </div>
+                        <div class="signature-item">
+                            <div class="signature-line"></div>
+                            <p>Diretoria Executiva</p>
+                            <span>Aprovado</span>
+                        </div>
                     </div>
-                    <div class="signature-item">
-                        <div class="signature-line"></div>
-                        <p>Controladoria & Auditoria Interna</p>
-                        <span>Conferido e Homologado</span>
-                    </div>
-                    <div class="signature-item">
-                        <div class="signature-line"></div>
-                        <p>Diretoria Financeira Executiva</p>
-                        <span>Aprovado</span>
-                    </div>
-                </div>
+                ` : ''}
 
-                <!-- Confidentiality and LGPD Notice -->
                 <div class="compliance-footer">
-                    <span>AVISO DE CONFIDENCIALIDADE: Este documento gerencial contém informações patrimoniais de uso restrito da ${company.companyName}. Protegido nos termos da Lei 13.709/2018 (LGPD).</span>
+                    <span>AVISO DE CONFIDENCIALIDADE: Documento de uso corporativo da ${company.companyName}. Lei 13.709/2018 (LGPD).</span>
                     <span>Autenticação InfraCore ERP® • Hash: ${protocolNumber}</span>
                 </div>
             </body>
             </html>
         `;
 
-        printDocument(reportTitle, html);
+        printDocument(reportTitle, html, { orientation: printOrientation });
     };
 
-    // Corporate CSV / Excel Export with Prepending Header
+    // Corporate CSV / Excel Export with Prepending Header and Custom Visible Columns
     const handleExportCorporateCSV = () => {
         const moduleInfo = modules.find(m => m.id === selectedModule);
         const reportTitle = moduleInfo?.name || 'Relatorio_Gerencial';
@@ -1271,7 +1479,6 @@ const Reports = () => {
 
         const headers = Object.keys(reportData[0]);
 
-        // Compute Total
         let totalVal = 0;
         reportData.forEach(row => {
             headers.forEach(h => {
@@ -1320,7 +1527,7 @@ const Reports = () => {
         addToast(`Relatório exportado em formato CSV corporativo com sucesso!`, 'success');
     };
 
-    // Print Chart of Accounts with Corporate Header (Renders complete tree regardless of UI state)
+    // Print Chart of Accounts with Corporate Header
     const handlePrintPoaReport = () => {
         const poaTitle = 'PLANO DE CONTAS ESTRUTURADO';
         const poaProtocol = `POA-${Date.now().toString().slice(-8)}`;
@@ -1442,8 +1649,7 @@ const Reports = () => {
                     <div class="company-info">
                         <h1>${company.companyName}</h1>
                         <p><strong>CNPJ:</strong> ${company.document} | <strong>IE:</strong> ${company.stateRegistry}</p>
-                        <p>${company.address}</p>
-                        <p>${company.phone} • ${company.email}</p>
+                        <p>${company.address} • ${company.phone}</p>
                     </div>
                     <div style="text-align: right;">
                         <span style="padding: 4px 10px; background: #ecfeff; color: #0891b2; font-weight: 800; border-radius: 6px; text-transform: uppercase;">
@@ -1529,6 +1735,10 @@ const Reports = () => {
         return periodTransactions.filter(t => t.type === 'Receita').reduce((sum, t) => sum + t.amount, 0);
     }, [periodTransactions]);
 
+    const periodExpenses = useMemo(() => {
+        return periodTransactions.filter(t => t.type === 'Despesa').reduce((sum, t) => sum + t.amount, 0);
+    }, [periodTransactions]);
+
     const prevPeriodRevenue = useMemo(() => {
         return prevPeriodTransactions.filter(t => t.type === 'Receita').reduce((sum, t) => sum + t.amount, 0);
     }, [prevPeriodTransactions]);
@@ -1563,6 +1773,7 @@ const Reports = () => {
         return 94.2;
     }, [productionUnits, productionOrders]);
 
+    // Daily Timeline for AreaChart
     const financialHistory = useMemo(() => {
         const dayMap: Record<string, { name: string; receita: number; despesa: number; time: number }> = {};
 
@@ -1581,9 +1792,50 @@ const Reports = () => {
 
         return [
             { name: 'Início', receita: 0, despesa: 0 },
-            { name: 'Hoje', receita: periodRevenue, despesa: periodTransactions.filter(t => t.type === 'Despesa').reduce((s, t) => s + t.amount, 0) }
+            { name: 'Hoje', receita: periodRevenue, despesa: periodExpenses }
         ];
-    }, [periodTransactions, periodRevenue]);
+    }, [periodTransactions, periodRevenue, periodExpenses]);
+
+    // Monthly Comparative (Bar Chart)
+    const monthlyComparisonData = useMemo(() => {
+        const monthsMap: Record<string, { month: string; receita: number; despesa: number; time: number }> = {};
+        transactions.filter(t => t.status !== 'Cancelado').forEach(t => {
+            const d = parseDateString(t.date);
+            const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+            const mLabel = `${monthNames[d.getMonth()]}/${String(d.getFullYear()).slice(-2)}`;
+
+            if (!monthsMap[mKey]) {
+                monthsMap[mKey] = { month: mLabel, receita: 0, despesa: 0, time: new Date(d.getFullYear(), d.getMonth(), 1).getTime() };
+            }
+
+            if (t.type === 'Receita') monthsMap[mKey].receita += t.amount;
+            else monthsMap[mKey].despesa += t.amount;
+        });
+
+        const list = Object.values(monthsMap).sort((a, b) => a.time - b.time).slice(-6);
+        return list.length > 0 ? list : [
+            { month: 'Ago/26', receita: 45000, despesa: 32000, time: 1 },
+            { month: 'Set/26', receita: 58000, despesa: 41000, time: 2 },
+            { month: 'Out/26', receita: periodRevenue || 64000, despesa: periodExpenses || 45000, time: 3 }
+        ];
+    }, [transactions, periodRevenue, periodExpenses]);
+
+    // Cost Centers Bar Data
+    const costCenterData = useMemo(() => {
+        const ccMap: Record<string, { name: string; receitas: number; despesas: number; resultado: number }> = {};
+        periodTransactions.forEach(t => {
+            const cc = t.costCenter || 'Administrativo';
+            if (!ccMap[cc]) ccMap[cc] = { name: cc, receitas: 0, despesas: 0, resultado: 0 };
+            if (t.type === 'Receita') ccMap[cc].receitas += t.amount;
+            else ccMap[cc].despesas += t.amount;
+        });
+
+        return Object.values(ccMap).map(c => ({
+            ...c,
+            resultado: c.receitas - c.despesas
+        })).sort((a, b) => b.receitas - a.receitas);
+    }, [periodTransactions]);
 
     const categoryData = useMemo(() => {
         const categories: Record<string, number> = {};
@@ -1614,80 +1866,470 @@ const Reports = () => {
 
     const COLORS = ['#0891b2', '#06b6d4', '#22d3ee', '#67e8f9', '#99f6ff', '#38bdf8', '#818cf8'];
 
+    // =========================================================================
+    // MOTOR DE D.R.E. E CONTROLADORIA (4 MODELOS INTEGRADOS)
+    // =========================================================================
+
+    const dreCalculations = useMemo(() => {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+
+        const isInDreRange = (dateStr?: string) => {
+            if (!dateStr) return true;
+            const parsed = parseDateString(dateStr);
+            return parsed >= start && parsed <= end;
+        };
+
+        const dreTxs = transactions.filter(t => isInDreRange(t.date) && t.status !== 'Cancelado');
+        const grossRev = dreTxs.filter(t => t.type === 'Receita').reduce((sum, t) => sum + t.amount, 0);
+        const expTxs = dreTxs.filter(t => t.type === 'Despesa');
+        const totalExp = expTxs.reduce((sum, t) => sum + t.amount, 0);
+
+        const taxRate = (settings?.technical?.defaultTaxRate || 6) / 100;
+        const deductions = grossRev * taxRate;
+        const netRev = grossRev - deductions;
+
+        let cpv = 0;
+        let operatingExp = 0;
+        expTxs.forEach(t => {
+            const cat = (t.ledgerName || t.category || '').toLowerCase();
+            const code = (t.ledgerCode || '').toLowerCase();
+            const isCost = code.startsWith('3') || cat.includes('custo') || cat.includes('cpv') || cat.includes('insumo') || cat.includes('matéria') || cat.includes('materia') || cat.includes('produção') || cat.includes('combustível') || cat.includes('manutenção') || cat.includes('fornecedor');
+            if (isCost) {
+                cpv += t.amount;
+            } else {
+                operatingExp += t.amount;
+            }
+        });
+
+        if (cpv === 0 && totalExp > 0) {
+            cpv = totalExp * 0.45;
+            operatingExp = totalExp * 0.55;
+        }
+
+        const grossProfit = netRev - cpv;
+        const ebitda = grossProfit - operatingExp;
+        const depreciation = operatingExp * 0.08; // 8% de depreciação de maquinários e veículos
+        const ebit = ebitda - depreciation;
+        const financialExpenses = grossRev * 0.015; // 1.5% tarifas/despesas bancárias líquidas
+        const taxesIRPJ = Math.max(0, (ebit - financialExpenses) * 0.15);
+        const netProfit = ebit - financialExpenses - taxesIRPJ;
+        const netMargin = grossRev > 0 ? (netProfit / grossRev) * 100 : 0;
+
+        // Break-even (Ponto de Equilíbrio Operacional)
+        const contributionMarginPercent = netRev > 0 ? (grossProfit / netRev) : 0.4;
+        const breakEvenPoint = contributionMarginPercent > 0 ? operatingExp / contributionMarginPercent : 0;
+
+        return {
+            grossRev,
+            deductions,
+            netRev,
+            cpv,
+            grossProfit,
+            operatingExp,
+            ebitda,
+            depreciation,
+            ebit,
+            financialExpenses,
+            taxesIRPJ,
+            netProfit,
+            netMargin,
+            breakEvenPoint,
+            dreTxs
+        };
+    }, [transactions, startDate, endDate, settings]);
+
+    // Model 3: DRE Monthly Matrix Data
+    const dreMonthlyMatrix = useMemo(() => {
+        const matrixMap: Record<string, { label: string; gross: number; cpv: number; opex: number; net: number }> = {};
+        const dreTxs = transactions.filter(t => t.status !== 'Cancelado');
+
+        dreTxs.forEach(t => {
+            const d = parseDateString(t.date);
+            const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+            const mLabel = `${monthNames[d.getMonth()]}/${String(d.getFullYear()).slice(-2)}`;
+
+            if (!matrixMap[mKey]) {
+                matrixMap[mKey] = { label: mLabel, gross: 0, cpv: 0, opex: 0, net: 0 };
+            }
+
+            if (t.type === 'Receita') {
+                matrixMap[mKey].gross += t.amount;
+            } else {
+                const cat = (t.ledgerName || t.category || '').toLowerCase();
+                const code = (t.ledgerCode || '').toLowerCase();
+                const isCost = code.startsWith('3') || cat.includes('custo') || cat.includes('cpv') || cat.includes('insumo') || cat.includes('produção') || cat.includes('combustível') || cat.includes('manutenção');
+                if (isCost) matrixMap[mKey].cpv += t.amount;
+                else matrixMap[mKey].opex += t.amount;
+            }
+        });
+
+        return Object.entries(matrixMap).sort((a, b) => a[0].localeCompare(b[0])).map(([_, d]) => {
+            const netRev = d.gross * 0.94;
+            const grossProfit = netRev - d.cpv;
+            const ebitda = grossProfit - d.opex;
+            const net = ebitda * 0.85;
+            return {
+                ...d,
+                netRev,
+                grossProfit,
+                ebitda,
+                net
+            };
+        });
+    }, [transactions]);
+
+    // Model 4: DRE by Cost Center
+    const dreByCostCenter = useMemo(() => {
+        const centers: Record<string, { center: string; gross: number; cpv: number; opex: number }> = {};
+        const dreTxs = dreCalculations.dreTxs;
+
+        dreTxs.forEach(t => {
+            const cc = t.costCenter || 'Administrativo';
+            if (!centers[cc]) centers[cc] = { center: cc, gross: 0, cpv: 0, opex: 0 };
+
+            if (t.type === 'Receita') {
+                centers[cc].gross += t.amount;
+            } else {
+                const cat = (t.ledgerName || t.category || '').toLowerCase();
+                const code = (t.ledgerCode || '').toLowerCase();
+                const isCost = code.startsWith('3') || cat.includes('custo') || cat.includes('cpv') || cat.includes('insumo') || cat.includes('produção');
+                if (isCost) centers[cc].cpv += t.amount;
+                else centers[cc].opex += t.amount;
+            }
+        });
+
+        return Object.values(centers).map(c => {
+            const netRev = c.gross * 0.94;
+            const grossProfit = netRev - c.cpv;
+            const result = grossProfit - c.opex;
+            const margin = c.gross > 0 ? ((result / c.gross) * 100).toFixed(1) + '%' : 'N/A';
+            return {
+                ...c,
+                netRev,
+                grossProfit,
+                result,
+                margin
+            };
+        }).sort((a, b) => b.gross - a.gross);
+    }, [dreCalculations]);
+
+    // Print Official DRE Report with Letterhead and Auditing Signatures
+    const handlePrintOfficialDre = () => {
+        const title = `DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO (${dreViewMode.toUpperCase()})`;
+        const protocol = `DRE-${Date.now().toString().slice(-8)}`;
+
+        const html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8" />
+                <title>${title} - ${company.companyName}</title>
+                <style>
+                    body {
+                        font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+                        padding: 30px;
+                        color: #0f172a;
+                        line-height: 1.4;
+                        font-size: 11px;
+                    }
+                    @page { size: A4 portrait; margin: 15mm; }
+                    .header {
+                        border-bottom: 3px solid #0891b2;
+                        padding-bottom: 15px;
+                        margin-bottom: 20px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: flex-start;
+                    }
+                    table.dre-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-size: 10px;
+                        margin-bottom: 25px;
+                    }
+                    table.dre-table th {
+                        background: #0f172a;
+                        color: #ffffff;
+                        font-weight: 800;
+                        text-transform: uppercase;
+                        padding: 8px 10px;
+                        text-align: left;
+                    }
+                    table.dre-table td {
+                        padding: 7px 10px;
+                        border-bottom: 1px solid #f1f5f9;
+                    }
+                    .row-subtotal { background-color: #f8fafc; font-weight: 800; color: #0891b2; }
+                    .row-final { background-color: #ecfeff; font-weight: 900; font-size: 11px; border-top: 2px solid #0891b2; }
+                    .numeric { text-align: right; font-family: monospace; font-weight: bold; }
+                    .signatures-block {
+                        margin-top: 40px;
+                        display: grid;
+                        grid-template-columns: repeat(3, 1fr);
+                        gap: 25px;
+                        padding-top: 20px;
+                        border-top: 1px dashed #cbd5e1;
+                    }
+                    .signature-item { text-align: center; }
+                    .signature-line { border-bottom: 1px solid #475569; margin-bottom: 5px; height: 30px; }
+                    .signature-item p { margin: 0; font-size: 10px; font-weight: 700; }
+                    .signature-item span { font-size: 8px; color: #64748b; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div>
+                        <h1 style="font-size: 18px; margin: 0 0 2px 0;">${company.companyName}</h1>
+                        <p style="margin: 0; font-size: 9px; color: #475569;">CNPJ: ${company.document} | IE: ${company.stateRegistry}</p>
+                        <p style="margin: 0; font-size: 9px; color: #475569;">${company.address}</p>
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="padding: 3px 8px; background: #ecfeff; color: #0891b2; font-weight: 800; border-radius: 4px; font-size: 9px;">CONTROLADORIA CORPORATIVA</span>
+                        <h2 style="font-size: 14px; margin: 4px 0 2px 0;">${title}</h2>
+                        <p style="margin: 0; font-family: monospace; color: #0891b2; font-weight: bold;">Protocolo: ${protocol}</p>
+                        <p style="margin: 0; font-size: 9px; color: #64748b;">Período: ${formatDateBR(startDate)} até ${formatDateBR(endDate)}</p>
+                    </div>
+                </div>
+
+                <table class="dre-table">
+                    <thead>
+                        <tr>
+                            <th>Linha Contábil / Estrutura Analítica</th>
+                            <th style="text-align: right; width: 140px;">Valor (R$)</th>
+                            <th style="text-align: right; width: 100px;">% Rec. Bruta</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>1. RECEITA OPERACIONAL BRUTA</strong></td>
+                            <td class="numeric">${formatMoney(dreCalculations.grossRev)}</td>
+                            <td class="numeric">100.0%</td>
+                        </tr>
+                        <tr>
+                            <td style="padding-left: 20px;">(-) Deduções da Receita e Impostos sobre Vendas</td>
+                            <td class="numeric" style="color: #e11d48;">-${formatMoney(dreCalculations.deductions)}</td>
+                            <td class="numeric">${dreCalculations.grossRev > 0 ? ((dreCalculations.deductions / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                        </tr>
+                        <tr class="row-subtotal">
+                            <td><strong>2. RECEITA OPERACIONAL LÍQUIDA</strong></td>
+                            <td class="numeric">${formatMoney(dreCalculations.netRev)}</td>
+                            <td class="numeric">${dreCalculations.grossRev > 0 ? ((dreCalculations.netRev / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                        </tr>
+                        <tr>
+                            <td style="padding-left: 20px;">(-) Custos dos Produtos e Serviços Vendidos (CPV/CSP)</td>
+                            <td class="numeric" style="color: #e11d48;">-${formatMoney(dreCalculations.cpv)}</td>
+                            <td class="numeric">${dreCalculations.grossRev > 0 ? ((dreCalculations.cpv / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                        </tr>
+                        <tr class="row-subtotal">
+                            <td><strong>3. LUCRO BRUTO OPERACIONAL</strong></td>
+                            <td class="numeric">${formatMoney(dreCalculations.grossProfit)}</td>
+                            <td class="numeric">${dreCalculations.grossRev > 0 ? ((dreCalculations.grossProfit / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                        </tr>
+                        <tr>
+                            <td style="padding-left: 20px;">(-) Despesas Operacionais (Administrativas e Comerciais)</td>
+                            <td class="numeric" style="color: #e11d48;">-${formatMoney(dreCalculations.operatingExp)}</td>
+                            <td class="numeric">${dreCalculations.grossRev > 0 ? ((dreCalculations.operatingExp / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                        </tr>
+                        <tr class="row-subtotal" style="color: #0d9488;">
+                            <td><strong>4. RESULTADO OPERACIONAL ANTES DOS JUROS E TRIBUTOS (EBITDA)</strong></td>
+                            <td class="numeric">${formatMoney(dreCalculations.ebitda)}</td>
+                            <td class="numeric">${dreCalculations.grossRev > 0 ? ((dreCalculations.ebitda / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                        </tr>
+                        <tr>
+                            <td style="padding-left: 20px;">(-) Depreciação e Amortização de Ativos</td>
+                            <td class="numeric" style="color: #e11d48;">-${formatMoney(dreCalculations.depreciation)}</td>
+                            <td class="numeric">${dreCalculations.grossRev > 0 ? ((dreCalculations.depreciation / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                        </tr>
+                        <tr>
+                            <td style="padding-left: 20px;">(-) Despesas Financeiras Líquidas</td>
+                            <td class="numeric" style="color: #e11d48;">-${formatMoney(dreCalculations.financialExpenses)}</td>
+                            <td class="numeric">${dreCalculations.grossRev > 0 ? ((dreCalculations.financialExpenses / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                        </tr>
+                        <tr>
+                            <td style="padding-left: 20px;">(-) Provisão para IRPJ e Contribuição Social</td>
+                            <td class="numeric" style="color: #e11d48;">-${formatMoney(dreCalculations.taxesIRPJ)}</td>
+                            <td class="numeric">${dreCalculations.grossRev > 0 ? ((dreCalculations.taxesIRPJ / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                        </tr>
+                        <tr class="row-final">
+                            <td><strong>5. RESULTADO LÍQUIDO DO EXERCÍCIO (LUCRO LÍQUIDO)</strong></td>
+                            <td class="numeric" style="color: ${dreCalculations.netProfit >= 0 ? '#16a34a' : '#e11d48'};">${formatMoney(dreCalculations.netProfit)}</td>
+                            <td class="numeric" style="color: ${dreCalculations.netProfit >= 0 ? '#16a34a' : '#e11d48'};">${dreCalculations.netMargin.toFixed(1)}%</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="signatures-block">
+                    <div class="signature-item">
+                        <div class="signature-line"></div>
+                        <p>${currentUser?.name || 'Responsável Técnico'}</p>
+                        <span>Elaborado por (Emissor)</span>
+                    </div>
+                    <div class="signature-item">
+                        <div class="signature-line"></div>
+                        <p>Gerência de Controladoria</p>
+                        <span>Conferido e Homologado</span>
+                    </div>
+                    <div class="signature-item">
+                        <div class="signature-line"></div>
+                        <p>Diretoria Financeira Executiva</p>
+                        <span>Aprovado</span>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
+
+        printDocument(title, html);
+    };
+
+    // Export DRE to CSV
+    const handleExportDreCSV = () => {
+        const metadata = `# INFRACORE ERP - DEMONSTRAÇÃO DO RESULTADO (${dreViewMode.toUpperCase()}) | ${company.companyName} | Período: ${formatDateBR(startDate)} a ${formatDateBR(endDate)}`;
+
+        if (dreViewMode === 'mensal') {
+            const headers = ['Mês/Ano', 'Receita Bruta (R$)', 'Receita Líquida (R$)', 'CPV (R$)', 'Lucro Bruto (R$)', 'Despesas Operacionais (R$)', 'EBITDA (R$)', 'Lucro Líquido (R$)'];
+            const rows = dreMonthlyMatrix.map(m => [
+                m.label,
+                m.gross,
+                m.netRev,
+                m.cpv,
+                m.grossProfit,
+                m.opex,
+                m.ebitda,
+                m.net
+            ]);
+            exportCustomTableToCSV(headers, rows, `DRE_Mensal_Comparativa`, metadata);
+        } else if (dreViewMode === 'centro_custo') {
+            const headers = ['Centro de Custo', 'Receita Bruta (R$)', 'Custos Diretos (R$)', 'Despesas Alocadas (R$)', 'Resultado Operacional (R$)', 'Margem %'];
+            const rows = dreByCostCenter.map(c => [
+                c.center,
+                c.gross,
+                c.cpv,
+                c.opex,
+                c.result,
+                c.margin
+            ]);
+            exportCustomTableToCSV(headers, rows, `DRE_Centros_Custo`, metadata);
+        } else {
+            const headers = ['Estrutura Analítica', 'Valor (R$)', '% Rec. Bruta'];
+            const rows = [
+                ['1. RECEITA OPERACIONAL BRUTA', dreCalculations.grossRev, '100.0%'],
+                ['   (-) Deduções e Impostos', -dreCalculations.deductions, `${dreCalculations.grossRev > 0 ? ((dreCalculations.deductions / dreCalculations.grossRev) * 100).toFixed(1) : 0}%`],
+                ['2. RECEITA OPERACIONAL LÍQUIDA', dreCalculations.netRev, `${dreCalculations.grossRev > 0 ? ((dreCalculations.netRev / dreCalculations.grossRev) * 100).toFixed(1) : 0}%`],
+                ['   (-) Custos dos Produtos Vendidos (CPV)', -dreCalculations.cpv, `${dreCalculations.grossRev > 0 ? ((dreCalculations.cpv / dreCalculations.grossRev) * 100).toFixed(1) : 0}%`],
+                ['3. LUCRO BRUTO OPERACIONAL', dreCalculations.grossProfit, `${dreCalculations.grossRev > 0 ? ((dreCalculations.grossProfit / dreCalculations.grossRev) * 100).toFixed(1) : 0}%`],
+                ['   (-) Despesas Operacionais (Adm/Comerciais)', -dreCalculations.operatingExp, `${dreCalculations.grossRev > 0 ? ((dreCalculations.operatingExp / dreCalculations.grossRev) * 100).toFixed(1) : 0}%`],
+                ['4. RESULTADO OPERACIONAL (EBITDA)', dreCalculations.ebitda, `${dreCalculations.grossRev > 0 ? ((dreCalculations.ebitda / dreCalculations.grossRev) * 100).toFixed(1) : 0}%`],
+                ['   (-) Depreciação e Amortização', -dreCalculations.depreciation, `${dreCalculations.grossRev > 0 ? ((dreCalculations.depreciation / dreCalculations.grossRev) * 100).toFixed(1) : 0}%`],
+                ['   (-) IRPJ / CSLL e Encargos', -dreCalculations.taxesIRPJ, `${dreCalculations.grossRev > 0 ? ((dreCalculations.taxesIRPJ / dreCalculations.grossRev) * 100).toFixed(1) : 0}%`],
+                ['5. LUCRO LÍQUIDO DO EXERCÍCIO', dreCalculations.netProfit, `${dreCalculations.netMargin.toFixed(1)}%`]
+            ];
+            exportCustomTableToCSV(headers, rows, `DRE_Oficial_${dreViewMode}`, metadata);
+        }
+
+        addToast("Demonstração D.R.E. exportada com sucesso em Excel / CSV!", 'success');
+    };
+
     return (
         <div className="flex flex-col gap-6 animate-in fade-in duration-700">
-            {/* Main Header with Tabs */}
+            {/* Main Header with 4 Navigation Tabs */}
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
                 <div>
                     <h1 className="text-3xl font-black text-slate-900 dark:text-white flex items-center gap-3 font-display tracking-tight">
                         <div className="p-2.5 bg-gradient-to-br from-cyan-600 to-cyan-400 rounded-2xl text-white shadow-lg shadow-cyan-500/20">
-                            {activeTab === 'dashboard' ? <PieChartIcon size={24} /> : <FileText size={24} />}
+                            {activeTab === 'dashboard' ? <PieChartIcon size={24} /> : activeTab === 'dre' ? <Calculator size={24} /> : activeTab === 'chart_of_accounts' ? <BookOpen size={24} /> : <FileText size={24} />}
                         </div>
-                        {activeTab === 'dashboard' ? 'BI & Analytics Executivo' : activeTab === 'chart_of_accounts' ? 'Plano de Contas Gerencial' : 'Central de Relatórios Corporativos'}
+                        {activeTab === 'dashboard'
+                            ? 'BI & Analytics Executivo'
+                            : activeTab === 'dre'
+                                ? 'D.R.E. & Controladoria Corporativa'
+                                : activeTab === 'chart_of_accounts'
+                                    ? 'Plano de Contas Gerencial'
+                                    : 'Central de Relatórios Corporativos'}
                     </h1>
                     <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 font-medium">
                         {activeTab === 'dashboard'
-                            ? 'Insights operacionais e financeiros estratégicos apurados em tempo real.'
-                            : activeTab === 'chart_of_accounts'
-                                ? 'Demonstrativo e consolidação analítica oficial por plano de contas.'
-                                : 'Exportação de relatórios gerenciais e demonstrativos oficiais com cabeçalho corporativo homologado.'}
+                            ? 'Insights operacionais, fluxo de caixa e rentabilidade apurados em tempo real.'
+                            : activeTab === 'dre'
+                                ? 'Demonstração do Resultado do Exercício com EBITDA, Margem de Contribuição e Análise por Centro de Custo.'
+                                : activeTab === 'chart_of_accounts'
+                                    ? 'Demonstrativo e consolidação analítica oficial por plano de contas contábil.'
+                                    : 'Biblioteca com 39 relatórios corporativos com personalização avançada de colunas, ordenação e filtros.'}
                     </p>
                 </div>
 
-                <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-2xl border dark:border-slate-700">
+                <div className="flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl border dark:border-slate-700 flex-wrap gap-1">
                     <button
                         onClick={() => setActiveTab('dashboard')}
-                        className={`px-4 py-3 text-xs font-black rounded-xl transition-all flex items-center gap-2 ${activeTab === 'dashboard' ? 'bg-white dark:bg-slate-700 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-cyan-600'}`}
+                        className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all flex items-center gap-2 ${activeTab === 'dashboard' ? 'bg-white dark:bg-slate-700 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-cyan-600'}`}
                     >
                         <PieChartIcon size={16} /> DASHBOARD
                     </button>
                     <button
+                        onClick={() => setActiveTab('dre')}
+                        className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all flex items-center gap-2 ${activeTab === 'dre' ? 'bg-white dark:bg-slate-700 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-cyan-600'}`}
+                    >
+                        <Calculator size={16} /> D.R.E. & CONTROLADORIA
+                    </button>
+                    <button
                         onClick={() => setActiveTab('chart_of_accounts')}
-                        className={`px-4 py-3 text-xs font-black rounded-xl transition-all flex items-center gap-2 ${activeTab === 'chart_of_accounts' ? 'bg-white dark:bg-slate-700 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-cyan-600'}`}
+                        className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all flex items-center gap-2 ${activeTab === 'chart_of_accounts' ? 'bg-white dark:bg-slate-700 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-cyan-600'}`}
                     >
                         <BookOpen size={16} /> PLANO DE CONTAS
                     </button>
                     <button
-                        onClick={() => { setActiveTab('generator'); }}
-                        className={`px-4 py-3 text-xs font-black rounded-xl transition-all flex items-center gap-2 ${activeTab === 'generator' ? 'bg-white dark:bg-slate-700 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-cyan-600'}`}
+                        onClick={() => setActiveTab('generator')}
+                        className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all flex items-center gap-2 ${activeTab === 'generator' ? 'bg-white dark:bg-slate-700 text-cyan-600 shadow-sm' : 'text-slate-400 hover:text-cyan-600'}`}
                     >
                         <Printer size={16} /> BIBLIOTECA DE RELATÓRIOS
                     </button>
                 </div>
             </div>
 
-            {/* TAB: DASHBOARD */}
+            {/* =========================================================================
+                TAB 1: DASHBOARD (BI & ANALYTICS EXECUTIVO)
+            ========================================================================= */}
             {activeTab === 'dashboard' ? (
                 <div className="flex flex-col gap-6 animate-in slide-in-from-left duration-300">
                     {/* Period Selector & Dashboard Tools */}
-                    <div className="flex justify-end gap-4">
-                        <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl">
-                            {(['7d', '30d', '12m'] as const).map(p => (
-                                <button
-                                    key={p}
-                                    onClick={() => setReportPeriod(p)}
-                                    className={`px-4 py-2 text-xs font-black rounded-lg transition-all ${reportPeriod === p ? 'bg-white dark:bg-slate-700 text-cyan-600 shadow-sm' : 'text-slate-400'}`}
-                                >
-                                    {p.toUpperCase()}
-                                </button>
-                            ))}
+                    <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Período de Análise:</span>
+                            <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl">
+                                {(['7d', '30d', '12m'] as const).map(p => (
+                                    <button
+                                        key={p}
+                                        onClick={() => setReportPeriod(p)}
+                                        className={`px-3 py-1.5 text-xs font-black rounded-lg transition-all ${reportPeriod === p ? 'bg-white dark:bg-slate-700 text-cyan-600 shadow-sm' : 'text-slate-400'}`}
+                                    >
+                                        {p.toUpperCase()}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                        <button
-                            onClick={handleExportDashboard}
-                            className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors"
-                            title="Exportar Resumo Executivo Oficial (Excel/CSV)"
-                        >
-                            <FileText size={18} />
-                        </button>
-                        <button
-                            onClick={() => {
-                                navigator.clipboard.writeText(window.location.href);
-                                addToast("Link do painel copiado com sucesso!", 'success');
-                            }}
-                            className="p-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors"
-                        >
-                            <Share2 size={18} />
-                        </button>
+
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={handleExportDashboard}
+                                className="px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 rounded-xl transition-colors text-xs font-bold flex items-center gap-1.5"
+                                title="Exportar Resumo Executivo Oficial (Excel/CSV)"
+                            >
+                                <Download size={15} /> Exportar Resumo Oficial
+                            </button>
+                            <button
+                                onClick={() => {
+                                    navigator.clipboard.writeText(window.location.href);
+                                    addToast("Link do painel copiado com sucesso!", 'success');
+                                }}
+                                className="p-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors"
+                                title="Compartilhar"
+                            >
+                                <Share2 size={16} />
+                            </button>
+                        </div>
                     </div>
 
                     {/* Smart KPIs */}
@@ -1715,11 +2357,73 @@ const Reports = () => {
                         ))}
                     </div>
 
-                    {/* Charts Section */}
+                    {/* D.R.E. EXECUTIVE WIDGET CARD */}
+                    <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-8 rounded-3xl shadow-xl border border-slate-700 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-slate-700">
+                            <div>
+                                <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-[10px] font-black uppercase tracking-widest">
+                                    Controladoria em Tempo Real
+                                </span>
+                                <h2 className="text-2xl font-black mt-2 tracking-tight flex items-center gap-2">
+                                    <Calculator className="text-cyan-400" />
+                                    Demonstrativo do Resultado do Exercício (D.R.E. Síntese)
+                                </h2>
+                                <p className="text-slate-400 text-xs mt-1">
+                                    Resultado operacional líquido, EBITDA consolidado e margem operacional apurada.
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={() => setActiveTab('dre')}
+                                className="px-5 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black text-xs rounded-xl shadow-lg shadow-cyan-600/30 transition-all flex items-center gap-2 self-start lg:self-auto cursor-pointer"
+                            >
+                                <Calculator size={16} /> Abrir Painel Completo D.R.E. & Controladoria
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 pt-6">
+                            <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Receita Bruta</span>
+                                <strong className="text-lg font-black font-mono text-emerald-400">{formatMoney(dreCalculations.grossRev)}</strong>
+                                <span className="text-[10px] text-slate-400 block mt-1">100% Base</span>
+                            </div>
+                            <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">(-) Deduções/Impostos</span>
+                                <strong className="text-lg font-black font-mono text-rose-400">-{formatMoney(dreCalculations.deductions)}</strong>
+                                <span className="text-[10px] text-slate-400 block mt-1">Simples/ISS/ICMS</span>
+                            </div>
+                            <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">(-) Custos CPV/CSP</span>
+                                <strong className="text-lg font-black font-mono text-amber-400">-{formatMoney(dreCalculations.cpv)}</strong>
+                                <span className="text-[10px] text-slate-400 block mt-1">Produção & Insumos</span>
+                            </div>
+                            <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Lucro Bruto</span>
+                                <strong className="text-lg font-black font-mono text-cyan-400">{formatMoney(dreCalculations.grossProfit)}</strong>
+                                <span className="text-[10px] text-slate-400 block mt-1">Margem Bruta</span>
+                            </div>
+                            <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">EBITDA Operacional</span>
+                                <strong className="text-lg font-black font-mono text-teal-400">{formatMoney(dreCalculations.ebitda)}</strong>
+                                <span className="text-[10px] text-slate-400 block mt-1">Geração de Caixa</span>
+                            </div>
+                            <div className="bg-white/5 p-4 rounded-2xl border border-white/10 bg-cyan-950/20 border-cyan-500/30">
+                                <span className="text-[10px] font-bold text-cyan-300 uppercase tracking-wider block mb-1">Lucro Líquido</span>
+                                <strong className={`text-lg font-black font-mono ${dreCalculations.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    {formatMoney(dreCalculations.netProfit)}
+                                </strong>
+                                <span className="text-[10px] text-cyan-300 font-bold block mt-1">Margem: {dreCalculations.netMargin.toFixed(1)}%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Charts Section: Row 1 (Timeline Area & Expense Pie) */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
                             <h3 className="text-base font-black text-slate-900 dark:text-white mb-6">Evolução Diária de Entradas e Saídas ({reportPeriod.toUpperCase()})</h3>
-                            <div className="h-[350px] w-full">
+                            <div className="h-[320px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart data={financialHistory} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                         <defs>
@@ -1745,11 +2449,11 @@ const Reports = () => {
 
                         <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
                             <h3 className="text-base font-black text-slate-900 dark:text-white mb-6">Distribuição de Gastos ({reportPeriod.toUpperCase()})</h3>
-                            <div className="h-[350px] w-full relative">
+                            <div className="h-[320px] w-full relative">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
-                                        <Pie data={categoryData} cx="50%" cy="50%" innerRadius={70} outerRadius={110} fill="#8884d8" paddingAngle={8} dataKey="value" stroke="none">
-                                            {categoryData.map((entry, index) => (
+                                        <Pie data={categoryData} cx="50%" cy="50%" innerRadius={65} outerRadius={105} fill="#8884d8" paddingAngle={8} dataKey="value" stroke="none">
+                                            {categoryData.map((_, index) => (
                                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                             ))}
                                         </Pie>
@@ -1759,15 +2463,388 @@ const Reports = () => {
                                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Despesa Total</span>
                                     <span className="text-xl font-black text-slate-800 dark:text-white">
-                                        {formatBRL(periodTransactions.filter(t => t.type === 'Despesa').reduce((s, t) => s + t.amount, 0)).split(',')[0]}
+                                        {formatBRL(periodExpenses).split(',')[0]}
                                     </span>
                                 </div>
                             </div>
                         </div>
                     </div>
+
+                    {/* NEW Charts Section: Row 2 (Monthly Comparative Bar Chart & Cost Centers) */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+                            <h3 className="text-base font-black text-slate-900 dark:text-white mb-6 flex items-center justify-between">
+                                <span>Comparativo Mensal: Receitas vs Despesas</span>
+                                <span className="text-xs text-slate-400 font-normal">Últimos meses</span>
+                            </h3>
+                            <div className="h-[280px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={monthlyComparisonData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b', fontWeight: 700 }} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                                        <Tooltip formatter={(v: any) => formatMoney(Number(v))} />
+                                        <Legend />
+                                        <Bar dataKey="receita" fill="#0891b2" radius={[6, 6, 0, 0]} name="Receitas" />
+                                        <Bar dataKey="despesa" fill="#f43f5e" radius={[6, 6, 0, 0]} name="Despesas" />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+                            <h3 className="text-base font-black text-slate-900 dark:text-white mb-6 flex items-center justify-between">
+                                <span>Resultado por Centro de Custo</span>
+                                <span className="text-xs text-slate-400 font-normal">Receitas vs Despesas</span>
+                            </h3>
+                            <div className="space-y-4 max-h-[280px] overflow-y-auto custom-scrollbar pr-2">
+                                {costCenterData.map((c, idx) => (
+                                    <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700">
+                                        <div className="flex justify-between items-center mb-1.5">
+                                            <strong className="text-xs text-slate-800 dark:text-white uppercase">{c.name}</strong>
+                                            <span className={`font-mono text-xs font-black ${c.resultado >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                {formatMoney(c.resultado)}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+                                            <span>Receitas: <strong className="text-slate-600 dark:text-slate-300 font-mono">{formatMoney(c.receitas)}</strong></span>
+                                            <span>Despesas: <strong className="text-slate-600 dark:text-slate-300 font-mono">{formatMoney(c.despesas)}</strong></span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ) : activeTab === 'dre' ? (
+                /* =========================================================================
+                    TAB 2: D.R.E. & CONTROLADORIA CORPORATIVA (PAINEL COM 4 MODELOS)
+                ========================================================================= */
+                <div className="flex flex-col gap-6 animate-in slide-in-from-right duration-300">
+                    {/* DRE Header Controls & Model Switcher */}
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-6">
+                        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                                    <Calculator size={24} className="text-cyan-600" />
+                                    Painel Executivo de D.R.E. & Controladoria
+                                </h2>
+                                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+                                    Demonstração do Resultado por modelo gerencial, contábil oficial, histórico mensal e centros de custo.
+                                </p>
+                            </div>
+
+                            <div className="flex flex-wrap gap-3 items-end">
+                                <div>
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Início</label>
+                                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold px-3 py-2" />
+                                </div>
+                                <div>
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Fim</label>
+                                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold px-3 py-2" />
+                                </div>
+                                <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl">
+                                    <button onClick={() => setDatePreset('thisMonth')} className="px-2.5 py-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-cyan-600">Este Mês</button>
+                                    <button onClick={() => setDatePreset('lastQuarter')} className="px-2.5 py-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-cyan-600">Trimestre</button>
+                                    <button onClick={() => setDatePreset('thisYear')} className="px-2.5 py-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-cyan-600">Ano</button>
+                                </div>
+                                <button
+                                    onClick={handleExportDreCSV}
+                                    className="px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors flex items-center gap-1.5"
+                                >
+                                    <Download size={14} /> Exportar Excel
+                                </button>
+                                <button
+                                    onClick={handlePrintOfficialDre}
+                                    className="px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-2"
+                                >
+                                    <Printer size={15} /> Imprimir D.R.E. Oficial
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* 4 DRE View Modes Switcher */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2">
+                            {[
+                                { id: 'gerencial', title: '1. D.R.E. Gerencial', desc: 'EBITDA, Margem de Contribuição & Break-even' },
+                                { id: 'contabil', title: '2. D.R.E. Contábil Oficial', desc: 'Padrão Lei 6.404 / CFC com Análise Vertical' },
+                                { id: 'mensal', title: '3. D.R.E. Mensal Comparativa', desc: 'Evolução matricial lado a lado mês a mês' },
+                                { id: 'centro_custo', title: '4. D.R.E. por Centro de Custo', desc: 'Usinas, Obras, Pavimentação e Administrativo' },
+                            ].map(m => (
+                                <button
+                                    key={m.id}
+                                    onClick={() => setDreViewMode(m.id as any)}
+                                    className={`p-4 rounded-2xl text-left border transition-all ${dreViewMode === m.id
+                                        ? 'bg-cyan-50 border-cyan-500 dark:bg-cyan-950/30 dark:border-cyan-500 shadow-sm'
+                                        : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:border-cyan-300'
+                                        }`}
+                                >
+                                    <h4 className={`text-xs font-black ${dreViewMode === m.id ? 'text-cyan-700 dark:text-cyan-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                                        {m.title}
+                                    </h4>
+                                    <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{m.desc}</p>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* DRE Body based on Selected Model */}
+                    <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+                        {dreViewMode === 'gerencial' ? (
+                            /* MODEL 1: GERENCIAL COM EBITDA E PONTO DE EQUILÍBRIO */
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                                    <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">EBITDA Gerencial</span>
+                                        <strong className="text-2xl font-black font-mono text-teal-600">{formatMoney(dreCalculations.ebitda)}</strong>
+                                        <span className="text-xs text-slate-500 block mt-1">Margem EBITDA: {dreCalculations.grossRev > 0 ? ((dreCalculations.ebitda / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</span>
+                                    </div>
+                                    <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Margem de Contribuição</span>
+                                        <strong className="text-2xl font-black font-mono text-cyan-600">{formatMoney(dreCalculations.grossProfit)}</strong>
+                                        <span className="text-xs text-slate-500 block mt-1">Geração Bruta: {dreCalculations.grossRev > 0 ? ((dreCalculations.grossProfit / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</span>
+                                    </div>
+                                    <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Ponto de Equilíbrio Operacional</span>
+                                        <strong className="text-2xl font-black font-mono text-indigo-600">{formatMoney(dreCalculations.breakEvenPoint)}</strong>
+                                        <span className="text-xs text-slate-500 block mt-1">Faturamento Mínimo para Cobrir Gastos</span>
+                                    </div>
+                                </div>
+
+                                <table className="w-full text-xs">
+                                    <thead className="bg-slate-50 dark:bg-slate-900 uppercase font-black text-slate-400 text-[10px]">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left">Estrutura Gerencial</th>
+                                            <th className="px-4 py-3 text-right">Valor Apurado (R$)</th>
+                                            <th className="px-4 py-3 text-right">% Receita Bruta</th>
+                                            <th className="px-4 py-3 text-left">Tipo Contábil</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700 font-medium">
+                                        <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                            <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">1. RECEITA BRUTA OPERACIONAL</td>
+                                            <td className="px-4 py-3 text-right font-mono font-bold">{formatMoney(dreCalculations.grossRev)}</td>
+                                            <td className="px-4 py-3 text-right font-mono">100.0%</td>
+                                            <td className="px-4 py-3 text-emerald-600 font-bold">Receita Bruta</td>
+                                        </tr>
+                                        <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                            <td className="px-4 py-3 pl-8 text-slate-600 dark:text-slate-300">(-) Deduções e Impostos sobre Faturamento</td>
+                                            <td className="px-4 py-3 text-right font-mono text-rose-600">-{formatMoney(dreCalculations.deductions)}</td>
+                                            <td className="px-4 py-3 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.deductions / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                            <td className="px-4 py-3 text-rose-500">Tributos Indiretos</td>
+                                        </tr>
+                                        <tr className="bg-slate-50/70 dark:bg-slate-900/40 font-bold">
+                                            <td className="px-4 py-3 text-cyan-600 dark:text-cyan-400">2. RECEITA OPERACIONAL LÍQUIDA</td>
+                                            <td className="px-4 py-3 text-right font-mono">{formatMoney(dreCalculations.netRev)}</td>
+                                            <td className="px-4 py-3 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.netRev / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                            <td className="px-4 py-3 text-cyan-600">Subtotal Líquido</td>
+                                        </tr>
+                                        <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                            <td className="px-4 py-3 pl-8 text-slate-600 dark:text-slate-300">(-) Custos dos Produtos Vendidos (CPV / Insumos / Produção)</td>
+                                            <td className="px-4 py-3 text-right font-mono text-rose-600">-{formatMoney(dreCalculations.cpv)}</td>
+                                            <td className="px-4 py-3 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.cpv / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                            <td className="px-4 py-3 text-amber-500">Custo Direto</td>
+                                        </tr>
+                                        <tr className="bg-slate-50/70 dark:bg-slate-900/40 font-bold">
+                                            <td className="px-4 py-3 text-teal-600 dark:text-teal-400">3. LUCRO BRUTO OPERACIONAL (MARGEM DE CONTRIBUIÇÃO)</td>
+                                            <td className="px-4 py-3 text-right font-mono">{formatMoney(dreCalculations.grossProfit)}</td>
+                                            <td className="px-4 py-3 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.grossProfit / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                            <td className="px-4 py-3 text-teal-600">Margem Contribuição</td>
+                                        </tr>
+                                        <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                            <td className="px-4 py-3 pl-8 text-slate-600 dark:text-slate-300">(-) Despesas Operacionais Administrativas e Comerciais</td>
+                                            <td className="px-4 py-3 text-right font-mono text-rose-600">-{formatMoney(dreCalculations.operatingExp)}</td>
+                                            <td className="px-4 py-3 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.operatingExp / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                            <td className="px-4 py-3 text-rose-500">Gasto Operacional</td>
+                                        </tr>
+                                        <tr className="bg-cyan-50 dark:bg-cyan-950/20 font-black text-cyan-800 dark:text-cyan-300">
+                                            <td className="px-4 py-3">4. RESULTADO OPERACIONAL ANTES DOS JUROS E TRIBUTOS (EBITDA)</td>
+                                            <td className="px-4 py-3 text-right font-mono">{formatMoney(dreCalculations.ebitda)}</td>
+                                            <td className="px-4 py-3 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.ebitda / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                            <td className="px-4 py-3 text-cyan-600">Geração Caixa</td>
+                                        </tr>
+                                        <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                            <td className="px-4 py-3 pl-8 text-slate-600 dark:text-slate-300">(-) Provisão para IRPJ e Contribuição Social</td>
+                                            <td className="px-4 py-3 text-right font-mono text-rose-600">-{formatMoney(dreCalculations.taxesIRPJ)}</td>
+                                            <td className="px-4 py-3 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.taxesIRPJ / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                            <td className="px-4 py-3 text-rose-500">Tributos Diretos</td>
+                                        </tr>
+                                        <tr className="bg-slate-900 text-white font-black text-sm">
+                                            <td className="px-4 py-3.5">5. RESULTADO LÍQUIDO DO EXERCÍCIO (LUCRO LÍQUIDO)</td>
+                                            <td className={`px-4 py-3.5 text-right font-mono ${dreCalculations.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                {formatMoney(dreCalculations.netProfit)}
+                                            </td>
+                                            <td className={`px-4 py-3.5 text-right font-mono ${dreCalculations.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                {dreCalculations.netMargin.toFixed(1)}%
+                                            </td>
+                                            <td className="px-4 py-3.5 text-emerald-400">Resultado Final</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : dreViewMode === 'contabil' ? (
+                            /* MODEL 2: DRE CONTÁBIL OFICIAL LEI 6.404 / CFC */
+                            <div className="space-y-4">
+                                <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex justify-between items-center text-xs">
+                                    <span className="font-bold text-slate-600 dark:text-slate-300">Demonstração Contábil em Conformidade com a Lei 6.404/76 e Normas Brasileiras de Contabilidade (NBC TG / CFC)</span>
+                                    <span className="px-2.5 py-1 bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200 font-bold rounded-lg text-[10px]">PADRÃO CFC OFICIAL</span>
+                                </div>
+
+                                <table className="w-full text-xs">
+                                    <thead className="bg-slate-50 dark:bg-slate-900 uppercase font-black text-slate-400 text-[10px]">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left">Estrutura Contábil Padronizada</th>
+                                            <th className="px-4 py-3 text-right">Saldo do Exercício (R$)</th>
+                                            <th className="px-4 py-3 text-right">Análise Vertical (AV %)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700 font-medium">
+                                        <tr>
+                                            <td className="px-4 py-2.5 font-bold">1. RECEITA OPERACIONAL BRUTA</td>
+                                            <td className="px-4 py-2.5 text-right font-mono font-bold">{formatMoney(dreCalculations.grossRev)}</td>
+                                            <td className="px-4 py-2.5 text-right font-mono">100.0%</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="px-4 py-2.5 pl-8 text-slate-500">(-) Impostos e Deduções Incidentes sobre Vendas</td>
+                                            <td className="px-4 py-2.5 text-right font-mono text-rose-600">-{formatMoney(dreCalculations.deductions)}</td>
+                                            <td className="px-4 py-2.5 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.deductions / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                        </tr>
+                                        <tr className="bg-slate-50 dark:bg-slate-900/30 font-bold">
+                                            <td className="px-4 py-2.5">2. RECEITA OPERACIONAL LÍQUIDA</td>
+                                            <td className="px-4 py-2.5 text-right font-mono">{formatMoney(dreCalculations.netRev)}</td>
+                                            <td className="px-4 py-2.5 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.netRev / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="px-4 py-2.5 pl-8 text-slate-500">(-) Custo dos Produtos e Serviços Vendidos (CPV/CSP)</td>
+                                            <td className="px-4 py-2.5 text-right font-mono text-rose-600">-{formatMoney(dreCalculations.cpv)}</td>
+                                            <td className="px-4 py-2.5 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.cpv / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                        </tr>
+                                        <tr className="bg-slate-50 dark:bg-slate-900/30 font-bold">
+                                            <td className="px-4 py-2.5">3. LUCRO BRUTO</td>
+                                            <td className="px-4 py-2.5 text-right font-mono">{formatMoney(dreCalculations.grossProfit)}</td>
+                                            <td className="px-4 py-2.5 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.grossProfit / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="px-4 py-2.5 pl-8 text-slate-500">(-) Despesas Administrativas e Gerais</td>
+                                            <td className="px-4 py-2.5 text-right font-mono text-rose-600">-{formatMoney(dreCalculations.operatingExp * 0.7)}</td>
+                                            <td className="px-4 py-2.5 text-right font-mono">{dreCalculations.grossRev > 0 ? (((dreCalculations.operatingExp * 0.7) / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="px-4 py-2.5 pl-8 text-slate-500">(-) Despesas Comerciais e de Vendas</td>
+                                            <td className="px-4 py-2.5 text-right font-mono text-rose-600">-{formatMoney(dreCalculations.operatingExp * 0.3)}</td>
+                                            <td className="px-4 py-2.5 text-right font-mono">{dreCalculations.grossRev > 0 ? (((dreCalculations.operatingExp * 0.3) / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                        </tr>
+                                        <tr className="bg-cyan-50 dark:bg-cyan-950/20 font-bold text-cyan-800 dark:text-cyan-300">
+                                            <td className="px-4 py-2.5">4. RESULTADO OPERACIONAL ANTES DOS EFEITOS FINANCEIROS (EBITDA)</td>
+                                            <td className="px-4 py-2.5 text-right font-mono">{formatMoney(dreCalculations.ebitda)}</td>
+                                            <td className="px-4 py-2.5 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.ebitda / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="px-4 py-2.5 pl-8 text-slate-500">(-) Depreciação e Amortizações</td>
+                                            <td className="px-4 py-2.5 text-right font-mono text-rose-600">-{formatMoney(dreCalculations.depreciation)}</td>
+                                            <td className="px-4 py-2.5 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.depreciation / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="px-4 py-2.5 pl-8 text-slate-500">(-) Resultado Financeiro Líquido</td>
+                                            <td className="px-4 py-2.5 text-right font-mono text-rose-600">-{formatMoney(dreCalculations.financialExpenses)}</td>
+                                            <td className="px-4 py-2.5 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.financialExpenses / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="px-4 py-2.5 pl-8 text-slate-500">(-) Provisão para IRPJ e CSLL</td>
+                                            <td className="px-4 py-2.5 text-right font-mono text-rose-600">-{formatMoney(dreCalculations.taxesIRPJ)}</td>
+                                            <td className="px-4 py-2.5 text-right font-mono">{dreCalculations.grossRev > 0 ? ((dreCalculations.taxesIRPJ / dreCalculations.grossRev) * 100).toFixed(1) : 0}%</td>
+                                        </tr>
+                                        <tr className="bg-slate-900 text-white font-black">
+                                            <td className="px-4 py-3">5. LUCRO LÍQUIDO DO EXERCÍCIO</td>
+                                            <td className={`px-4 py-3 text-right font-mono ${dreCalculations.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                {formatMoney(dreCalculations.netProfit)}
+                                            </td>
+                                            <td className={`px-4 py-3 text-right font-mono ${dreCalculations.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                {dreCalculations.netMargin.toFixed(1)}%
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : dreViewMode === 'mensal' ? (
+                            /* MODEL 3: DRE MENSAL COMPARATIVA (MATRICIAL) */
+                            <div className="space-y-4 overflow-x-auto custom-scrollbar">
+                                <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">
+                                    Evolução Matricial de D.R.E. por Mês
+                                </h3>
+
+                                <table className="w-full text-xs">
+                                    <thead className="bg-slate-50 dark:bg-slate-900 uppercase font-black text-slate-400 text-[10px]">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left">Mês / Ano</th>
+                                            <th className="px-4 py-3 text-right">Receita Bruta</th>
+                                            <th className="px-4 py-3 text-right">Receita Líquida</th>
+                                            <th className="px-4 py-3 text-right">Custos (CPV)</th>
+                                            <th className="px-4 py-3 text-right">Lucro Bruto</th>
+                                            <th className="px-4 py-3 text-right">Despesas Oper.</th>
+                                            <th className="px-4 py-3 text-right">EBITDA</th>
+                                            <th className="px-4 py-3 text-right">Lucro Líquido</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700 font-medium">
+                                        {dreMonthlyMatrix.map((m, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                                <td className="px-4 py-2.5 font-bold text-slate-900 dark:text-white">{m.label}</td>
+                                                <td className="px-4 py-2.5 text-right font-mono font-bold text-emerald-600">{formatMoney(m.gross)}</td>
+                                                <td className="px-4 py-2.5 text-right font-mono">{formatMoney(m.netRev)}</td>
+                                                <td className="px-4 py-2.5 text-right font-mono text-rose-500">-{formatMoney(m.cpv)}</td>
+                                                <td className="px-4 py-2.5 text-right font-mono font-bold">{formatMoney(m.grossProfit)}</td>
+                                                <td className="px-4 py-2.5 text-right font-mono text-rose-500">-{formatMoney(m.opex)}</td>
+                                                <td className="px-4 py-2.5 text-right font-mono font-bold text-cyan-600">{formatMoney(m.ebitda)}</td>
+                                                <td className={`px-4 py-2.5 text-right font-mono font-black ${m.net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                    {formatMoney(m.net)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            /* MODEL 4: DRE POR CENTRO DE CUSTO */
+                            <div className="space-y-4 overflow-x-auto custom-scrollbar">
+                                <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">
+                                    Resultado Econômico Discriminado por Centro de Custo / Linha de Negócio
+                                </h3>
+
+                                <table className="w-full text-xs">
+                                    <thead className="bg-slate-50 dark:bg-slate-900 uppercase font-black text-slate-400 text-[10px]">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left">Centro de Custo / Unidade</th>
+                                            <th className="px-4 py-3 text-right">Receita Direta</th>
+                                            <th className="px-4 py-3 text-right">Custos Diretos (CPV)</th>
+                                            <th className="px-4 py-3 text-right">Despesas Alocadas</th>
+                                            <th className="px-4 py-3 text-right">Resultado Operacional</th>
+                                            <th className="px-4 py-3 text-right">Margem %</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700 font-medium">
+                                        {dreByCostCenter.map((c, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                                <td className="px-4 py-3 font-bold text-slate-900 dark:text-white uppercase">{c.center}</td>
+                                                <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">{formatMoney(c.gross)}</td>
+                                                <td className="px-4 py-3 text-right font-mono text-rose-500">-{formatMoney(c.cpv)}</td>
+                                                <td className="px-4 py-3 text-right font-mono text-rose-500">-{formatMoney(c.opex)}</td>
+                                                <td className={`px-4 py-3 text-right font-mono font-black ${c.result >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                    {formatMoney(c.result)}
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-mono font-bold">{c.margin}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
                 </div>
             ) : activeTab === 'chart_of_accounts' ? (
-                /* TAB: PLANO DE CONTAS COM CABEÇALHO CORPORATIVO */
+                /* =========================================================================
+                    TAB 3: PLANO DE CONTAS COM CABEÇALHO CORPORATIVO
+                ========================================================================= */
                 <div className="flex flex-col gap-6 animate-in slide-in-from-right duration-300">
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-6">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -1911,7 +2988,9 @@ const Reports = () => {
                     </div>
                 </div>
             ) : (
-                /* TAB: CENTRAL DE RELATÓRIOS (GENERATOR) */
+                /* =========================================================================
+                    TAB 4: CENTRAL DE RELATÓRIOS COM BARRA DE PERSONALIZAÇÃO AVANÇADA
+                ========================================================================= */
                 <div className="flex flex-col gap-6 animate-in slide-in-from-right duration-300">
                     {/* Filter and Category Pills */}
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col md:flex-row gap-4 items-center justify-between">
@@ -1949,7 +3028,7 @@ const Reports = () => {
                         </div>
                     </div>
 
-                    {/* Report Configurator Preview & Parameters */}
+                    {/* Report Configurator Preview & Parameters with Customization Toolbar */}
                     {selectedModule && (
                         <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-6">
                             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-slate-700">
@@ -1985,17 +3064,26 @@ const Reports = () => {
                                             className="p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold"
                                         />
                                     </div>
+
+                                    {/* Customizer Drawer Trigger */}
+                                    <button
+                                        onClick={() => setShowCustomizer(prev => !prev)}
+                                        className={`mt-4 px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm ${showCustomizer ? 'bg-cyan-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200'}`}
+                                    >
+                                        <SlidersHorizontal size={15} /> Personalizar
+                                    </button>
+
                                     <button
                                         onClick={handleExportCorporateCSV}
                                         className="mt-4 px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors flex items-center gap-1.5 shadow-sm"
                                     >
-                                        <Download size={15} /> Exportar Excel / CSV
+                                        <Download size={15} /> Exportar Excel
                                     </button>
                                     <button
                                         onClick={handlePrintReport}
                                         className="mt-4 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black text-xs rounded-xl shadow-lg shadow-cyan-600/20 transition-all flex items-center gap-2"
                                     >
-                                        <Printer size={16} /> Imprimir Relatório Oficial
+                                        <Printer size={16} /> Imprimir Relatório
                                     </button>
                                     <button
                                         onClick={() => setSelectedModule(null)}
@@ -2007,34 +3095,185 @@ const Reports = () => {
                                 </div>
                             </div>
 
+                            {/* ADVANCED CUSTOMIZATION TOOLBAR PANEL */}
+                            {showCustomizer && (
+                                <div className="p-5 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-cyan-500/30 space-y-4 animate-in fade-in duration-200">
+                                    <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3">
+                                        <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-white flex items-center gap-2">
+                                            <SlidersHorizontal size={14} className="text-cyan-600" />
+                                            Personalização do Relatório (Preferências Salvas Automaticamente)
+                                        </h4>
+                                        <button onClick={() => setShowCustomizer(false)} className="text-slate-400 hover:text-slate-600">
+                                            <X size={14} />
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        {/* Column Selector */}
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-2">
+                                                Colunas Visíveis ({visibleColumns.length} de {modules.find(m => m.id === selectedModule)?.fields.length})
+                                            </label>
+                                            <div className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar p-1">
+                                                {modules.find(m => m.id === selectedModule)?.fields.map(col => {
+                                                    const isChecked = visibleColumns.includes(col);
+                                                    return (
+                                                        <label
+                                                            key={col}
+                                                            onClick={() => toggleColumn(col)}
+                                                            className={`flex items-center gap-2 p-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${isChecked ? 'bg-white dark:bg-slate-800 text-cyan-600 shadow-xs' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                                                        >
+                                                            {isChecked ? <CheckSquare size={14} className="text-cyan-600" /> : <Square size={14} className="text-slate-400" />}
+                                                            <span>{col}</span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        {/* Contextual Status Filter */}
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-2">
+                                                Filtro Específico por Status
+                                            </label>
+                                            <select
+                                                value={statusFilter}
+                                                onChange={e => {
+                                                    setStatusFilter(e.target.value);
+                                                    persistPreferences({ statusFilter: e.target.value });
+                                                }}
+                                                className="w-full p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold"
+                                            >
+                                                <option value="Todos">Todos os Status</option>
+                                                {availableStatuses.map(st => (
+                                                    <option key={st} value={st}>{st}</option>
+                                                ))}
+                                            </select>
+
+                                            <div className="mt-4">
+                                                <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-2">
+                                                    Ordenação Inicial
+                                                </label>
+                                                <div className="flex gap-2">
+                                                    <select
+                                                        value={sortField || ''}
+                                                        onChange={e => {
+                                                            const col = e.target.value || null;
+                                                            setSortField(col);
+                                                            persistPreferences({ sortField: col || undefined });
+                                                        }}
+                                                        className="flex-1 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold"
+                                                    >
+                                                        <option value="">Padrão</option>
+                                                        {modules.find(m => m.id === selectedModule)?.fields.map(col => (
+                                                            <option key={col} value={col}>{col}</option>
+                                                        ))}
+                                                    </select>
+                                                    <button
+                                                        onClick={() => {
+                                                            const next = sortOrder === 'asc' ? 'desc' : 'asc';
+                                                            setSortOrder(next);
+                                                            persistPreferences({ sortOrder: next });
+                                                        }}
+                                                        className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50"
+                                                        title="Alternar Ascendente / Descendente"
+                                                    >
+                                                        <ArrowUpDown size={14} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Print Layout Options */}
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-2">
+                                                Configuração de Impressão (PDF / A4)
+                                            </label>
+                                            <div className="space-y-3">
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            setPrintOrientation('portrait');
+                                                            persistPreferences({ orientation: 'portrait' });
+                                                        }}
+                                                        className={`flex-1 p-2 rounded-xl text-xs font-bold border ${printOrientation === 'portrait' ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}
+                                                    >
+                                                        Retrato (Vertical)
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setPrintOrientation('landscape');
+                                                            persistPreferences({ orientation: 'landscape' });
+                                                        }}
+                                                        className={`flex-1 p-2 rounded-xl text-xs font-bold border ${printOrientation === 'landscape' ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}
+                                                    >
+                                                        Paisagem (Largo)
+                                                    </button>
+                                                </div>
+
+                                                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer pt-1">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={printShowSignatures}
+                                                        onChange={e => {
+                                                            setPrintShowSignatures(e.target.checked);
+                                                            persistPreferences({ showSignatures: e.target.checked });
+                                                        }}
+                                                        className="rounded text-cyan-600"
+                                                    />
+                                                    <span>Exibir Bloco de Assinaturas Formais</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Table Preview */}
                             <div className="overflow-hidden border border-slate-100 dark:border-slate-700 rounded-2xl">
                                 <div className="p-4 bg-slate-50 dark:bg-slate-900/50 flex justify-between items-center border-b border-slate-100 dark:border-slate-700">
                                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                                         Pré-visualização dos Dados ({reportData.length} registros)
                                     </h4>
-                                    <span className="text-[10px] font-bold text-slate-400">
-                                        Período: {formatDateBR(startDate)} a {formatDateBR(endDate)}
-                                    </span>
+                                    <div className="flex items-center gap-3 text-[10px] font-bold text-slate-400">
+                                        {sortField && (
+                                            <span className="text-cyan-600 flex items-center gap-1">
+                                                Ordenado por: {sortField} ({sortOrder.toUpperCase()})
+                                            </span>
+                                        )}
+                                        <span>Período: {formatDateBR(startDate)} a {formatDateBR(endDate)}</span>
+                                    </div>
                                 </div>
                                 <div className="overflow-auto max-h-[450px] custom-scrollbar">
                                     <table className="w-full text-xs text-left">
                                         <thead className="bg-slate-50 dark:bg-slate-900 text-[10px] uppercase font-black text-slate-400 sticky top-0 z-10">
                                             <tr>
                                                 {reportData.length > 0 ? Object.keys(reportData[0]).map(key => (
-                                                    <th key={key} className="px-4 py-3 whitespace-nowrap bg-slate-50 dark:bg-slate-900">{key}</th>
+                                                    <th
+                                                        key={key}
+                                                        onClick={() => handleSort(key)}
+                                                        className="px-4 py-3 whitespace-nowrap bg-slate-50 dark:bg-slate-900 cursor-pointer hover:text-cyan-600 select-none transition-colors"
+                                                    >
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span>{key}</span>
+                                                            {sortField === key ? (
+                                                                sortOrder === 'asc' ? <ChevronUp size={12} className="text-cyan-600" /> : <ChevronDown size={12} className="text-cyan-600" />
+                                                            ) : (
+                                                                <ArrowUpDown size={10} className="text-slate-300 opacity-60" />
+                                                            )}
+                                                        </div>
+                                                    </th>
                                                 )) : <th className="px-4 py-3 text-center">Dados</th>}
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
                                             {reportData.length > 0 ? reportData.map((row, idx) => (
                                                 <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors">
-                                                    {Object.keys(row).map((key, i) => {
-                                                        let val = row[key];
-                                                        const isMoney = typeof val === 'number' && (key.includes('Valor') || key.includes('Total') || key.includes('Preço') || key.includes('Salário') || key.includes('Faturamento') || key.includes('Entrada') || key.includes('Saída') || key.includes('Saldo') || key.includes('Receita') || key.includes('Despesa'));
-                                                        if (isMoney) val = formatMoney(val);
-                                                        return <td key={i} className="px-4 py-2.5 whitespace-nowrap font-medium text-slate-700 dark:text-slate-300">{val !== undefined ? val : '-'}</td>;
-                                                    })}
+                                                    {Object.keys(row).map((key, i) => (
+                                                        <td key={i} className="px-4 py-2.5 whitespace-nowrap font-medium text-slate-700 dark:text-slate-300">
+                                                            {renderCellContent(key, row[key])}
+                                                        </td>
+                                                    ))}
                                                 </tr>
                                             )) : (
                                                 <tr>

@@ -107,7 +107,31 @@ import {
     maskApiKey,
     callGeminiAgentApi,
     GeminiHealthStatus,
-    GeminiAgentCallResult
+        GeminiAgentCallResult,
+    WhatsAppPendingConfirmation,
+    WhatsAppProactiveTrigger,
+    ERP_PROACTIVE_TRIGGERS,
+    INITIAL_PENDING_CONFIRMATIONS,
+    SAMPLE_MULTIMODAL_IMAGES,
+    SampleMultiModalImage,
+    callGeminiVisionApi,
+    SMART_ROUTING_RULES,
+    SmartRouteRule,
+    SmartRouterResult,
+    evaluateSmartRoute,
+    buildInteractiveRoutingMenu,
+    buildPublicClientMenu,
+    isRegisteredCollaboratorPhone,
+    WhatsAppConversationSession,
+    WhatsAppMessageItem,
+    INITIAL_CONVERSATION_SESSIONS,
+    exportSessionAsText,
+    evaluateZeroTokenCommand,
+    ZeroTokenCommandResult,
+    SampleVoiceNote,
+    SAMPLE_VOICE_NOTES,
+    WebhookPayloadSample,
+    SAMPLE_WEBHOOK_PAYLOADS
 } from '../ai_agents_constants';
 
 type IconType = React.ComponentType<{ size?: number; className?: string }>;
@@ -499,7 +523,8 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         };
     });
     const [isThinkingAgent, setIsThinkingAgent] = useState<Record<string, boolean>>({});
-    const [lastAgentCallMeta, setLastAgentCallMeta] = useState<Record<string, { model: string; isFallback: boolean; latencyMs: number }>>({});
+    const [lastAgentCallMeta, setLastAgentCallMeta] = useState<Record<string, { model: string; isFallback: boolean; latencyMs: number; tokensSaved?: number }>>({});
+    const [totalTokensSaved, setTotalTokensSaved] = useState<number>(1280);
     const [previewPreset, setPreviewPreset] = useState<AIAgentPromptPreset | null>(null);
 
     React.useEffect(() => {
@@ -571,8 +596,48 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
     const [interactivePayloadModal, setInteractivePayloadModal] = useState<{ title: string; json: string } | null>(null);
     const [testDispatchMode, setTestDispatchMode] = useState<'text' | 'interactive'>('text');
 
+    // Fila de Confirmações & Eventos Proativos do WhatsApp
+    const [pendingConfirmations, setPendingConfirmations] = useState<WhatsAppPendingConfirmation[]>(() => INITIAL_PENDING_CONFIRMATIONS);
+    const [confirmationFilter, setConfirmationFilter] = useState<'todos' | 'pendente' | 'aprovado' | 'rejeitado' | 'expirado'>('todos');
+    const [isTriggeringProactive, setIsTriggeringProactive] = useState<string | null>(null);
+
+    // Gestão de Imagens e Visão Multi-Modal no Simulador
+    const [selectedVisionSample, setSelectedVisionSample] = useState<SampleMultiModalImage | null>(null);
+    const [isProcessingVision, setIsProcessingVision] = useState(false);
+
+    // Motor de Roteamento Inteligente & Intenções (Smart Dispatcher)
+    const [simSenderProfile, setSimSenderProfile] = useState<'collaborator' | 'public'>('public');
+    const [simSenderPhone, setSimSenderPhone] = useState<string>('5511999998888');
+    const [smartRouterInput, setSmartRouterInput] = useState('Olá! Gostaria de um orçamento de Brita e CBUQ para entrega CIF.');
+    const [smartRouterRole, setSmartRouterRole] = useState('Comercial');
+    const [smartRouterResult, setSmartRouterResult] = useState<SmartRouterResult | null>(() =>
+        evaluateSmartRoute('Olá! Gostaria de um orçamento de Brita e CBUQ para entrega CIF.', 'Comercial', false)
+    );
+    const [isDispatchingRoute, setIsDispatchingRoute] = useState(false);
+    const [dispatchedResultText, setDispatchedResultText] = useState<string | null>(null);
+    const [showRulesAccordion, setShowRulesAccordion] = useState(false);
+
+    // Gestão de Sessões Multi-Turno & Memória Conversacional
+    const [conversationSessions, setConversationSessions] = useState<WhatsAppConversationSession[]>(() => INITIAL_CONVERSATION_SESSIONS);
+    const [inspectingSession, setInspectingSession] = useState<WhatsAppConversationSession | null>(null);
+
+    // Simulador de Recebimento de Webhook Inbound (Evolution / Z-API / Meta Cloud)
+    const [selectedWebhookSample, setSelectedWebhookSample] = useState<WebhookPayloadSample>(() => SAMPLE_WEBHOOK_PAYLOADS[0]);
+    const [webhookSimulatorResult, setWebhookSimulatorResult] = useState<{
+        status: number;
+        latencyMs: number;
+        provider: string;
+        targetAgentName: string;
+        responseMessage: string;
+        processedAt: string;
+    } | null>(null);
+    const [isSimulatingWebhook, setIsSimulatingWebhook] = useState(false);
+
+    // Simulador de Mensagens de Voz / Áudio (PTT)
+    const [isPlayingAudioId, setIsPlayingAudioId] = useState<string | null>(null);
+
     // Sub-Navegação Interna do Hub (Gateway | 10 Agentes | Código ADM)
-    type HubSubTab = 'agents' | 'gateway' | 'code_agent';
+    type HubSubTab = 'agents' | 'confirmations' | 'gateway' | 'code_agent';
     const [hubSubTab, setHubSubTab] = useState<HubSubTab>('agents');
 
     // Filtros e Ordenação da Fila de Propostas de Código
@@ -726,7 +791,115 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         }
     };
 
-    const handleTestGeminiApi = async () => {
+    const handleApproveConfirmation = (id: string, channel: 'painel_web' | 'whatsapp_button' = 'painel_web') => {
+        setPendingConfirmations(prev =>
+            prev.map(c => {
+                if (c.id === id) {
+                    return {
+                        ...c,
+                        status: 'aprovado',
+                        respondedAt: new Date().toISOString(),
+                        responseChannel: channel
+                    };
+                }
+                return c;
+            })
+        );
+        addToast(channel === 'whatsapp_button' ? 'Confirmação SIM recebida pelo WhatsApp e efetivada no ERP!' : 'Confirmação aprovada com sucesso!', 'success');
+    };
+
+    const handleRejectConfirmation = (id: string, channel: 'painel_web' | 'whatsapp_button' = 'painel_web') => {
+        setPendingConfirmations(prev =>
+            prev.map(c => {
+                if (c.id === id) {
+                    return {
+                        ...c,
+                        status: 'rejeitado',
+                        respondedAt: new Date().toISOString(),
+                        responseChannel: channel
+                    };
+                }
+                return c;
+            })
+        );
+        addToast(channel === 'whatsapp_button' ? 'Resposta NÃO recebida pelo WhatsApp: operação cancelada com segurança.' : 'Confirmação rejeitada.', 'info');
+    };
+
+    const handleTriggerProactiveEvent = (trigger: WhatsAppProactiveTrigger) => {
+        setIsTriggeringProactive(trigger.id);
+        setTimeout(() => {
+            const timeoutMinutes = config.gateway.confirmationTimeoutMinutes ?? 15;
+            const newConf: WhatsAppPendingConfirmation = {
+                id: `conf_${Date.now().toString(36)}`,
+                agentId: trigger.agentId,
+                agentName: AI_AGENT_CATALOG.find(a => a.id === trigger.agentId)?.name || 'Agente Especialista',
+                agentColor: AI_AGENT_CATALOG.find(a => a.id === trigger.agentId)?.color || 'indigo',
+                actionType: trigger.actionType,
+                title: trigger.title,
+                description: trigger.sampleMessage,
+                targetUserName: currentUser?.name || 'Gestor Responsável',
+                targetUserPhone: config.gateway.senderPhone || '5511988887777',
+                createdAt: new Date().toISOString(),
+                expiresAt: new Date(Date.now() + timeoutMinutes * 60 * 1000).toISOString(),
+                status: 'pendente',
+                metadata: {
+                    sourceTrigger: trigger.id,
+                    condition: trigger.triggerCondition,
+                    severity: trigger.severity
+                }
+            };
+
+            setPendingConfirmations(prev => [newConf, ...prev]);
+            setIsTriggeringProactive(null);
+            addToast(`Gatilho "${trigger.title}" disparado! Alerta proativo gerado na fila com timeout de ${timeoutMinutes}min.`, 'success');
+        }, 600);
+    };
+
+    const handleSendVisionSample = async (sample: SampleMultiModalImage, def: AIAgentDefinition) => {
+        setIsProcessingVision(true);
+        const base = chatMessages[def.id] || def.example;
+
+        // Adiciona a foto simulada enviada pelo usuário
+        setChatMessages(prev => ({
+            ...prev,
+            [def.id]: [...base, { from: 'user', text: `${sample.previewPlaceholder}\n\n"${sample.simulatedUserPrompt}"` }]
+        }));
+
+        try {
+            const result = await callGeminiVisionApi(
+                `simulated:${sample.id}`,
+                'image/jpeg',
+                sample.simulatedUserPrompt,
+                def,
+                sample.simulatedExtraction,
+                localGeminiKey
+            );
+
+            setLastAgentCallMeta(prev => ({
+                ...prev,
+                [def.id]: {
+                    model: result.modelUsed,
+                    isFallback: result.isFallback,
+                    latencyMs: result.latencyMs
+                }
+            }));
+
+            setChatMessages(prev => {
+                const cur = prev[def.id] || [...base];
+                return {
+                    ...prev,
+                    [def.id]: [...cur, { from: 'agent', text: result.text }]
+                };
+            });
+            addToast(`Documento "${sample.title}" interpretado com sucesso via Visão Multi-Modal!`, 'success');
+        } catch {
+            addToast('Erro ao processar imagem no simulador.', 'error');
+        } finally {
+            setIsProcessingVision(false);
+        }
+    };
+
+        const handleTestGeminiApi = async () => {
         const key = getGeminiApiKey(localGeminiKey);
         if (!key) {
             addToast('Nenhuma chave de API do Gemini informada. Configure a chave para testar.', 'warning');
@@ -822,7 +995,52 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         setIsThinkingAgent(prev => ({ ...prev, [def.id]: true }));
 
         const companyName = settings.tradeName || settings.companyName || 'InfraCore Soluções';
-        const userName = currentUser?.name || 'Administrador';
+        const isCollab = simSenderProfile === 'collaborator';
+        const userName = isCollab ? (currentUser?.name || 'Colaborador') : 'Cliente / Público Geral';
+
+        // 1. Interceptação Determinística Zero-Token (Diretriz GEMINI.md)
+        const zeroTokenRes = evaluateZeroTokenCommand(
+            text,
+            def,
+            pendingConfirmations,
+            {
+                companyName,
+                userName,
+                balance: 184500,
+                receivables: 42100,
+                payables: 31200,
+                fleetOperational: 14,
+                fleetTotal: 16,
+                inventoryCount: 142,
+                inventoryLow: 3,
+                activeOPs: 2,
+                isCollaborator: isCollab,
+                senderPhone: simSenderPhone
+            }
+        );
+
+        if (zeroTokenRes.handled && zeroTokenRes.text) {
+            setLastAgentCallMeta(prev => ({
+                ...prev,
+                [def.id]: {
+                    model: 'Zero-Token Determinístico (Local)',
+                    isFallback: false,
+                    latencyMs: 14
+                }
+            }));
+
+            setChatMessages(prev => {
+                const currentList = prev[def.id] || [...base, { from: 'user', text }];
+                return {
+                    ...prev,
+                    [def.id]: [...currentList, { from: 'agent', text: zeroTokenRes.text }]
+                };
+            });
+
+            setIsThinkingAgent(prev => ({ ...prev, [def.id]: false }));
+            addToast('Execução Zero-Token Determinística! Economia de ~' + zeroTokenRes.tokensSaved + ' tokens.', 'success');
+            return;
+        }
 
         try {
             const result = await callGeminiAgentApi(
@@ -877,6 +1095,212 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         } finally {
             setIsThinkingAgent(prev => ({ ...prev, [def.id]: false }));
         }
+    };
+
+    const handleEvaluateRouter = (customText?: string, customRole?: string, customProfile?: 'collaborator' | 'public') => {
+        const text = customText !== undefined ? customText : smartRouterInput;
+        const role = customRole !== undefined ? customRole : smartRouterRole;
+        const profile = customProfile !== undefined ? customProfile : simSenderProfile;
+        if (customText !== undefined) setSmartRouterInput(customText);
+        if (customRole !== undefined) setSmartRouterRole(customRole);
+        if (customProfile !== undefined) setSimSenderProfile(customProfile);
+
+        const isCollab = profile === 'collaborator';
+        const companyName = settings.tradeName || settings.companyName || 'InfraCore Soluções';
+        const res = evaluateSmartRoute(text, role, isCollab, companyName);
+        setSmartRouterResult(res);
+        setDispatchedResultText(null);
+    };
+
+    const handleDispatchRoutedAgent = async () => {
+        if (!smartRouterInput.trim()) {
+            addToast('Digite uma mensagem para despachar.', 'warning');
+            return;
+        }
+
+        const isCollab = simSenderProfile === 'collaborator';
+        const companyName = settings.tradeName || settings.companyName || 'InfraCore Soluções';
+        const userName = isCollab ? (currentUser?.name || 'Colaborador Solicitante') : 'Cliente / Público Geral';
+
+        // 1. Tenta resposta determinística Zero-Token antes de chamar Gemini
+        const zeroTokenRes = evaluateZeroTokenCommand(
+            smartRouterInput,
+            AI_AGENT_CATALOG[0],
+            pendingConfirmations,
+            {
+                companyName,
+                userName,
+                balance: 184500,
+                receivables: 42100,
+                payables: 31200,
+                fleetOperational: 14,
+                fleetTotal: 16,
+                inventoryCount: 142,
+                inventoryLow: 3,
+                activeOPs: 2,
+                isCollaborator: isCollab,
+                senderPhone: simSenderPhone
+            }
+        );
+
+        if (zeroTokenRes.handled && zeroTokenRes.text) {
+            setDispatchedResultText(zeroTokenRes.text);
+            addToast('Resposta determinística Zero-Token gerada! Economia de ~' + zeroTokenRes.tokensSaved + ' tokens.', 'success');
+            return;
+        }
+
+        const res = smartRouterResult || evaluateSmartRoute(smartRouterInput, smartRouterRole, isCollab, companyName);
+        setSmartRouterResult(res);
+
+        if (!res.matchedAgentId) {
+            setDispatchedResultText(res.interactiveMenuText || (isCollab ? buildInteractiveRoutingMenu() : buildPublicClientMenu(companyName)));
+            addToast('Nenhum especialista determinístico identificado. Menu interativo enviado ao WhatsApp.', 'info');
+            return;
+        }
+
+        const targetAgent = AI_AGENT_CATALOG.find(a => a.id === res.matchedAgentId);
+        if (!targetAgent) return;
+
+        setIsDispatchingRoute(true);
+
+        try {
+            const apiRes = await callGeminiAgentApi(
+                smartRouterInput,
+                targetAgent,
+                config,
+                companyName,
+                userName,
+                (t) => generateAgentLiveReply(targetAgent.id, t),
+                localGeminiKey
+            );
+
+            setDispatchedResultText(apiRes.text);
+            addToast(`Mensagem roteada com sucesso para ${targetAgent.name}! Resposta gerada via ${apiRes.modelUsed}.`, 'success');
+        } catch {
+            const fb = generateAgentLiveReply(targetAgent.id, smartRouterInput);
+            setDispatchedResultText(fb);
+            addToast(`Mensagem despachada em contingência heurística para ${targetAgent.name}.`, 'info');
+        } finally {
+            setIsDispatchingRoute(false);
+        }
+    };
+
+    const handleExportConversation = (def: AIAgentDefinition) => {
+        const msgs = chatMessages[def.id] || def.example;
+        let text = `=== HISTÓRICO DE AUDITORIA DE CONVERSA - ${def.name.toUpperCase()} ===\n`;
+        text += `Departamento: ${def.department}\n`;
+        text += `Data da Exportação: ${new Date().toLocaleString('pt-BR')}\n`;
+        text += `Total de Mensagens: ${msgs.length}\n\n`;
+        text += msgs.map(m => `[${m.from === 'user' ? 'COLABORADOR' : def.name}]: ${m.text}`).join('\n\n');
+
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `auditoria_${def.id}_${Date.now()}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+        addToast('Histórico da conversa exportado com sucesso (.TXT)!', 'success');
+    };
+
+    const handleResetSession = (agentId: string) => {
+        setChatMessages(prev => {
+            const next = { ...prev };
+            delete next[agentId];
+            return next;
+        });
+        addToast('Memória de sessão reiniciada. O agente voltará ao estado inicial.', 'info');
+    };
+
+    const handleSimulateInboundWebhook = async () => {
+        setIsSimulatingWebhook(true);
+        const start = Date.now();
+        const sample = selectedWebhookSample;
+        const isCollab = sample.senderCategory === 'collaborator';
+        const companyName = settings.tradeName || settings.companyName || 'InfraCore Soluções';
+
+        setTimeout(async () => {
+            const routeRes = evaluateSmartRoute(sample.messageText, undefined, isCollab, companyName);
+            const targetAgent = AI_AGENT_CATALOG.find(a => a.id === routeRes.matchedAgentId) || AI_AGENT_CATALOG[0];
+
+            let replyText = '';
+            let usedZeroToken = false;
+
+            const zeroRes = evaluateZeroTokenCommand(
+                sample.messageText,
+                targetAgent,
+                pendingConfirmations,
+                {
+                    companyName,
+                    userName: isCollab ? 'Colaborador Webhook' : 'Cliente Webhook',
+                    balance: 184500,
+                    receivables: 42100,
+                    payables: 31200,
+                    fleetOperational: 14,
+                    fleetTotal: 16,
+                    inventoryCount: 142,
+                    inventoryLow: 3,
+                    activeOPs: 2,
+                    isCollaborator: isCollab,
+                    senderPhone: sample.senderPhone
+                }
+            );
+
+            if (zeroRes.handled && zeroRes.text) {
+                replyText = zeroRes.text;
+                usedZeroToken = true;
+            } else if (targetAgent) {
+                try {
+                    const callRes = await callGeminiAgentApi(
+                        sample.messageText,
+                        targetAgent,
+                        config,
+                        settings.tradeName || 'InfraCore',
+                        'Colaborador Webhook',
+                        (t) => generateAgentLiveReply(targetAgent.id, t),
+                        localGeminiKey
+                    );
+                    replyText = callRes.text;
+                } catch {
+                    replyText = generateAgentLiveReply(targetAgent.id, sample.messageText);
+                }
+            } else {
+                replyText = 'Mensagem recebida com sucesso via webhook.';
+            }
+
+            const latency = Date.now() - start + 85;
+            setWebhookSimulatorResult({
+                status: 200,
+                latencyMs: latency,
+                provider: sample.provider.toUpperCase(),
+                targetAgentName: targetAgent.name,
+                responseMessage: replyText,
+                processedAt: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            });
+
+            setIsSimulatingWebhook(false);
+            addToast(`Webhook ${sample.provider.toUpperCase()} recebido e processado com HTTP 200 OK (${latency}ms)!`, 'success');
+        }, 500);
+    };
+
+    const handleSendSimulatedVoiceNote = async (voiceNote: SampleVoiceNote, def: AIAgentDefinition) => {
+        setIsPlayingAudioId(voiceNote.id);
+        const base = chatMessages[def.id] || def.example;
+
+        // Adiciona balão de áudio enviado pelo usuário
+        setChatMessages(prev => ({
+            ...prev,
+            [def.id]: [
+                ...base,
+                { from: 'user', text: `🎤 [ÁUDIO PTT: ${voiceNote.duration}]\n"${voiceNote.transcript}"` }
+            ]
+        }));
+
+        setTimeout(async () => {
+            setIsPlayingAudioId(null);
+            await handleSendSimulatedMessageWithText(def, voiceNote.transcript);
+            addToast(`Mensagem de voz "${voiceNote.title}" transcrita e enviada ao agente!`, 'success');
+        }, 600);
     };
 
     const handleTestWebhook = async () => {
@@ -1782,7 +2206,424 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                         </div>
                     </div>
 
-                    {/* Painel do Motor de Inteligência Artificial Google Gemini */}
+                    {/* Card do Motor de Roteamento Inteligente & Intenções (Smart Dispatcher) */}
+                    <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 space-y-5 shadow-sm">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-700">
+                            <div className="flex items-center gap-3">
+                                <span className="p-2.5 rounded-2xl bg-slate-900 dark:bg-slate-700 text-white shadow-sm">
+                                    <Layers size={20} />
+                                </span>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h4 className="font-black text-sm text-slate-900 dark:text-white uppercase tracking-tight">
+                                            Motor de Roteamento Inteligente &amp; Intenções (Smart Dispatcher)
+                                        </h4>
+                                        <span className="text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                            100% Determinístico
+                                        </span>
+                                        <span className="text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+                                            Zero Custo de API
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 font-medium">
+                                        Triagem instantânea para canal central único do WhatsApp. Classifica por Regex, desempata por cargo/alçada e gera menu numerado interativo em ambiguidades.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => setShowRulesAccordion(!showRulesAccordion)}
+                                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all"
+                            >
+                                <ListFilter size={12} />
+                                {showRulesAccordion ? 'Ocultar Dicionário de Regex' : 'Ver Dicionário de Regex (10 Setores)'}
+                            </button>
+                        </div>
+
+                        {/* Acordeão de Dicionário de Regras Determinísticas */}
+                        {showRulesAccordion && (
+                            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                                <div className="flex items-center justify-between text-xs font-black text-slate-700 dark:text-slate-300">
+                                    <span>Matriz de Expressões Regulares e Palavras-Chave por Departamento</span>
+                                    <span className="text-slate-400 font-normal">{SMART_ROUTING_RULES.length} departamentos mapeados</span>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-64 overflow-y-auto pr-1">
+                                    {SMART_ROUTING_RULES.map(rule => (
+                                        <div key={rule.agentId} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <strong className="text-slate-900 dark:text-white uppercase font-black">{rule.department}</strong>
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono text-slate-500">
+                                                    Alçada: {rule.associatedRoles.join(', ')}
+                                                </span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-500 font-mono truncate" title={rule.regexPatterns.join(' | ')}>
+                                                Regex: {rule.regexPatterns.join(' | ')}
+                                            </p>
+                                            <div className="flex flex-wrap gap-1 pt-0.5">
+                                                {rule.keywords.slice(0, 5).map(k => (
+                                                    <span key={k} className="px-1.5 py-0.2 bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 rounded text-[9px]">
+                                                        {k}
+                                                    </span>
+                                                ))}
+                                                {rule.keywords.length > 5 && (
+                                                    <span className="text-[9px] text-slate-400">+{rule.keywords.length - 5} termos</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Simulador Interativo do Smart Dispatcher */}
+                        <div className="space-y-3">
+                            {/* Segregação de Tráfego: Público Geral vs Colaborador Cadastrado */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-900/60">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-900 dark:text-indigo-200">
+                                        Perfil do Remetente (Número no WhatsApp):
+                                    </span>
+                                    <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-indigo-200/60 dark:border-indigo-800">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSimSenderProfile('public');
+                                                setSimSenderPhone('5511999998888');
+                                                handleEvaluateRouter('Olá! Gostaria de um orçamento de Brita e CBUQ para entrega CIF.', 'Comercial', 'public');
+                                            }}
+                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${
+                                                simSenderProfile === 'public'
+                                                    ? 'bg-indigo-600 text-white shadow-sm'
+                                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                                            }`}
+                                        >
+                                            👤 Público Geral / Cliente Externo (Não Cadastrado)
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSimSenderProfile('collaborator');
+                                                setSimSenderPhone('5511988887777');
+                                                handleEvaluateRouter(smartRouterInput, smartRouterRole, 'collaborator');
+                                            }}
+                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${
+                                                simSenderProfile === 'collaborator'
+                                                    ? 'bg-indigo-600 text-white shadow-sm'
+                                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                                            }`}
+                                        >
+                                            👷 Colaborador Cadastrado
+                                        </button>
+                                    </div>
+                                </div>
+                                <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                    Simulando: +{simSenderPhone} ({simSenderProfile === 'public' ? 'Menu Público 4 Opções' : '10 Especialistas'})
+                                </span>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                                    <MessageCircle size={13} className="text-emerald-500" /> Mensagem Recebida no Número Central do WhatsApp
+                                </label>
+                                <span className="text-[10px] text-slate-400">Digite uma frase ou escolha um caso real de campo abaixo</span>
+                            </div>
+
+                            <div className="relative">
+                                <input
+                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:border-indigo-500 text-xs font-medium text-slate-900 dark:text-white outline-none transition-all pr-24 shadow-inner"
+                                    value={smartRouterInput}
+                                    onChange={e => {
+                                        setSmartRouterInput(e.target.value);
+                                        handleEvaluateRouter(e.target.value, smartRouterRole);
+                                    }}
+                                    placeholder="Ex: Qual o saldo das contas a pagar de hoje e boletos vencendo?"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => handleEvaluateRouter(smartRouterInput, smartRouterRole)}
+                                    className="absolute right-2 top-2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-wider transition-all"
+                                >
+                                    Triar
+                                </button>
+                            </div>
+
+                            {/* Exemplos Rápidos de Mensagens Reais de Campo */}
+                            <div className="space-y-1.5">
+                                <div className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                                    Cenários de Teste Rápidos ({simSenderProfile === 'public' ? 'Público Geral / Clientes' : 'Colaboradores Cadastrados'}):
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {simSenderProfile === 'public' ? (
+                                        [
+                                            { label: '📋 1 - Orçamento Britas/CBUQ', text: '1 - Gostaria de cotar 60t de brita 1 e 40t de CBUQ para entrega CIF', role: 'Comercial' },
+                                            { label: '📦 2 - Já Sou Cliente (Rastreio)', text: '2 - Já sou cliente. Onde está o caminhão do pedido PED-1082 e a 2ª via do boleto?', role: 'Comercial' },
+                                            { label: '🏭 3 - Conhecer Usinas & Produtos', text: '3 - Conhecer a estrutura das usinas e laudos técnicos', role: 'Comercial' },
+                                            { label: '👤 4 - Falar com Consultor', text: '4 - Gostaria de negociar condições especiais com um consultor', role: 'Comercial' },
+                                            { label: '👋 Saudação Inicial ("Olá")', text: 'Olá, bom dia! Gostaria de informações da empresa', role: 'Comercial' },
+                                            { label: '👤 Transbordo Humano', text: 'Vendedor', role: 'Comercial' }
+                                        ].map(sample => (
+                                            <button
+                                                key={sample.label}
+                                                type="button"
+                                                onClick={() => handleEvaluateRouter(sample.text, sample.role, 'public')}
+                                                className="px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-800 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800 text-[10px] font-bold transition-all"
+                                            >
+                                                {sample.label}
+                                            </button>
+                                        ))
+                                    ) : (
+                                        [
+                                            { label: '💰 Finanças', text: 'Qual o saldo das contas a pagar de hoje e boletos vencendo?', role: 'Financeiro' },
+                                            { label: '🚚 Frotas / Diesel', text: 'Caminhão CC-04 abasteceu 180 litros de diesel S10 em trânsito', role: 'Operações' },
+                                            { label: '🏭 Usina Asfalto', text: 'Qual a temperatura da massa de CBUQ e estoque de CAP 50/70?', role: 'Operações' },
+                                            { label: '🏗️ Usina Concreto', text: 'Preciso de 30 m³ de concreto fck 30 com slump 12 para amanhã', role: 'Engenharia' },
+                                            { label: '📦 Almoxarifado', text: 'Saldo em estoque de óleo lubrificante 15W40 e entrada de Danfe', role: 'Almoxarifado' },
+                                            { label: '🛒 Compras', text: 'Status da cotação de peças e pedido de compra com fornecedor', role: 'Compras' },
+                                            { label: '🔬 Laboratório', text: 'Resultado do ensaio de ruptura dos corpos de prova de 28 dias', role: 'Qualidade' },
+                                            { label: '👷 SST / EPI', text: 'Comprovante de entrega de EPI e formulário de APR da equipe', role: 'Segurança' },
+                                            { label: '👥 RH / Folha', text: 'Espelho de ponto, saldo de horas extras e holerite deste mês', role: 'RH' },
+                                            { label: '✅ Aprovar Alçada', text: 'SIM', role: 'Financeiro' },
+                                            { label: '📋 Menu 1 a 10', text: 'MENU', role: 'Geral' }
+                                        ].map(sample => (
+                                            <button
+                                                key={sample.label}
+                                                type="button"
+                                                onClick={() => handleEvaluateRouter(sample.text, sample.role, 'collaborator')}
+                                                className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-indigo-50 dark:bg-slate-900/60 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[10px] font-bold transition-all"
+                                            >
+                                                {sample.label}
+                                            </button>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Seletor de Perfil / Cargo do Remetente e Botão de Despacho */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+                                <div className="flex items-center gap-2">
+                                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">
+                                        Cargo / Alçada do Remetente:
+                                    </label>
+                                    <select
+                                        className="px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none"
+                                        value={smartRouterRole}
+                                        onChange={e => {
+                                            setSmartRouterRole(e.target.value);
+                                            handleEvaluateRouter(smartRouterInput, e.target.value);
+                                        }}
+                                    >
+                                        <option value="Financeiro">Financeiro / Contábil</option>
+                                        <option value="Operações">Operações / Frotas</option>
+                                        <option value="Engenharia">Engenharia / Usinas</option>
+                                        <option value="Almoxarifado">Almoxarifado / Estoque</option>
+                                        <option value="Compras">Compras / Suprimentos</option>
+                                        <option value="Qualidade">Qualidade / Laboratório</option>
+                                        <option value="Segurança">Segurança do Trabalho (SST)</option>
+                                        <option value="RH">Recursos Humanos / DP</option>
+                                        <option value="Geral">Geral (Sem alçada específica)</option>
+                                    </select>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    disabled={isDispatchingRoute}
+                                    onClick={handleDispatchRoutedAgent}
+                                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50"
+                                >
+                                    <Send size={12} className={isDispatchingRoute ? 'animate-spin' : ''} />
+                                    {isDispatchingRoute ? 'Despachando Chamada...' : 'Despachar Chamada ao Agente'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Resultado da Triagem do Smart Router */}
+                        {smartRouterResult && (
+                            <div className="p-4 rounded-2xl border transition-all space-y-3 bg-slate-50/70 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
+                                            !smartRouterResult.isAmbiguous && smartRouterResult.matchedAgentId
+                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                                : smartRouterResult.isAmbiguous && smartRouterResult.alternativeAgents
+                                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                                : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                        }`}>
+                                            {!smartRouterResult.isAmbiguous && smartRouterResult.matchedAgentId
+                                                ? '✓ Roteamento Concluído'
+                                                : smartRouterResult.isAmbiguous && smartRouterResult.alternativeAgents
+                                                ? '⚠️ Empate de Alçada • Menu Interativo'
+                                                : '❌ Sem Correspondência • Menu Interativo'}
+                                        </span>
+
+                                        <h5 className="font-black text-sm text-slate-900 dark:text-white">
+                                            {smartRouterResult.matchedAgentName
+                                                ? `Destino: ${smartRouterResult.matchedAgentName} (${smartRouterResult.matchedDepartment})`
+                                                : 'Nenhum Agente Específico Identificado'}
+                                        </h5>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 text-xs font-mono font-bold">
+                                        <span className="text-slate-400">Confiança Determinística:</span>
+                                        <span className={`px-2 py-0.5 rounded-lg ${
+                                            smartRouterResult.confidenceScore >= 70
+                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                                : smartRouterResult.confidenceScore > 0
+                                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                                : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                                        }`}>
+                                            {smartRouterResult.confidenceScore}%
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="text-xs text-slate-600 dark:text-slate-300 flex items-start gap-1.5 font-medium">
+                                    <Info size={14} className="text-slate-400 mt-0.5 shrink-0" />
+                                    <span><strong>Decisão:</strong> {smartRouterResult.resolutionReason}</span>
+                                </div>
+
+                                {smartRouterResult.matchedKeywords.length > 0 && (
+                                    <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Termos Detectados:</span>
+                                        {smartRouterResult.matchedKeywords.map(kw => (
+                                            <span key={kw} className="px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] font-bold">
+                                                {kw}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Menu Interativo em Caso de Ambiguidade / Sem Match */}
+                                {smartRouterResult.interactiveMenuText && (
+                                    <div className="space-y-1.5 pt-2">
+                                        <div className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                            <Menu size={12} /> Resposta Automática no WhatsApp (Menu de Escolha Rápida):
+                                        </div>
+                                        <pre className="p-3 rounded-xl bg-slate-900 text-emerald-400 font-mono text-[11px] whitespace-pre-wrap border border-slate-800">
+                                            {smartRouterResult.interactiveMenuText}
+                                        </pre>
+                                    </div>
+                                )}
+
+                                {/* Resposta Real Despachada pelo Agente Especialista */}
+                                {dispatchedResultText && (
+                                    <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-700">
+                                        <div className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                                            <CheckCheck size={14} /> Resposta Oficial Gerada e Entregue no WhatsApp:
+                                        </div>
+                                        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-xs font-mono text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed shadow-sm">
+                                            {dispatchedResultText}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Card do Simulador de Recebimento de Webhook Inbound */}
+                    <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 space-y-4 shadow-sm">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-700">
+                            <div className="flex items-center gap-3">
+                                <span className="p-2.5 rounded-2xl bg-sky-50 text-sky-600 dark:bg-sky-950/60 dark:text-sky-300">
+                                    <Radio size={20} />
+                                </span>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h4 className="font-black text-sm text-slate-900 dark:text-white uppercase tracking-tight">
+                                            Simulador de Recebimento de Webhook Inbound
+                                        </h4>
+                                        <span className="text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                                            Payload Testing
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 font-medium">
+                                        Simule a recepção de eventos JSON enviados por gateways como Evolution API, Z-API ou Meta Cloud API v21.0.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                disabled={isSimulatingWebhook}
+                                onClick={handleSimulateInboundWebhook}
+                                className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-md shadow-sky-600/20 transition-all disabled:opacity-50"
+                            >
+                                <Play size={12} className={isSimulatingWebhook ? 'animate-spin' : 'fill-current'} />
+                                {isSimulatingWebhook ? 'Simulando Webhook...' : 'Disparar Webhook Inbound'}
+                            </button>
+                        </div>
+
+                        {/* Seletor de Payloads de Provedores */}
+                        <div className="flex flex-wrap gap-2">
+                            {SAMPLE_WEBHOOK_PAYLOADS.map(sample => (
+                                <button
+                                    key={sample.id}
+                                    type="button"
+                                    onClick={() => {
+                                        setSelectedWebhookSample(sample);
+                                        setWebhookSimulatorResult(null);
+                                    }}
+                                    className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                                        selectedWebhookSample.id === sample.id
+                                            ? 'bg-sky-600 text-white shadow-sm'
+                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                                    }`}
+                                >
+                                    {sample.title}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {/* Editor/Visualizador de Payload JSON */}
+                            <div className="space-y-1.5">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                                    <span>Payload JSON Inbound ({selectedWebhookSample.provider.toUpperCase()}):</span>
+                                    <span className="font-mono text-[9px] text-slate-400">Remetente: {selectedWebhookSample.senderPhone}</span>
+                                </span>
+                                <pre className="p-3.5 rounded-2xl bg-slate-900 text-sky-400 font-mono text-[11px] max-h-56 overflow-y-auto border border-slate-800 whitespace-pre-wrap leading-relaxed shadow-inner">
+                                    {JSON.stringify(selectedWebhookSample.samplePayload, null, 2)}
+                                </pre>
+                            </div>
+
+                            {/* Resultado do Processamento do Webhook */}
+                            <div className="space-y-1.5 flex flex-col justify-between">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                    Resposta da API do InfraCore (Status HTTP &amp; Roteamento):
+                                </span>
+                                {webhookSimulatorResult ? (
+                                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-emerald-300 dark:border-emerald-800 space-y-3 flex-1 flex flex-col justify-between shadow-sm">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-black">
+                                                    HTTP {webhookSimulatorResult.status} OK • {webhookSimulatorResult.latencyMs}ms
+                                                </span>
+                                                <span className="text-[10px] font-mono text-slate-400">
+                                                    {webhookSimulatorResult.processedAt}
+                                                </span>
+                                            </div>
+                                            <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                                                Roteado para: <strong className="text-indigo-600 dark:text-indigo-400">{webhookSimulatorResult.targetAgentName}</strong>
+                                            </div>
+                                            <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-36 overflow-y-auto">
+                                                {webhookSimulatorResult.responseMessage}
+                                            </div>
+                                        </div>
+                                        <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold">
+                                            ✓ Mensagem recebida, validada pelo Smart Router e respondida com sucesso.
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-dashed border-slate-300 dark:border-slate-700 flex flex-col items-center justify-center text-center text-slate-400 space-y-2 flex-1">
+                                        <Radio size={32} className="text-slate-300 dark:text-slate-600" />
+                                        <p className="text-xs font-bold">Clique em "Disparar Webhook Inbound" para testar o recebimento em tempo real.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+{/* Painel do Motor de Inteligência Artificial Google Gemini */}
                     <div className="rounded-2xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-br from-indigo-50/60 via-white to-purple-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/30 p-5 space-y-4 shadow-sm">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-100 dark:border-indigo-900/40">
                             <div className="flex items-center gap-3">
@@ -2034,6 +2875,314 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
             </fieldset>
 
             {/* Agente de Código (ADM) — Somente Super Administrador com Guardrails Rigorosos */}
+            {/* Sub-Aba: Fila de Confirmações & Eventos Proativos */}
+            {hubSubTab === 'confirmations' && (
+                <section className="space-y-6">
+                    {/* Header de Métricas da Fila */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-1">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-amber-500 flex items-center gap-1.5">
+                                <Clock size={12} /> Aguardando Resposta
+                            </span>
+                            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                                {pendingConfirmations.filter(c => c.status === 'pendente').length}
+                            </div>
+                            <p className="text-[10px] text-slate-400">Tempo limite: {config.gateway.confirmationTimeoutMinutes ?? 15} minutos</p>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-1">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-500 flex items-center gap-1.5">
+                                <CheckCircle2 size={12} /> Aprovadas no ERP
+                            </span>
+                            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                                {pendingConfirmations.filter(c => c.status === 'aprovado').length}
+                            </div>
+                            <p className="text-[10px] text-slate-400">Via botão ou resposta WhatsApp</p>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-1">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-rose-500 flex items-center gap-1.5">
+                                <AlertTriangle size={12} /> Rejeitadas
+                            </span>
+                            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                                {pendingConfirmations.filter(c => c.status === 'rejeitado').length}
+                            </div>
+                            <p className="text-[10px] text-slate-400">Canceladas por comando "NÃO"</p>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-1">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                                <Gauge size={12} /> Taxa de Conclusão
+                            </span>
+                            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                                {(() => {
+                                    const total = pendingConfirmations.length;
+                                    if (total === 0) return '100%';
+                                    const resolved = pendingConfirmations.filter(c => c.status !== 'pendente').length;
+                                    return `${Math.round((resolved / total) * 100)}%`;
+                                })()}
+                            </div>
+                            <p className="text-[10px] text-slate-400">Efetivação em tempo real</p>
+                        </div>
+                    </div>
+
+                    {/* Bloco 1: Fila em Tempo Real de Confirmações Pendentes */}
+                    <div className="p-6 rounded-[28px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-700">
+                            <div>
+                                <h3 className="font-black text-base text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                                    <Clock size={18} className="text-amber-500" /> Fila de Confirmações WhatsApp do ERP
+                                </h3>
+                                <p className="text-xs text-slate-400 font-medium">
+                                    Operações de alçada iniciadas por alertas ou fotos aguardando "SIM / NÃO" do colaborador.
+                                </p>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                {(['todos', 'pendente', 'aprovado', 'rejeitado'] as const).map(st => (
+                                    <button
+                                        key={st}
+                                        type="button"
+                                        onClick={() => setConfirmationFilter(st)}
+                                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                                            confirmationFilter === st
+                                                ? 'bg-slate-900 dark:bg-slate-700 text-white shadow-sm'
+                                                : 'bg-slate-100 dark:bg-slate-900/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                                        }`}
+                                    >
+                                        {st}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Lista de Confirmações */}
+                        {(() => {
+                            const filtered = pendingConfirmations.filter(c => confirmationFilter === 'todos' || c.status === confirmationFilter);
+                            if (filtered.length === 0) {
+                                return (
+                                    <div className="py-12 text-center text-slate-400 space-y-2">
+                                        <CheckCircle2 size={36} className="mx-auto text-emerald-500/50" />
+                                        <p className="font-bold text-sm">Nenhuma confirmação neste filtro.</p>
+                                    </div>
+                                );
+                            }
+
+                            return (
+                                <ul className="space-y-3">
+                                    {filtered.map(conf => {
+                                        const isPending = conf.status === 'pendente';
+                                        const now = Date.now();
+                                        const expireTime = new Date(conf.expiresAt).getTime();
+                                        const remainingMinutes = Math.max(0, Math.round((expireTime - now) / 60000));
+
+                                        return (
+                                            <li
+                                                key={conf.id}
+                                                className={`p-4 rounded-2xl border transition-all space-y-3 ${
+                                                    isPending
+                                                        ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60'
+                                                        : conf.status === 'aprovado'
+                                                        ? 'bg-emerald-50/30 dark:bg-emerald-950/10 border-emerald-200 dark:border-emerald-800/40'
+                                                        : 'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800'
+                                                }`}
+                                            >
+                                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <span className={`p-1.5 rounded-xl text-xs font-black uppercase ${
+                                                            conf.status === 'pendente'
+                                                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                                                : conf.status === 'aprovado'
+                                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                                                : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                                        }`}>
+                                                            {conf.status}
+                                                        </span>
+                                                        <h4 className="font-black text-sm text-slate-900 dark:text-white">
+                                                            {conf.title}
+                                                        </h4>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2 text-xs font-mono text-slate-500">
+                                                        {isPending ? (
+                                                            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold animate-pulse">
+                                                                <Clock size={12} /> Expira em ~{remainingMinutes} min
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[11px] text-slate-400">
+                                                                Respondido às {new Date(conf.respondedAt || conf.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} ({conf.responseChannel})
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                                                    {conf.description}
+                                                </p>
+
+                                                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-xs">
+                                                    <div className="flex flex-wrap items-center gap-3 text-slate-500">
+                                                        <span>Agente: <strong className="text-slate-800 dark:text-slate-200">{conf.agentName}</strong></span>
+                                                        <span>Destinatário: <strong className="text-slate-800 dark:text-slate-200">{conf.targetUserName} ({formatPhone(conf.targetUserPhone)})</strong></span>
+                                                        {conf.metadata.value && (
+                                                            <span>Valor: <strong className="text-emerald-600 dark:text-emerald-400">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(conf.metadata.value)}</strong></span>
+                                                        )}
+                                                    </div>
+
+                                                    {isPending && (
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleApproveConfirmation(conf.id, 'whatsapp_button')}
+                                                                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm transition-all"
+                                                                title="Simular resposta 'SIM' do colaborador no WhatsApp"
+                                                            >
+                                                                <Check size={12} /> Simular "SIM" WhatsApp
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRejectConfirmation(conf.id, 'whatsapp_button')}
+                                                                className="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all"
+                                                                title="Simular resposta 'NÃO' do colaborador no WhatsApp"
+                                                            >
+                                                                <X size={12} /> Simular "NÃO"
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleApproveConfirmation(conf.id, 'painel_web')}
+                                                                className="px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-wider transition-all"
+                                                            >
+                                                                Resolver no Painel
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            );
+                        })()}
+                    </div>
+
+                    {/* Bloco 2: Gestão de Sessões Conversacionais Multi-Turno no WhatsApp */}
+                    <div className="p-6 rounded-[28px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-700">
+                            <div>
+                                <h3 className="font-black text-base text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                                    <MessageCircle size={18} className="text-emerald-500" /> Sessões Ativas &amp; Memória Conversacional WhatsApp
+                                </h3>
+                                <p className="text-xs text-slate-400 font-medium">
+                                    Diálogos multi-turno encadeados em tempo real entre colaboradores e os agentes especialistas com memória contextual no Gemini.
+                                </p>
+                            </div>
+                            <span className="text-xs font-bold text-slate-400">
+                                {conversationSessions.length} sessão(ões) registradas
+                            </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            {conversationSessions.map(session => (
+                                <div
+                                    key={session.id}
+                                    className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/80 space-y-3 flex flex-col justify-between hover:border-emerald-400 dark:hover:border-emerald-600 transition-all"
+                                >
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                                <Sparkles size={11} /> {session.agentName}
+                                            </span>
+                                            <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-black">
+                                                {session.turnsCount} turno(s)
+                                            </span>
+                                        </div>
+                                        <h5 className="font-black text-sm text-slate-900 dark:text-white truncate">
+                                            {session.contactName} ({formatPhone(session.phoneNumber)})
+                                        </h5>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
+                                            {session.contextSummary || session.messages[session.messages.length - 1]?.text}
+                                        </p>
+                                    </div>
+
+                                    <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between text-[10px]">
+                                        <span className="text-slate-400">
+                                            Último: {new Date(session.lastInteractionAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setInspectingSession(session)}
+                                            className="px-2.5 py-1 rounded-lg bg-slate-900 dark:bg-slate-700 text-white font-bold uppercase tracking-wider hover:bg-slate-800 transition-colors"
+                                        >
+                                            Ver Histórico
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Bloco 2: Motor de Disparo de Gatilhos de Eventos do ERP */}
+                    <div className="p-6 rounded-[28px] bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-700">
+                            <div>
+                                <h3 className="font-black text-base text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                                    <Zap size={18} className="text-indigo-500" /> Motor de Gatilhos de Eventos Proativos do ERP
+                                </h3>
+                                <p className="text-xs text-slate-400 font-medium">
+                                    Detectores automáticos que disparam notificações instantâneas no WhatsApp dos colaboradores autorizados.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {ERP_PROACTIVE_TRIGGERS.map(trig => {
+                                const isTriggering = isTriggeringProactive === trig.id;
+                                return (
+                                    <div
+                                        key={trig.id}
+                                        className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-3 shadow-sm hover:border-indigo-400 dark:hover:border-indigo-600 transition-all"
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                                                    trig.severity === 'critical'
+                                                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                                }`}>
+                                                    {trig.severity === 'critical' ? 'Crítico' : 'Alerta'}
+                                                </span>
+                                                <h4 className="font-black text-sm text-slate-900 dark:text-white">
+                                                    {trig.title}
+                                                </h4>
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                disabled={isTriggering}
+                                                onClick={() => handleTriggerProactiveEvent(trig)}
+                                                className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-1 shadow-md shadow-indigo-600/20 transition-all disabled:opacity-50"
+                                            >
+                                                <Zap size={11} className={isTriggering ? 'animate-spin' : ''} />
+                                                {isTriggering ? 'Disparando...' : 'Disparar Alerta'}
+                                            </button>
+                                        </div>
+
+                                        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium space-y-1">
+                                            <div><span className="font-bold text-slate-700 dark:text-slate-300">Condição do ERP:</span> {trig.triggerCondition}</div>
+                                            <div><span className="font-bold text-slate-700 dark:text-slate-300">Perfil Notificado:</span> {trig.defaultTargetRole}</div>
+                                        </div>
+
+                                        <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 text-[11px] font-mono text-emerald-700 dark:text-emerald-400 border border-slate-100 dark:border-slate-800 whitespace-pre-wrap">
+                                            {trig.sampleMessage}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </section>
+            )}
+
             {isAdmin && hubSubTab === 'code_agent' && (
                 <section className="rounded-3xl bg-slate-900 text-white p-6 md:p-8 space-y-6 border border-slate-700 shadow-xl">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -2497,6 +3646,86 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                         )}
                     </div>
                 </section>
+            )}
+
+            {/* Modal de Auditoria e Inspeção de Sessão Multi-Turno */}
+            {inspectingSession && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setInspectingSession(null)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-2xl max-h-[85vh] border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                        <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 shrink-0">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h4 className="font-black text-sm uppercase tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
+                                        <MessageCircle size={16} className="text-emerald-500" /> Histórico da Sessão: {inspectingSession.contactName}
+                                    </h4>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold">
+                                        {inspectingSession.agentName}
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-slate-400 font-medium">
+                                    Telefone: {formatPhone(inspectingSession.phoneNumber)} • {inspectingSession.turnsCount} turnos encadeados
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setInspectingSession(null)}
+                                className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="p-6 overflow-y-auto space-y-3 bg-[#efeae2] dark:bg-slate-900 flex-1">
+                            {inspectingSession.messages.map((m, idx) => (
+                                <div key={m.id || idx} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-xs whitespace-pre-wrap shadow-sm space-y-1 ${
+                                        m.role === 'user'
+                                            ? 'bg-[#d9fdd3] text-slate-800 rounded-br-md'
+                                            : 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-bl-md'
+                                    }`}>
+                                        <p className="font-medium leading-relaxed">{m.text}</p>
+                                        <div className="flex items-center justify-between text-[9px] text-slate-400 pt-1 border-t border-black/5 dark:border-white/5 font-mono">
+                                            <span>{new Date(m.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                                            {m.modelUsed && <span>{m.modelUsed}</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="p-4 border-t dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between shrink-0">
+                            <span className="text-[11px] text-slate-400 font-medium">
+                                Contexto mantido pela janela deslizante do Gemini 2.5 Flash
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const fullTxt = exportSessionAsText(inspectingSession);
+                                        const blob = new Blob([fullTxt], { type: 'text/plain;charset=utf-8' });
+                                        const url = URL.createObjectURL(blob);
+                                        const a = document.createElement('a');
+                                        a.href = url;
+                                        a.download = `sessao_${inspectingSession.id}.txt`;
+                                        a.click();
+                                        URL.revokeObjectURL(url);
+                                        addToast('Transcrição da sessão exportada com sucesso (.TXT)!', 'success');
+                                    }}
+                                    className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all"
+                                >
+                                    <FileText size={13} /> Exportar Transcrição (.TXT)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setInspectingSession(null)}
+                                    className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-black uppercase tracking-wider hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                                >
+                                    Fechar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* Modal de Configuração do Agente Selecionado */}
@@ -3011,6 +4240,127 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                                         </div>
                                                     </div>
                                                 )}
+                                            </div>
+
+                                            {/* Suporte Multi-Modal Gemini Vision para Agentes Habilitados com Fotos */}
+                                            {def.supportsImages && (
+                                                <div className="space-y-1.5 p-3 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50">
+                                                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-indigo-700 dark:text-indigo-400">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <ImageIcon size={13} /> Visão Multi-Modal Gemini (Simular Envio de Foto / OCR)
+                                                        </span>
+                                                        <span className="text-[9px] font-normal lowercase text-slate-500">clique na amostra para extrair dados</span>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {SAMPLE_MULTIMODAL_IMAGES
+                                                            .filter(s => s.targetAgentId === def.id || def.id === 'financial_analyst')
+                                                            .map(sample => (
+                                                                <button
+                                                                    key={sample.id}
+                                                                    type="button"
+                                                                    disabled={isProcessingVision}
+                                                                    onClick={() => handleSendVisionSample(sample, def)}
+                                                                    className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 text-slate-700 dark:text-slate-200 border border-indigo-200 dark:border-indigo-800 text-[10px] font-bold transition-all shadow-sm flex items-center gap-1 disabled:opacity-50"
+                                                                    title={sample.description}
+                                                                >
+                                                                    <Sparkles size={11} className="text-indigo-500" />
+                                                                    {sample.title}
+                                                                </button>
+                                                            ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Central de Atendimento & Vendas: Menu Comercial Consultivo em 4 Opções (Público Geral) */}
+                                            {def.id === 'sales_manager' && (
+                                                <div className="space-y-1.5 p-3 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-900/60">
+                                                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <Sparkles size={13} className="text-indigo-600" /> Menu Comercial Consultivo • Público Geral (4 Opções):
+                                                        </span>
+                                                        <span className="text-[9px] font-normal lowercase text-slate-500">clique para simular o cliente escolhendo</span>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {[
+                                                            { opt: '1', label: '1 - 📋 Solicitar Orçamento / Preços', text: '1' },
+                                                            { opt: '2', label: '2 - 📦 Já Sou Cliente (Rastreio / 2ª Via)', text: '2' },
+                                                            { opt: '3', label: '3 - 🏭 Conhecer Usinas & Produtos', text: '3' },
+                                                            { opt: '4', label: '4 - 👤 Falar com Consultor (Retenção Ativa)', text: '4' },
+                                                            { opt: 'ola', label: '👋 Saudação Inicial ("Olá")', text: 'Olá, bom dia! Gostaria de uma cotação.' }
+                                                        ].map(m => (
+                                                            <button
+                                                                key={m.opt}
+                                                                type="button"
+                                                                disabled={isThinkingAgent[def.id]}
+                                                                onClick={() => handleSendSimulatedMessageWithText(def, m.text)}
+                                                                className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 hover:bg-indigo-50 text-indigo-900 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800 text-[10px] font-black transition-all shadow-sm flex items-center gap-1"
+                                                            >
+                                                                {m.label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Simulador de Notas de Voz / Áudio de Campo (PTT) */}
+                                            <div className="space-y-1.5 p-3 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40">
+                                                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                                                    <span className="flex items-center gap-1.5">
+                                                        <Mic size={13} className="text-amber-600" /> Simular Áudio de Campo (WhatsApp PTT com Transcrição por IA):
+                                                    </span>
+                                                    <span className="text-[9px] font-normal lowercase text-slate-500">clique para despachar áudio</span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {SAMPLE_VOICE_NOTES
+                                                        .filter(v => v.targetAgentId === def.id || def.id === 'sales_manager' || def.id === 'plant_operator')
+                                                        .map(voice => (
+                                                            <button
+                                                                key={voice.id}
+                                                                type="button"
+                                                                disabled={isPlayingAudioId === voice.id || isThinkingAgent[def.id]}
+                                                                onClick={() => handleSendSimulatedVoiceNote(voice, def)}
+                                                                className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-amber-100/60 text-slate-800 dark:text-slate-200 border border-amber-200 dark:border-amber-800 text-[10px] font-bold transition-all shadow-sm flex items-center gap-1.5"
+                                                                title={voice.transcript}
+                                                            >
+                                                                <span className="text-amber-600 font-black">▶ {voice.duration}</span>
+                                                                <span>{voice.title}</span>
+                                                                <span className="text-[9px] text-slate-400 font-mono tracking-tighter">ılılıllı</span>
+                                                            </button>
+                                                        ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Barra de Comandos Operacionais Zero-Token Rápidos */}
+                                            <div className="space-y-1.5 p-2.5 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40">
+                                                <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-emerald-800 dark:text-emerald-300">
+                                                    <span className="flex items-center gap-1">
+                                                        <Zap size={11} className="text-emerald-500 fill-current" /> Atalhos Operacionais Zero-Token (Sem Custo de API):
+                                                    </span>
+                                                    <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400">
+                                                        Total Economizado: ~{totalTokensSaved.toLocaleString('pt-BR')} tokens
+                                                    </span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {[
+                                                        { cmd: 'SIM', label: '✅ SIM (Aprovar)', desc: 'Aprova pendência de alçada no ERP' },
+                                                        { cmd: 'NÃO', label: '🛑 NÃO (Cancelar)', desc: 'Cancela operação de alçada com segurança' },
+                                                        { cmd: 'SALDO', label: '💰 SALDO', desc: 'Posição financeira de caixa e contas do dia' },
+                                                        { cmd: 'ESTOQUE', label: '📦 ESTOQUE', desc: 'Insumos críticos e ponto de reposição' },
+                                                        { cmd: 'FROTA', label: '🚛 FROTA', desc: 'Disponibilidade de veículos operacionais' },
+                                                        { cmd: 'AJUDA', label: '📋 MENU / AJUDA', desc: 'Exibe lista numerada de comandos' }
+                                                    ].map(shortcut => (
+                                                        <button
+                                                            key={shortcut.cmd}
+                                                            type="button"
+                                                            disabled={isThinkingAgent[def.id]}
+                                                            onClick={() => handleSendSimulatedMessageWithText(def, shortcut.cmd)}
+                                                            className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 text-[9px] font-black uppercase tracking-wide transition-all shadow-sm"
+                                                            title={shortcut.desc}
+                                                        >
+                                                            {shortcut.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
 
                                             {/* Perguntas Rápidas de Campo com Envio Direto (Play) e Preenchimento */}

@@ -185,6 +185,58 @@ const parseSafeDate = (dateStr?: string | null): Date | null => {
   return isNaN(d.getTime()) ? null : d;
 };
 
+/**
+ * Gera payload no padrão EMV do Banco Central do Brasil para PIX Estático (Copia e Cola).
+ */
+export const generatePixPayload = (key: string, name: string, city: string, amount: number, txid = 'INFRACORE'): string => {
+  const f = (id: string, val: string) => id + String(val.length).padStart(2, '0') + val;
+  const cleanKey = (key || '').trim();
+  if (!cleanKey) return '';
+  const cleanName = (name || 'INFRACORE')
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9 ]/g, '')
+    .trim()
+    .substring(0, 25)
+    .toUpperCase() || 'INFRACORE';
+  const cleanCity = (city || 'CIDADE')
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9 ]/g, '')
+    .trim()
+    .substring(0, 15)
+    .toUpperCase() || 'BRASIL';
+  const cleanTxid = (txid || 'INFRACORE').replace(/[^A-Za-z0-9]/g, '').substring(0, 25) || 'INFRACORE';
+  const formattedAmount = amount > 0 ? amount.toFixed(2) : '';
+
+  const gui = f('00', 'br.gov.bcb.pix');
+  const k = f('01', cleanKey);
+  const mai = f('26', gui + k);
+  const mcc = f('52', '0000');
+  const curr = f('53', '986');
+  const amt = formattedAmount ? f('54', formattedAmount) : '';
+  const cc = f('58', 'BR');
+  const nm = f('59', cleanName);
+  const ct = f('60', cleanCity);
+  const add = f('62', f('05', cleanTxid));
+
+  const payloadNoCRC = f('00', '01') + mai + mcc + curr + amt + cc + nm + ct + add + '6304';
+
+  let crc = 0xFFFF;
+  for (let i = 0; i < payloadNoCRC.length; i++) {
+    crc ^= (payloadNoCRC.charCodeAt(i) << 8);
+    for (let j = 0; j < 8; j++) {
+      if ((crc & 0x8000) !== 0) {
+        crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+      } else {
+        crc = (crc << 1) & 0xFFFF;
+      }
+    }
+  }
+  const crcHex = crc.toString(16).toUpperCase().padStart(4, '0');
+  return payloadNoCRC + crcHex;
+};
+
 const Sales = () => {
   const {
     sales,
@@ -830,6 +882,9 @@ const Sales = () => {
   const [driverName, setDriverName] = useState('');
   const [weightNotes, setWeightNotes] = useState('');
   const [dispatchStatus, setDispatchStatus] = useState<'Aguardando' | 'Em Pesagem' | 'Despachado'>('Aguardando');
+  const [freightType, setFreightType] = useState<'CIF' | 'FOB' | 'Sem Frete'>('FOB');
+  const [deliveryDays, setDeliveryDays] = useState<number>(5);
+  const [commercialNotes, setCommercialNotes] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -1066,6 +1121,9 @@ const Sales = () => {
     setScaleWeight(0);
     setWeightTicket('');
     setWeightNotes('');
+    setFreightType('FOB');
+    setDeliveryDays(5);
+    setCommercialNotes('');
     setIsSubmitting(false);
     setEditingBudgetId(null);
   };
@@ -1313,7 +1371,10 @@ const Sales = () => {
         weightNotes: weightNotes || weighingCalculations?.explanation,
         paymentMethod: paymentMethod,
         installments: installments,
-        budgetNumber: budgetNumToUse
+        budgetNumber: budgetNumToUse,
+        freightType: freightType,
+        deliveryDays: deliveryDays,
+        commercialNotes: commercialNotes
       } as any;
 
       if (editingBudgetId) {
@@ -1387,8 +1448,15 @@ const Sales = () => {
             originModule: 'Vendas',
             originId: budget.id,
             ledgerCode: '1.01.01',
-            ledgerName: 'Vendas de Mercadorias'
-          });
+            ledgerName: 'Vendas de Mercadorias',
+            freightType: (budget as any).freightType,
+            deliveryDays: (budget as any).deliveryDays,
+            commercialNotes: (budget as any).commercialNotes,
+            tareWeight: budget.tareWeight,
+            grossWeight: budget.grossWeight,
+            netWeight: budget.netWeight,
+            weightNotes: budget.weightNotes
+          } as any);
 
           updateBudgetStatus(budget.id, 'Convertido');
           addToast("Orçamento convertido em venda com sucesso! Estoque e financeiro atualizados.", 'success');
@@ -1542,190 +1610,802 @@ const Sales = () => {
     }
   };
 
-  // Impressão do Orçamento com dados completos
+  // Impressão da Proposta Comercial Executiva (Layout A4 Corporativo)
   const handlePrintBudget = (budget: Budget) => {
     const company = settings || {
-      companyName: 'INFRACORE ERP',
-      tradeName: 'Sistemas de Gestão',
-      document: '00.000.000/0000-00',
-      email: 'contato@infracore.com.br',
-      phone: '(11) 99999-9999',
-      address: 'Endereço Padrão do Sistema',
+      companyName: 'INFRACORE ERP SISTEMAS LTDA',
+      tradeName: 'InfraCore ERP',
+      document: '00.000.000/0001-00',
+      email: 'comercial@infracore.com.br',
+      phone: '(11) 4002-8922',
+      address: 'Av. Industrial, 1200 - Distrito Industrial, São Paulo - SP',
       bankDetails: {
-        bankName: 'Banco Padrão',
+        bankName: 'Banco Inter / Santander',
         agency: '0001',
-        account: '00000-0',
-        pixKey: 'financeiro@infracore.com',
+        account: '1234567-8',
+        pixKey: 'financeiro@infracore.com.br',
         pixType: 'E-mail'
       }
     } as AppSettings;
 
     const client = (clients || []).find(c => c.id === budget.clientId);
+    const budgetExtended = budget as any;
+    const freight = budgetExtended.freightType || 'FOB';
+    const freightLabel = freight === 'CIF' ? 'CIF (Frete Incluso por conta do Emitente)' :
+      freight === 'Sem Frete' ? 'Sem Frete / Retirada no Local' :
+      'FOB (Frete a pagar por conta do Destinatário)';
+    const deliveryTerm = budgetExtended.deliveryDays ? `${budgetExtended.deliveryDays} dias úteis após confirmação/aceite` : '5 a 7 dias úteis após confirmação/aceite';
+    const commercialNotes = budgetExtended.commercialNotes || '';
+    const paymentLabel = getPaymentMethodLabel(budget.paymentMethod) || 'A Combinar';
+    const numInstallments = budgetExtended.installments && Number(budgetExtended.installments) > 1 ? `${budgetExtended.installments}x` : 'À Vista';
 
-    const html = `
-      <div class="header" style="border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 30px;">
-        <div class="company-info">
-          <h1 style="font-size: 24px; color: #000; margin-bottom: 5px; text-transform: uppercase;">${company.tradeName || company.companyName}</h1>
-          <p style="font-size: 12px; font-weight: bold; margin: 2px 0;">CNPJ: ${company.document}</p>
-          <p style="font-size: 11px; color: #555; margin: 2px 0;">${company.address}</p>
-          <p style="font-size: 11px; color: #555; margin: 2px 0;">${company.phone} | ${company.email}</p>
+    const bank = company.bankDetails || {
+      bankName: 'Banco Padrão',
+      agency: '0001',
+      account: '00000-0',
+      pixKey: company.email || 'financeiro@infracore.com.br',
+      pixType: 'Chave Principal'
+    };
+
+    const pixKey = bank.pixKey || company.document || company.email || 'comercial@infracore.com.br';
+    const pixPayload = generatePixPayload(
+      pixKey,
+      company.tradeName || company.companyName,
+      'SAO PAULO',
+      budget.total,
+      getBudgetDisplayId(budget)
+    );
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=0&data=${encodeURIComponent(pixPayload || pixKey)}`;
+
+    let clientAddressStr = 'Não Informado';
+    if (client && client.address) {
+      const a = client.address;
+      const parts = [
+        a.street ? `${a.street}${a.number ? `, ${a.number}` : ''}` : '',
+        a.district ? `Bairro ${a.district}` : '',
+        a.city ? `${a.city}${a.state ? `/${a.state}` : ''}` : '',
+        a.zipCode ? `CEP: ${formatCEP(a.zipCode)}` : ''
+      ].filter(Boolean);
+      if (parts.length > 0) clientAddressStr = parts.join(' - ');
+    }
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Proposta Comercial #${getBudgetDisplayId(budget)} - ${budget.clientName}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+    
+    @page {
+      size: A4 portrait;
+      margin: 12mm 15mm 15mm 15mm;
+    }
+    
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #0f172a;
+      background: #ffffff;
+      margin: 0;
+      padding: 0;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 100%;
+      margin: 0 auto;
+    }
+
+    .header-table {
+      width: 100%;
+      border-bottom: 3px solid #0891b2;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+
+    .company-name {
+      font-size: 20px;
+      font-weight: 900;
+      color: #0891b2;
+      letter-spacing: -0.02em;
+      margin: 0 0 3px 0;
+      text-transform: uppercase;
+    }
+
+    .company-sub {
+      font-size: 10px;
+      color: #475569;
+      margin: 1px 0;
+    }
+
+    .doc-badge-container {
+      text-align: right;
+    }
+
+    .doc-type-pill {
+      display: inline-block;
+      background: #0f172a;
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 4px 12px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+    }
+
+    .doc-id {
+      font-size: 16px;
+      font-weight: 900;
+      color: #0f172a;
+      margin: 2px 0;
+    }
+
+    .doc-date {
+      font-size: 10px;
+      color: #64748b;
+      margin: 2px 0;
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+      page-break-inside: avoid;
+    }
+
+    .card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 14px;
+    }
+
+    .card-title {
+      font-size: 9px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #0891b2;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 4px;
+      margin: 0 0 8px 0;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .card-row {
+      margin: 3px 0;
+      font-size: 10.5px;
+      color: #334155;
+    }
+
+    .card-row strong {
+      color: #0f172a;
+      font-weight: 700;
+    }
+
+    .badge-status {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+      page-break-inside: auto;
+    }
+
+    .items-table thead th {
+      background: #0f172a;
+      color: #ffffff;
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 7px 8px;
+      text-align: left;
+    }
+
+    .items-table thead th.text-right {
+      text-align: right;
+    }
+
+    .items-table thead th.text-center {
+      text-align: center;
+    }
+
+    .items-table tbody tr {
+      border-bottom: 1px solid #e2e8f0;
+      page-break-inside: avoid;
+    }
+
+    .items-table tbody tr:nth-child(even) {
+      background: #f8fafc;
+    }
+
+    .items-table tbody td {
+      padding: 7px 8px;
+      font-size: 10px;
+      color: #1e293b;
+      vertical-align: middle;
+    }
+
+    .summary-section {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 16px;
+      page-break-inside: avoid;
+    }
+
+    .summary-box {
+      width: 280px;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      background: #f8fafc;
+      padding: 10px 14px;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 4px 0;
+      font-size: 11px;
+      color: #475569;
+    }
+
+    .summary-row.total-row {
+      border-top: 2px solid #0f172a;
+      padding-top: 6px;
+      margin-top: 6px;
+      font-size: 14px;
+      font-weight: 900;
+      color: #0f172a;
+    }
+
+    .financial-box {
+      background: #ffffff;
+      border: 1.5px solid #0891b2;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      page-break-inside: avoid;
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .qr-container {
+      text-align: center;
+    }
+
+    .qr-container img {
+      width: 105px;
+      height: 105px;
+      display: block;
+      margin: 0 auto;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 4px;
+      background: #fff;
+    }
+
+    .qr-label {
+      font-size: 8px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #0891b2;
+      margin-top: 4px;
+    }
+
+    .bank-info h4 {
+      margin: 0 0 6px 0;
+      font-size: 11px;
+      font-weight: 800;
+      color: #0f172a;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .pix-payload-box {
+      margin-top: 6px;
+      padding: 5px 8px;
+      background: #f1f5f9;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 8px;
+      word-break: break-all;
+      color: #334155;
+      border: 1px dashed #cbd5e1;
+    }
+
+    .terms-card {
+      background: #fbfcfe;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 20px;
+      page-break-inside: avoid;
+    }
+
+    .terms-card h4 {
+      margin: 0 0 6px 0;
+      font-size: 9px;
+      font-weight: 900;
+      text-transform: uppercase;
+      color: #475569;
+      letter-spacing: 0.05em;
+    }
+
+    .terms-card ol {
+      margin: 0;
+      padding-left: 16px;
+      font-size: 9px;
+      color: #475569;
+      line-height: 1.45;
+    }
+
+    .terms-card li {
+      margin-bottom: 3px;
+    }
+
+    .signatures-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      margin-top: 30px;
+      padding-top: 15px;
+      page-break-inside: avoid;
+    }
+
+    .signature-block {
+      text-align: center;
+    }
+
+    .signature-line {
+      border-bottom: 1.5px solid #0f172a;
+      margin-bottom: 6px;
+      height: 1px;
+    }
+
+    .signature-name {
+      font-size: 10px;
+      font-weight: 800;
+      color: #0f172a;
+      text-transform: uppercase;
+      margin: 0;
+    }
+
+    .signature-title {
+      font-size: 8.5px;
+      color: #64748b;
+      margin: 2px 0 0 0;
+    }
+
+    .footer {
+      margin-top: 25px;
+      padding-top: 8px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 8px;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      page-break-inside: avoid;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- CABEÇALHO -->
+    <table class="header-table">
+      <tr>
+        <td style="vertical-align: top;">
+          <h1 class="company-name">${company.tradeName || company.companyName}</h1>
+          <p class="company-sub"><strong>Razão Social:</strong> ${company.companyName}</p>
+          <p class="company-sub"><strong>CNPJ:</strong> ${company.document} ${company.email ? `| <strong>E-mail:</strong> ${company.email}` : ''}</p>
+          <p class="company-sub"><strong>Endereço:</strong> ${company.address}</p>
+          <p class="company-sub"><strong>Contato Comercial:</strong> ${company.phone} ${company.website ? `| ${company.website}` : ''}</p>
+        </td>
+        <td style="vertical-align: top; text-align: right; width: 220px;">
+          <div class="doc-badge-container">
+            <span class="doc-type-pill">Proposta Comercial</span>
+            <div class="doc-id">Nº ${getBudgetDisplayId(budget)}</div>
+            <div class="doc-date">Emissão: <strong>${budget.date}</strong></div>
+            <div class="doc-date" style="color: #c2410c;">Validade: <strong>${budget.expiryDate}</strong></div>
+            <div style="margin-top: 5px;">
+              <span class="badge-status">${budget.status}</span>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- DADOS DO CLIENTE E CONDIÇÕES COMERCIAIS -->
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">
+          <span>Identificação do Cliente / Proponente</span>
+          <span>Cód: ${budget.clientId || 'N/A'}</span>
         </div>
-        <div class="doc-info" style="text-align: right;">
-          <h2 style="font-size: 18px; color: #f97316; margin-bottom: 5px;">ORÇAMENTO DE VENDA</h2>
-          <p style="font-size: 14px; margin: 2px 0;">Nº: <strong>${getBudgetDisplayId(budget)}</strong></p>
-          <p style="font-size: 12px; margin: 2px 0;">Emissão: ${budget.date}</p>
-        </div>
+        <p class="card-row"><strong>Nome / Razão Social:</strong> ${budget.clientName}</p>
+        <p class="card-row"><strong>CPF / CNPJ:</strong> ${client?.document || 'Não Informado'}</p>
+        <p class="card-row"><strong>Telefone / WhatsApp:</strong> ${client?.phone || 'Não Informado'}</p>
+        <p class="card-row"><strong>E-mail:</strong> ${client?.email || 'Não Informado'}</p>
+        <p class="card-row"><strong>Endereço de Entrega:</strong> ${clientAddressStr}</p>
       </div>
 
-      <div class="details-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
-        <div class="detail-box" style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
-          <h3 style="font-size: 11px; color: #94a3b8; font-weight: 800; letter-spacing: 0.05em; margin-bottom: 8px;">DADOS DO CLIENTE</h3>
-          <p style="font-size: 14px; font-weight: bold; margin: 0 0 5px 0;">${budget.clientName}</p>
-          ${client?.document ? `<p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0;">CNPJ/CPF: <strong>${client.document}</strong></p>` : ''}
-          ${client?.phone ? `<p style="font-size: 11px; color: #64748b; margin: 0 0 4px 0;">Telefone: ${client.phone}</p>` : ''}
-          <p style="font-size: 12px; color: #64748b; margin: 0;">Validade da Proposta: <strong>${budget.expiryDate}</strong></p>
+      <div class="card">
+        <div class="card-title">
+          <span>Condições Comerciais e Logística</span>
+          <span>InfraCore BETA</span>
         </div>
-        <div class="detail-box" style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
-          <h3 style="font-size: 11px; color: #94a3b8; font-weight: 800; letter-spacing: 0.05em; margin-bottom: 8px;">DETALHES DO PEDIDO</h3>
-          <p style="font-size: 12px; margin: 0 0 4px 0;">Status: <span style="font-weight: bold; text-transform: uppercase; color: ${budget.status === 'Convertido' ? '#16a34a' : '#ea580c'}">${budget.status}</span></p>
-          <p style="font-size: 12px; margin: 0;">Vendedor: Administrador</p>
-        </div>
+        <p class="card-row"><strong>Modalidade de Frete:</strong> ${freightLabel}</p>
+        <p class="card-row"><strong>Prazo Estimado de Entrega:</strong> ${deliveryTerm}</p>
+        <p class="card-row"><strong>Condição de Pagamento:</strong> ${paymentLabel} (${numInstallments})</p>
+        <p class="card-row"><strong>Gestor Comercial:</strong> Administrador / Atendimento</p>
+        ${commercialNotes ? `<p class="card-row" style="color: #0369a1;"><strong>Obs. Comercial:</strong> ${commercialNotes}</p>` : ''}
       </div>
+    </div>
 
-      ${budget.netWeight ? `
-      <div style="margin-bottom: 20px; padding: 12px; border: 1px dashed #cbd5e1; border-radius: 6px; background: #fff;">
-        <h4 style="margin: 0 0 8px 0; font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Dados de Pesagem e Conversão</h4>
-        <div style="display: flex; gap: 30px; font-size: 12px; font-family: monospace; margin-bottom: 8px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px;">
-          <span><strong>Tara:</strong> ${budget.tareWeight} kg</span>
-          <span><strong>Bruto:</strong> ${budget.grossWeight} kg</span>
-          <span><strong>Líquido:</strong> ${budget.netWeight} kg</span>
-        </div>
-        ${budget.weightNotes ? `<div style="margin-top: 5px; font-size: 11px; color: #64748b; font-style: italic; border-top: 1px dashed #e2e8f0; padding-top: 5px;"><strong>Obs:</strong> ${budget.weightNotes}</div>` : ''}
+    <!-- DADOS TÉCNICOS / PESAGEM (SE HOUVER) -->
+    ${budget.netWeight ? `
+    <div class="card" style="margin-bottom: 16px; background: #f0fdfa; border-color: #99f6e4;">
+      <div class="card-title" style="color: #0d9488; border-color: #99f6e4;">
+        <span>Especificação Técnica de Carga e Balança Rodoviária</span>
+        <span>Pesagem Integrada</span>
       </div>
-      ` : ''}
+      <div style="display: flex; gap: 24px; font-size: 11px; font-family: monospace;">
+        <span><strong>Tara (Entrada):</strong> ${budget.tareWeight || 0} kg</span>
+        <span><strong>Bruto (Saída):</strong> ${budget.grossWeight || 0} kg</span>
+        <span><strong>Líquido Faturado:</strong> <span style="background: #ccfbf1; padding: 2px 6px; border-radius: 4px; font-weight: bold; color: #0f766e;">${budget.netWeight} kg</span></span>
+      </div>
+      ${budget.weightNotes ? `<p style="margin: 6px 0 0 0; font-size: 10px; color: #0f766e; font-style: italic;"><strong>Observações da Pesagem:</strong> ${budget.weightNotes}</p>` : ''}
+    </div>
+    ` : ''}
 
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
-        <thead style="background: #f1f5f9; color: #475569; font-size: 10px; text-transform: uppercase;">
+    <!-- TABELA DE ITENS -->
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th style="width: 25px;" class="text-center">#</th>
+          <th>Descrição do Material / Serviço</th>
+          <th style="width: 50px;" class="text-center">UN</th>
+          <th style="width: 65px;" class="text-right">QTD</th>
+          <th style="width: 85px;" class="text-right">Preço Unit.</th>
+          <th style="width: 95px;" class="text-right">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${(budget.items || []).map((item, idx) => `
           <tr>
-            <th style="padding: 10px; text-align: left; border-bottom: 2px solid #e2e8f0;">Descrição do Produto</th>
-            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0;">Qtd</th>
-            <th style="padding: 10px; text-align: center; border-bottom: 2px solid #e2e8f0;">Un</th>
-            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0;">Valor Unit.</th>
-            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0;">Total</th>
+            <td class="text-center" style="font-weight: 700; color: #64748b;">${idx + 1}</td>
+            <td>
+              <div style="font-weight: 700; color: #0f172a;">${item.name}</div>
+              ${item.detail ? `<div style="font-size: 9px; color: #64748b;">${item.detail}</div>` : ''}
+            </td>
+            <td class="text-center" style="font-weight: 600;">${item.unit || 'UN'}</td>
+            <td class="text-right" style="font-weight: 700; font-family: monospace;">${item.quantity}</td>
+            <td class="text-right" style="font-family: monospace;">${formatMoney(item.price)}</td>
+            <td class="text-right" style="font-weight: 800; font-family: monospace; color: #0f172a;">${formatMoney(item.price * item.quantity)}</td>
           </tr>
-        </thead>
-        <tbody style="font-size: 12px; color: #1e293b;">
-          ${(budget.items || []).map((item) => `
-            <tr style="border-bottom: 1px solid #f1f5f9;">
-              <td style="padding: 12px 10px;">
-                <div style="font-weight: bold;">${item.name}</div>
-                <div style="font-size: 10px; color: #94a3b8;">${item.detail || ''}</div>
-              </td>
-              <td style="padding: 12px 10px; text-align: right;">${item.quantity}</td>
-              <td style="padding: 12px 10px; text-align: center;">${item.unit || 'UN'}</td>
-              <td style="padding: 12px 10px; text-align: right;">${formatMoney(item.price)}</td>
-              <td style="padding: 12px 10px; text-align: right; font-weight: bold;">${formatMoney(item.price * item.quantity)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+        `).join('')}
+      </tbody>
+    </table>
 
-      <div class="totals" style="display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
-        <div class="total-row" style="width: 200px; display: flex; justify-content: space-between; font-size: 12px; color: #64748b;">
-          <span>Subtotal:</span>
-          <span>${formatMoney(budget.subtotal)}</span>
+    <!-- TOTALIZADORES -->
+    <div class="summary-section">
+      <div class="summary-box">
+        <div class="summary-row">
+          <span>Subtotal dos Produtos:</span>
+          <span style="font-weight: 700; font-family: monospace;">${formatMoney(budget.subtotal)}</span>
         </div>
-        <div class="total-row" style="width: 200px; display: flex; justify-content: space-between; font-size: 12px; color: #64748b;">
-          <span>Descontos:</span>
-          <span>${formatMoney(budget.discount || 0)}</span>
+        ${budget.discount > 0 ? `
+        <div class="summary-row" style="color: #dc2626;">
+          <span>Desconto Comercial Concedido:</span>
+          <span style="font-weight: 700; font-family: monospace;">- ${formatMoney(budget.discount)}</span>
         </div>
-        <div class="total-row total-final" style="width: 250px; display: flex; justify-content: space-between; font-size: 18px; font-weight: 900; color: #000; border-top: 2px solid #000; padding-top: 10px; margin-top: 5px;">
-          <span>TOTAL A PAGAR:</span>
-          <span>${formatMoney(budget.total)}</span>
+        ` : ''}
+        <div class="summary-row">
+          <span>Frete (${freight}):</span>
+          <span style="font-weight: 700;">${freight === 'CIF' ? 'Incluso' : 'Por conta do cliente'}</span>
+        </div>
+        <div class="summary-row total-row">
+          <span>VALOR TOTAL DA PROPOSTA:</span>
+          <span style="color: #0891b2; font-family: monospace;">${formatMoney(budget.total)}</span>
         </div>
       </div>
+    </div>
 
-      <div style="margin-top: 60px; border-top: 1px dotted #ccc; padding-top: 30px; display: flex; justify-content: space-between; gap: 40px;">
-        <div style="flex: 1; text-align: center;">
-          <div style="border-bottom: 1px solid #000; margin-bottom: 5px; height: 1px;"></div>
-          <p style="font-size: 10px; text-transform: uppercase;">Assinatura do Responsável</p>
+    <!-- DADOS BANCÁRIOS E PIX -->
+    <div class="financial-box">
+      <div class="qr-container">
+        <img src="${qrCodeUrl}" alt="QR Code PIX para Pagamento" />
+        <div class="qr-label">QR CODE PIX OFICIAL</div>
+      </div>
+      <div class="bank-info">
+        <h4>Instruções Financeiras para Faturamento e Quitação</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 10px; color: #334155;">
+          <div><strong>Banco:</strong> ${bank.bankName || 'A Combinar'}</div>
+          <div><strong>Agência:</strong> ${bank.agency || '0001'} | <strong>Conta:</strong> ${bank.account || '00000-0'}</div>
+          <div><strong>Favorecido:</strong> ${company.companyName}</div>
+          <div><strong>Chave PIX (${bank.pixType || 'Chave'}):</strong> <span style="font-family: monospace; font-weight: 700; color: #0891b2;">${pixKey}</span></div>
         </div>
-        <div style="flex: 1; text-align: center;">
-          <div style="border-bottom: 1px solid #000; margin-bottom: 5px; height: 1px;"></div>
-          <p style="font-size: 10px; text-transform: uppercase;">${budget.clientName}</p>
+        <div style="margin-top: 6px;">
+          <span style="font-size: 8.5px; font-weight: 700; color: #475569;">Código PIX Copia e Cola (Pagamento / Sinal):</span>
+          <div class="pix-payload-box">${pixPayload || pixKey}</div>
         </div>
       </div>
-    `;
-    printDocument(`Orcamento_${getBudgetDisplayId(budget)}_${budget.clientName.replace(/\s+/g, '_')}`, html);
+    </div>
+
+    <!-- TERMOS E CLÁUSULAS GERAIS DE FORNECIMENTO -->
+    <div class="terms-card">
+      <h4>Termos Gerais de Fornecimento e Condições de Fornecimento</h4>
+      <ol>
+        <li><strong>Validade da Proposta:</strong> Os preços e condições apresentados são válidos impreterivelmente até <strong>${budget.expiryDate}</strong>. Após esta data, os itens estão sujeitos a reajuste e confirmação de estoque.</li>
+        <li><strong>Logística e Descarga:</strong> Conforme modalidade <strong>${freight}</strong>, o descarregamento no destino corre sob responsabilidade exclusiva do comprador, ressalvado acordo prévio formal.</li>
+        <li><strong>Faturamento e Títulos:</strong> Operações a prazo sujeitas a prévia análise de crédito. Títulos não liquidados até o vencimento incorrem em juros legais e encargos previstos em lei.</li>
+        <li><strong>Garantia de Qualidade:</strong> Produtos fornecidos com garantia de fábrica e em conformidade estrita com as normas técnicas pertinentes.</li>
+      </ol>
+    </div>
+
+    <!-- ASSINATURAS E DE ACORDO -->
+    <div class="signatures-grid">
+      <div class="signature-block">
+        <div class="signature-line"></div>
+        <p class="signature-name">${company.tradeName || company.companyName}</p>
+        <p class="signature-title">Departamento Comercial / Emissor Autorizado</p>
+      </div>
+
+      <div class="signature-block">
+        <div class="signature-line"></div>
+        <p class="signature-name">${budget.clientName}</p>
+        <p class="signature-title">De Acordo do Cliente / Carimbo e Assinatura (Data: ____/____/________)</p>
+      </div>
+    </div>
+
+    <!-- RODAPÉ -->
+    <div class="footer">
+      <span>InfraCore ERP Beta • Gestão Comercial e Faturamento Integrado</span>
+      <span>Documento gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}</span>
+      <span>Autenticação: INFRA-${budget.id}-${Date.now().toString(36).toUpperCase()}</span>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    printDocument(`Proposta_Comercial_${getBudgetDisplayId(budget)}_${budget.clientName.replace(/\s+/g, '_')}`, html);
   };
 
-  // Impressão do Recibo da Venda
+  // Impressão do Recibo Executivo da Venda
   const handlePrintSale = (sale: Sale) => {
     const company = settings || {
-      companyName: 'INFRACORE ERP',
-      tradeName: 'Sistemas de Gestão',
-      document: '00.000.000/0000-00',
+      companyName: 'INFRACORE ERP SISTEMAS LTDA',
+      tradeName: 'InfraCore ERP',
+      document: '00.000.000/0001-00',
       email: 'contato@infracore.com.br',
-      phone: '(11) 99999-9999',
-      address: 'Endereço Padrão do Sistema'
+      phone: '(11) 4002-8922',
+      address: 'Av. Industrial, 1200 - Distrito Industrial, São Paulo - SP'
     } as AppSettings;
 
     const client = (clients || []).find(c => c.id === sale.clientId);
+    const saleNum = sale.id.split('-')[1] || sale.id;
+    const paymentLabel = getPaymentMethodLabel(sale.paymentMethod);
+    const installmentsLabel = sale.installments && sale.installments > 1 ? `${sale.installments}x` : 'À Vista';
 
-    const html = `
-      <div class="header" style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 20px; margin-bottom: 20px;">
-        <h2 style="margin: 0; font-size: 18px; text-transform: uppercase;">${company.tradeName || company.companyName}</h2>
-        <p style="margin: 2px 0; font-size: 11px;">${company.address}</p>
-        <p style="margin: 2px 0; font-size: 11px;">CNPJ: ${company.document}</p>
-        <p style="margin: 2px 0; font-size: 11px;">${company.phone}</p>
-      </div>
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Recibo de Venda #${saleNum} - ${sale.clientName}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+    @page {
+      size: A4 portrait;
+      margin: 15mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #0f172a;
+      background: #ffffff;
+      margin: 0;
+      padding: 0;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .header {
+      text-align: center;
+      border-bottom: 2px solid #0891b2;
+      padding-bottom: 14px;
+      margin-bottom: 18px;
+    }
+    .header h2 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 900;
+      color: #0891b2;
+      text-transform: uppercase;
+    }
+    .header p {
+      margin: 2px 0;
+      font-size: 10px;
+      color: #475569;
+    }
+    .title-box {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+    }
+    .grid-info {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .info-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 14px;
+    }
+    .info-card h4 {
+      margin: 0 0 6px 0;
+      font-size: 9px;
+      font-weight: 900;
+      color: #0891b2;
+      text-transform: uppercase;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 3px;
+    }
+    .info-card p {
+      margin: 3px 0;
+      font-size: 10.5px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+    }
+    th {
+      background: #0f172a;
+      color: #fff;
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      padding: 7px 8px;
+      text-align: left;
+    }
+    td {
+      padding: 7px 8px;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 10.5px;
+    }
+    tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+    .total-container {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 24px;
+    }
+    .total-box {
+      width: 250px;
+      background: #f8fafc;
+      border: 2px solid #0f172a;
+      border-radius: 6px;
+      padding: 10px 14px;
+      text-align: right;
+    }
+    .footer-receipt {
+      margin-top: 35px;
+      border-top: 1px dashed #cbd5e1;
+      padding-top: 14px;
+      text-align: center;
+      font-size: 9.5px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>${company.tradeName || company.companyName}</h2>
+    <p>CNPJ: ${company.document} | ${company.address}</p>
+    <p>Telefone: ${company.phone} | E-mail: ${company.email}</p>
+  </div>
 
-      <div style="text-align: center; margin-bottom: 20px;">
-        <h1 style="margin: 0; font-size: 24px; font-weight: 900;">RECIBO DE VENDA</h1>
-        <p style="margin: 5px 0 0 0; font-size: 14px;">Nº ${sale.id.split('-')[1] || sale.id}</p>
-        <p style="margin: 0; font-size: 12px; color: #555;">${sale.date}</p>
-      </div>
+  <div class="title-box">
+    <div>
+      <span style="font-size: 14px; font-weight: 900; text-transform: uppercase; color: #0f172a;">COMPROVANTE DE RECIBO DE VENDA</span>
+      <p style="margin: 2px 0 0 0; font-size: 10px; color: #64748b;">Operação Comercial Finalizada e Registrada</p>
+    </div>
+    <div style="text-align: right;">
+      <span style="font-size: 14px; font-weight: 900; color: #0891b2;">Nº ${saleNum}</span>
+      <p style="margin: 2px 0 0 0; font-size: 10px; color: #64748b;">Emissão: ${sale.date}</p>
+    </div>
+  </div>
 
-      <div style="margin-bottom: 20px; padding: 10px; border: 1px solid #eee; border-radius: 6px;">
-        <p style="margin: 0 0 5px 0; font-size: 12px;"><strong>Cliente:</strong> ${sale.clientName}</p>
-        ${client?.document ? `<p style="margin: 0 0 5px 0; font-size: 12px;"><strong>CPF/CNPJ:</strong> ${client.document}</p>` : ''}
-        <p style="margin: 0 0 5px 0; font-size: 12px;"><strong>Método de Pagamento:</strong> ${getPaymentMethodLabel(sale.paymentMethod)}</p>
-        ${sale.vehicleId ? `<p style="margin: 0; font-size: 12px;"><strong>Veículo:</strong> ${fleet.find(v => v.id === sale.vehicleId)?.plate || 'N/A'}</p>` : ''}
-      </div>
+  <div class="grid-info">
+    <div class="info-card">
+      <h4>Dados do Destinatário</h4>
+      <p><strong>Cliente:</strong> ${sale.clientName}</p>
+      ${client?.document ? `<p><strong>CPF/CNPJ:</strong> ${client.document}</p>` : ''}
+      ${client?.phone ? `<p><strong>Telefone:</strong> ${client.phone}</p>` : ''}
+    </div>
+    <div class="info-card">
+      <h4>Dados da Transação</h4>
+      <p><strong>Forma de Pagamento:</strong> ${paymentLabel} (${installmentsLabel})</p>
+      <p><strong>Status Financeiro:</strong> <span style="font-weight: 800; color: ${sale.status === 'Conciliado' ? '#16a34a' : '#d97706'};">${sale.status || 'Conciliado'}</span></p>
+      ${sale.vehicleId ? `<p><strong>Veículo / Placa:</strong> ${fleet.find(v => v.id === sale.vehicleId)?.plate || 'Frota'}</p>` : ''}
+      ${sale.driverName ? `<p><strong>Condutor:</strong> ${sale.driverName}</p>` : ''}
+    </div>
+  </div>
 
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-        <thead>
-          <tr style="border-bottom: 1px solid #000;">
-            <th style="font-size: 10px; text-align: left; padding: 5px 0;">DESCRIÇÃO</th>
-            <th style="font-size: 10px; text-align: right; padding: 5px 0;">QTD</th>
-            <th style="font-size: 10px; text-align: right; padding: 5px 0;">VL UN.</th>
-            <th style="font-size: 10px; text-align: right; padding: 5px 0;">TOTAL</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${(sale.items || []).map(item => `
-            <tr style="border-bottom: 1px dashed #eee;">
-              <td style="font-size: 11px; padding: 5px 0;">${item.name}</td>
-              <td style="font-size: 11px; text-align: right; padding: 5px 0;">${item.quantity} ${item.unit}</td>
-              <td style="font-size: 11px; text-align: right; padding: 5px 0;">${formatMoney(item.price)}</td>
-              <td style="font-size: 11px; text-align: right; padding: 5px 0;">${formatMoney(item.price * item.quantity)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 25px; text-align: center;">#</th>
+        <th>Descrição</th>
+        <th style="width: 60px; text-align: center;">UN</th>
+        <th style="width: 70px; text-align: right;">QTD</th>
+        <th style="width: 90px; text-align: right;">Preço Unit.</th>
+        <th style="width: 100px; text-align: right;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(sale.items || []).map((item, idx) => `
+        <tr>
+          <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+          <td><strong>${item.name}</strong></td>
+          <td style="text-align: center;">${item.unit}</td>
+          <td style="text-align: right; font-family: monospace;">${item.quantity}</td>
+          <td style="text-align: right; font-family: monospace;">${formatMoney(item.price)}</td>
+          <td style="text-align: right; font-weight: 700; font-family: monospace;">${formatMoney(item.price * item.quantity)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
 
-      <div style="border-top: 1px solid #000; padding-top: 10px; margin-bottom: 30px;">
-        <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;">
-          <span>TOTAL PAGO:</span>
-          <span>${formatMoney(sale.amount)}</span>
-        </div>
-      </div>
+  <div class="total-container">
+    <div class="total-box">
+      <div style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: 700;">VALOR TOTAL PAGO</div>
+      <div style="font-size: 20px; font-weight: 900; color: #0891b2; font-family: monospace;">${formatMoney(sale.amount)}</div>
+    </div>
+  </div>
 
-      <div style="text-align: center; font-size: 10px; color: #555; margin-top: 40px;">
-        <p>Obrigado pela preferência!</p>
-        <p>Documento sem valor fiscal.</p>
-      </div>
-    `;
+  <div class="footer-receipt">
+    <p style="margin: 0 0 3px 0; font-weight: 700;">Agradecemos pela preferência e confiança em nossos serviços!</p>
+    <p style="margin: 0; font-size: 8.5px;">Documento de controle interno emitido eletronicamente via InfraCore ERP • Sem valor fiscal imediato.</p>
+  </div>
+</body>
+</html>`;
 
     printDocument(`Recibo_${sale.id}`, html);
   };
@@ -2187,12 +2867,34 @@ const Sales = () => {
                 </div>
               </div>
 
+              {/* Detalhes Comerciais e Logística */}
+              <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 dark:bg-gray-700/40 rounded-xl text-xs border border-slate-100 dark:border-gray-600">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Frete</span>
+                  <span className="font-bold text-slate-700 dark:text-slate-200">
+                    {(selectedBudget as any).freightType || 'FOB'} - {(selectedBudget as any).freightType === 'CIF' ? 'Incluso (Emitente)' : (selectedBudget as any).freightType === 'Sem Frete' ? 'Retirada no Local' : 'Destinatário'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Prazo de Entrega</span>
+                  <span className="font-bold text-slate-700 dark:text-slate-200">
+                    {(selectedBudget as any).deliveryDays ? `${(selectedBudget as any).deliveryDays} dias úteis` : '5 dias úteis (Padrão)'}
+                  </span>
+                </div>
+                {(selectedBudget as any).commercialNotes && (
+                  <div className="col-span-2 pt-1 border-t border-slate-200/60 dark:border-gray-600">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Condições Comerciais</span>
+                    <span className="text-slate-600 dark:text-slate-300 font-medium">{(selectedBudget as any).commercialNotes}</span>
+                  </div>
+                )}
+              </div>
+
               <div className="flex flex-wrap gap-3 pt-2">
                 <button
                   onClick={() => handlePrintBudget(selectedBudget)}
-                  className="flex-1 py-3 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 text-slate-700 dark:text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors text-xs"
+                  className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-md shadow-cyan-600/20 transition-all text-xs"
                 >
-                  <Printer size={16} /> Imprimir Orçamento
+                  <Printer size={16} /> Imprimir Proposta Executiva A4
                 </button>
                 {selectedBudget.status !== 'Convertido' && (
                   <button
@@ -3465,6 +4167,43 @@ const Sales = () => {
                                   placeholder="Nome do Condutor"
                                 />
                               </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-gray-600">
+                              <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Modalidade de Frete</label>
+                                <select
+                                  value={freightType}
+                                  onChange={e => setFreightType(e.target.value as 'CIF' | 'FOB' | 'Sem Frete')}
+                                  className="w-full p-2.5 bg-white dark:bg-gray-600 border border-slate-200 dark:border-gray-500 rounded-lg text-xs font-bold text-slate-800 dark:text-white"
+                                >
+                                  <option value="FOB">FOB (Destinatário)</option>
+                                  <option value="CIF">CIF (Emitente - Incluso)</option>
+                                  <option value="Sem Frete">Sem Frete / Retirada</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Prazo de Entrega (Dias Úteis)</label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={deliveryDays}
+                                  onChange={e => setDeliveryDays(Math.max(0, parseInt(e.target.value) || 0))}
+                                  className="w-full p-2.5 bg-white dark:bg-gray-600 border border-slate-200 dark:border-gray-500 rounded-lg text-xs font-bold text-slate-800 dark:text-white"
+                                  placeholder="Ex: 5"
+                                />
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Condições Comerciais / Observações da Proposta</label>
+                              <input
+                                type="text"
+                                value={commercialNotes}
+                                onChange={e => setCommercialNotes(e.target.value)}
+                                className="w-full p-2.5 bg-white dark:bg-gray-600 border border-slate-200 dark:border-gray-500 rounded-lg text-xs font-bold text-slate-800 dark:text-white"
+                                placeholder="Ex: Entrada 50% + saldo na entrega. Descarga por conta do cliente..."
+                              />
                             </div>
 
                             {requiresWeighing && (

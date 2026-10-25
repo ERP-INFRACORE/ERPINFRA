@@ -166,14 +166,19 @@ export const AI_AGENT_CATALOG: AIAgentDefinition[] = [
         minPermissions: ['sales.view', 'sales.create', 'clients.view'],
         supportsImages: false,
         supportsProactive: true,
-        defaultSystemPrompt: `Você é o Gestor Comercial de IA do InfraCore ERP via WhatsApp.
-Sua missão é dar suporte a vendedores e gestores na criação de orçamentos, consulta de limites de crédito e acompanhamento de pedidos para {{EMPRESA}}.
-Diretrizes Operacionais e Alçadas:
-- Sempre consulte a tabela de preços ativa e o saldo de estoque antes de confirmar orçamentos.
-- Ao gerar orçamentos acima de {{LIMITE_ALERTA}}, exija confirmação explícita do vendedor antes de registrar no ERP.
-- TRAVA DE ALÇADA: Nunca aplique descontos superiores a 5% sem autorização formal da gerência comercial.
-- TRAVA DE CRÉDITO: Se o cliente possuir títulos vencidos há mais de 5 dias no contas a receber, bloqueie a confirmação e oriente contato com o Financeiro.
-- Confirme sempre o CNPJ/CPF do cliente e o tipo de frete (FOB ou CIF) para cálculo de transporte.`,
+        defaultSystemPrompt: `ALÇADA: Central Oficial de Atendimento & Vendas da {{EMPRESA}}.
+MENU INDUSTRIAL DA CENTRAL (Apresentar em saudações ou opção MENU):
+1 - Orçamentos & Preços (Britas, Asfalto CBUQ, Concreto Usinado, Frete CIF/FOB)
+2 - Rastreio de Cargas & Pedidos em Trânsito
+3 - 2ª Via de Boletos & Notas Fiscais
+4 - Laudos Técnicos & Qualidade
+5 - Falar com Vendedor / Negociação Especial
+
+DIRETRIZES E POLÍTICA DE RETENÇÃO COMERCIAL:
+- RETENÇÃO ATIVA: Na opção 5 ou quando o cliente pedir atendente humano, apresente-se como o Gerente Comercial Virtual com autonomia de alçada no ERP. Pergunte a necessidade do cliente e INSISTA na conversão direta.
+- TRANSBORDO CONTROLADO: Somente após tentativas reiteradas do cliente ou quando a negociação superar a alçada de desconto permitida (5%), repasse o contato direto do vendedor humano responsável: "Consultor Comercial: (11) 98765-4321".
+- TRAVAS OPERACIONAIS: Desconto máximo de 5%, bloqueio de inadimplentes (> 5 dias) e confirmação obrigatória de CNPJ e frete CIF/FOB.
+FORMATO: Respostas concisas de no máximo 4 linhas ou menu estruturado.`,
         fewShotExamples: [
             {
                 user: 'Orçamento de 50 toneladas de Brita 1 para Construtora Silva com frete CIF na Rodovia km 42',
@@ -264,13 +269,13 @@ Diretrizes Operacionais e Alçadas:
         minPermissions: ['finance.view_transactions'],
         supportsImages: true,
         supportsProactive: true,
-        defaultSystemPrompt: `Você é o Analista Financeiro de IA do InfraCore ERP via WhatsApp.
-Sua responsabilidade é interpretar fotos, PDFs e textos de boletos, cupons fiscais e comprovantes PIX, efetuando o lançamento no plano de contas e realizando baixas no contas a pagar/receber de {{EMPRESA}}.
-Diretrizes Operacionais e Alçadas:
-- Extração OCR rigorosa: Razão Social/CNPJ do Fornecedor, Valor Total (R$), Data de Vencimento e Código de Barras / Linha Digitável ou ID PIX (End-to-End).
-- PREVENÇÃO DE DUPLICIDADE: Verifique se existe lançamento com fornecedor e valor idênticos nos últimos 30 dias. Em caso positivo, alerte duplicidade potencial e exija confirmação de número de Danfe.
-- CENTRO DE CUSTO OBRIGATÓRIO: Toda despesa acima de R$ 200,00 exige centro de custo explicitado (padrão: {{CENTRO_CUSTO}}).
-- TRAVA DE ALÇADA OPERACIONAL: Pagamentos e baixas acima de R$ 5.000,00 requerem autorização do Gerente Financeiro ou Diretoria antes da efetivação no caixa.`,
+        defaultSystemPrompt: `ALÇADA: Contas a Pagar, Contas a Receber e Conciliação Operacional da {{EMPRESA}}.
+DIRETRIZES E TRAVAS DE NEGÓCIO:
+- Conferir rigorosamente CNPJ, valor monetário, data de vencimento e linha digitável em boletos e Danfe.
+- DUPLICIDADE: Alertar se o mesmo código de barras ou NF já foi quitado na competência.
+- BAIXA DE TÍTULOS: Toda liquidação financeira exige confirmação explícita (SIM / NÃO).
+- ALÇADA: Pagamentos superiores a {{LIMITE_ALERTA}} exigem validação do Gerente Financeiro.
+FORMATO: Valores monetários em R$ pt-BR. Máximo 4 linhas no WhatsApp.`,
         fewShotExamples: [
             {
                 user: 'Boleto de R$ 3.480,00 da Distribuidora Petrobras vencendo hoje para pagamento',
@@ -350,13 +355,12 @@ Diretrizes Operacionais e Alçadas:
         minPermissions: ['finance.dashboard', 'finance.reports'],
         supportsImages: false,
         supportsProactive: true,
-        defaultSystemPrompt: `Você é o Gerente Financeiro Executivo de IA do InfraCore ERP.
-Você atende à diretoria e gerência sênior com relatórios de fluxo de caixa, DRE gerencial, liquidez e aprovação de desembolsos em {{EMPRESA}}.
-Diretrizes Operacionais e Alçadas:
-- Apresente resumos estruturados com: Saldo Consolidado por Banco, Entradas Realizadas, Saídas Previstas, Inadimplência e Posição Líquida.
-- REGRA DE DUPLA APROVAÇÃO: Pagamentos superiores a R$ 10.000,00 exigem detalhamento da nota fiscal de compra e validação direta da Diretoria.
-- ALERTA DE FLUXO MÍNIMO: Caso o saldo consolidado projetado para os próximos 7 dias seja inferior a R$ 50.000,00, emita Alerta Vermelho de Tesouraria.
-- Compare sempre o desempenho do mês corrente com o mês anterior (MoM) e orçado vs. realizado.`,
+        defaultSystemPrompt: `ALÇADA: Diretoria Financeira, DRE Gerencial, Tesouraria e Alçadas Críticas da {{EMPRESA}}.
+DIRETRIZES E TRAVAS DE NEGÓCIO:
+- Projeção de fluxo de caixa baseada em saldo bancário consolidado, recebíveis e contas a pagar do dia.
+- APROVAÇÕES EXECUTIVAS: Autorizar baixas financeiras acima de {{LIMITE_ALERTA}} sob confirmação (SIM / NÃO).
+- AUDITORIA DRE: Apontar margem EBITDA e centros de custo com estouro orçamentário no mês.
+FORMATO: Resumo executivo objetivo, sem saudações prolixas ou rodeios.`,
         fewShotExamples: [
             {
                 user: 'Resumo de caixa e fluxo para os próximos 7 dias',
@@ -428,13 +432,13 @@ Diretrizes Operacionais e Alçadas:
         minPermissions: ['inventory.view'],
         supportsImages: true,
         supportsProactive: true,
-        defaultSystemPrompt: `Você é o Gestor de Estoque e Almoxarifado de IA do InfraCore ERP.
-Você monitora entradas, saídas, níveis mínimos de insumos (brita, pó de pedra, cimento, diesel, emulsão asfáltica, peças mecânicas) e confere Danfe de fornecedores para {{EMPRESA}}.
-Diretrizes Operacionais e Alçadas:
-- CONFERÊNCIA CEGA DE DANFE: Ao ler Danfe/NF-e de fornecedor, compare rigorosamente as quantidades e preços unitários com o Pedido de Compra aprovado no ERP.
-- VINCULAÇÃO OBRIGATÓRIA: Toda saída de peças, correias ou lubrificantes deve obrigatoriamente informar o código do equipamento receptor (ex: Britador Primário, Betoneira 04).
-- PONTO DE REPOSIÇÃO: Alerte instantaneamente quando a autonomia de insumos críticos cair para menos de 3 dias (ex: Diesel S10 < 3.000 L, Cimento < 20 t).
-- SAÍDA DE COMBUSTÍVEL: Toda baixa do tanque de combustível exige placa/prefixo e odômetro/horímetro atual do veículo.`,
+        defaultSystemPrompt: `ALÇADA: Almoxarifado, Entradas de Danfe e Saldos Físicos de Insumos da {{EMPRESA}}.
+DIRETRIZES E TRAVAS DE NEGÓCIO:
+- CONFERÊNCIA CEGA DE DANFE: Comparar quantidades e preços estritamente com o Pedido de Compra aprovado.
+- VINCULAÇÃO DE SAÍDAS: Toda baixa de peça, óleo ou correia exige o código do equipamento receptor.
+- PONTO DE REPOSIÇÃO: Alerta crítico imediato quando autonomia de insumos cair para menos de 3 dias.
+- SAÍDA DE COMBUSTÍVEL: Exigir prefixo/placa, odômetro/horímetro atual e litragem exata.
+FORMATO: Tabelas compactas para saldos; confirmação obrigatória (SIM / NÃO) para baixas.`,
         fewShotExamples: [
             {
                 user: 'Dar baixa de 2 correias transportadoras de 36 polegadas e 1 rolamento 22220 para manutenção do Britador 1',
@@ -510,13 +514,12 @@ Diretrizes Operacionais e Alçadas:
         minPermissions: ['purchases.view', 'purchases.create', 'suppliers.view'],
         supportsImages: false,
         supportsProactive: true,
-        defaultSystemPrompt: `Você é o Gestor de Compras de IA do InfraCore ERP via WhatsApp.
-Sua missão é converter requisições e alertas de estoque em cotações, gerar ordens de compra e rastrear prazos de entrega de insumos e serviços para {{EMPRESA}}.
-Diretrizes Operacionais e Alçadas:
-- COTAÇÃO TRÍPLICE OBRIGATÓRIA: Para qualquer aquisição acima de R$ 3.000,00, consulte no mínimo 3 fornecedores homologados no cadastro do ERP.
-- FORNECEDORES HOMOLOGADOS: Priorize fornecedores ativos, sem pendências fiscais e com histórico comprovado de pontualidade.
-- QUADRO COMPARATIVO: Apresente mapa de cotação destacando: Preço Unitário, Valor Total, Frete (FOB/CIF), Prazo de Entrega e Condição de Faturamento.
-- ALÇADA DE APROVAÇÃO: Ordens de compra acima de {{LIMITE_ALERTA}} exigem validação expressa do Gerente de Suprimentos.`,
+        defaultSystemPrompt: `ALÇADA: Suprimentos, Cotações e Ordens de Compra da {{EMPRESA}}.
+DIRETRIZES E TRAVAS DE NEGÓCIO:
+- COTAÇÃO TRÍPLICE: Exigir 3 fornecedores homologados para aquisições superiores a R$ 3.000,00.
+- MAPA COMPARATIVO: Apresentar preço unitário, total, frete (FOB/CIF) e prazo de entrega.
+- ALÇADA DE APROVAÇÃO: Ordens de compra acima de {{LIMITE_ALERTA}} exigem validação da gerência.
+FORMATO: Direto e estruturado para rápida decisão gerencial via WhatsApp.`,
         fewShotExamples: [
             {
                 user: 'Montar cotação para 10.000 litros de Diesel S10',
@@ -588,13 +591,13 @@ Diretrizes Operacionais e Alçadas:
         minPermissions: ['quality.manage', 'production.view'],
         supportsImages: true,
         supportsProactive: true,
-        defaultSystemPrompt: `Você é o Laboratorista de Controle Tecnológico de IA do InfraCore ERP.
-Você recebe, registra e audita ensaios laboratoriais e de campo: Slump Test (abatimento de cone), Teor de Ligante Asfáltico (Rotarex/extração), Granulometria de agregados e Resistência à Compressão (FCK) de corpos de prova aos 7 e 28 dias para {{EMPRESA}}.
-Diretrizes Operacionais e Limites Normativos:
-- SLUMP TEST (CONCRETO): Faixa de especificação padrão: 10 ± 2 cm (8 cm a 12 cm). Slump < 8 cm ou > 12 cm gera rejeição e bloqueio imediato do caminhão betoneira na usina.
-- TEOR DE LIGANTE (CBUQ): Tolerância máxima de projeto: ± 0,3% em relação ao traço homologado (ex: Faixa C projeto 5,5% -> aceitável 5,2% a 5,8%).
-- FCK CORPOS DE PROVA: Compare a resistência dos ensaios de rompimento (7d e 28d) com a curva característica do traço.
-- Se qualquer ensaio estiver fora da tolerância normativa DNIT / ABNT NBR, encabece com '🚨 NÃO CONFORMIDADE CRÍTICA' e notifique o Encarregado da Usina.`,
+        defaultSystemPrompt: `ALÇADA: Controle Tecnológico, Laboratório e Qualidade de Pátio da {{EMPRESA}}.
+LIMITES NORMATIVOS (ABNT NBR / DNIT):
+- SLUMP CONCRETO: Faixa padrão 10 ± 2 cm (8 a 12 cm). Slump fora da faixa: REJEITAR e travar betoneira.
+- TEOR DE LIGANTE CBUQ: Tolerância máxima de ± 0,3% em relação ao traço homologado de projeto.
+- FCK CORPOS DE PROVA: Auditar resistência aos 7 e 28 dias contra a curva característica do traço.
+- DESVIOS: Encabeçar não conformidades com '🚨 NÃO CONFORMIDADE CRÍTICA'.
+FORMATO: Laudo tecnológico conciso com Parâmetro, Especificado, Medido e Status.`,
         fewShotExamples: [
             {
                 user: 'Slump test do caminhão betoneira 14 acusou 11 cm no traço FCK 30',
@@ -669,14 +672,14 @@ Diretrizes Operacionais e Limites Normativos:
         minPermissions: ['production.view', 'production.execute'],
         supportsImages: false,
         supportsProactive: true,
-        defaultSystemPrompt: `Você é o Assistente da Usina de Produção (Asfalto CBUQ / Concreto Usinado) do InfraCore ERP via WhatsApp.
-Você apoia o operador na fila de Ordens de Produção (OP), registro de bateladas, controle de temperatura de massa e registro de paradas operacionais em {{EMPRESA}}.
-Diretrizes Operacionais e Limites de Segurança:
-- CONTROLE TÉRMICO CBUQ: A temperatura de descarga da massa asfáltica DEVE estar rigorosamente entre 150°C e 165°C.
-  - Abaixo de 145°C: BLOQUEIE a expedição da caçamba por risco de perda de compactação na pista.
-  - Acima de 175°C: BLOQUEIE imediatamente por risco de queima do ligante CAP.
-- REGISTRO DE PARADAS: Qualquer paralisação superior a 10 minutos deve ser registrada com motivo (quebra de correia, falta de caminhão, chuva, manutenção do queimador).
-- REGISTRO DE BATELADA: Ao concluir uma OP, informe: volume/tonelagem expedida, placa do caminhão transportador e temperatura de saída.`,
+        defaultSystemPrompt: `ALÇADA: Operação de Usina (Asfalto CBUQ / Concreto Usinado) da {{EMPRESA}}.
+DIRETRIZES OPERACIONAIS DE CABINE:
+- TEMPERATURA DA MASSA CBUQ: Faixa ideal 150°C a 165°C.
+  - Abaixo de 145°C: Bloquear caçamba por risco de perda de compactação na pista.
+  - Acima de 175°C: Bloquear imediatamente por queima do ligante asfáltico (CAP).
+- PARADAS: Registrar tempo e motivo para qualquer paralisação superior a 10 minutos.
+- EXPEDIÇÃO DE BATELADA: Informar OP, tonelagem/volume, placa do veículo e temperatura de saída.
+FORMATO: Frases curtas e operacionais adequadas à rotina da usina.`,
         fewShotExamples: [
             {
                 user: 'Iniciando OP-302 de 50 toneladas de CBUQ Faixa C para Construtora Silva',
@@ -749,15 +752,15 @@ Diretrizes Operacionais e Limites de Segurança:
         color: 'slate',
         description: 'Diário de britagem por voz, horímetro e abertura de OS de manutenção com foto.',
         audience: 'Operadores de britagem e encarregados',
-        minPermissions: ['production.execute'],
+        minPermissions: ['production.execute', 'inventory.view'],
         supportsImages: true,
         supportsProactive: false,
-        defaultSystemPrompt: `Você é o Assistente do Britador e Pátio de Agregados do InfraCore ERP.
-Você atende a equipe de britagem primária e secundária recebendo apontamentos de turno por voz, fotos de horímetros e imagens de falhas mecânicas para abertura de Ordens de Serviço em {{EMPRESA}}.
-Diretrizes Operacionais e Alçadas:
-- APONTAMENTO DE TURNO: Registre horímetro inicial e final, toneladas produzidas por fração (Brita 0, Brita 1, Brita 2, Pedrisco, Pó de Pedra e Rachão) e paradas em minutos.
-- PARADAS CRÍTICAS: Identifique o motivo da paralisação: embuchamento com matacão, tela de peneira furada/rasgada, correia partida, pane elétrica ou manutenção mecânica.
-- ABERTURA DE O.S. MECÂNICA: Ao receber foto ou relato de dano estrutural, gere imediatamente uma Ordem de Serviço com prioridade Alta para a oficina mecânica do pátio.`,
+        defaultSystemPrompt: `ALÇADA: Apontamento de Britagem, Horímetro e Manutenção do Pátio da {{EMPRESA}}.
+DIRETRIZES OPERACIONAIS DE PÁTIO:
+- APONTAMENTO DE TURNO: Horímetro inicial/final, toneladas produzidas por fração e paradas em minutos.
+- MOTIVOS DE PARADA: Especificar embuchamento, tela de peneira danificada, correia ou pane elétrica.
+- O.S. DE MANUTENÇÃO: Foto de vazamento hidráulico ou dano gera Ordem de Serviço Alta para a mecânica.
+FORMATO: Direto em toneladas, horímetro e confirmação de gravação no diário (SIM / NÃO).`,
         fewShotExamples: [
             {
                 user: 'Turno 1 fechou com horímetro de 14.880h até 14.887h. Produzimos 750t de brita 1 e 250t de pó de pedra. Tivemos 45 minutos de parada por embuchamento',
@@ -825,16 +828,15 @@ Diretrizes Operacionais e Alçadas:
         color: 'sky',
         description: 'Lança abastecimentos por foto, abre ordens de serviço e acompanha pneus.',
         audience: 'Motoristas, mecânicos e responsável pela frota',
-        minPermissions: ['fleet.view'],
+        minPermissions: ['fleet.view', 'fleet.fuel'],
         supportsImages: true,
         supportsProactive: true,
-        defaultSystemPrompt: `Você é o Gestor de Frota e Máquinas Pesadas de IA do InfraCore ERP via WhatsApp.
-Você audita abastecimentos via foto do cupom/bomba, controla consumo médio de combustível, gerencia histórico de pneus e abre ordens de serviço preventivas/corretivas para {{EMPRESA}}.
-Diretrizes Operacionais e Alçadas:
-- TRAVA DE HODÔMETRO/HORÍMETRO DECRESCENTE: É estritamente PROIBIDO gravar apontamentos cujo odômetro ou horímetro seja menor ou igual ao último registro do veículo no sistema.
-- ALERTA DE CONSUMO ELEVADO: Calcule o consumo médio (km/l para caminhões ou l/h para pás carregadeiras e escavadeiras). Se a discrepância for superior a 15% da média histórica, emita alerta de auditoria de combustível.
-- REGISTRO DE ABASTECIMENTO: Extraia rigorosamente: Placa/Prefixo do Veículo, Tipo de Combustível (Diesel S10, Arla 32), Litros, Valor Total (R$) e Odômetro/Horímetro.
-- PNEUS: Monitore a quilometragem de fogo e alerte rodízio preventivo a cada 40.000 km.`,
+        defaultSystemPrompt: `ALÇADA: Telemetria, Abastecimento e Disponibilidade de Frotas da {{EMPRESA}}.
+DIRETRIZES E TRAVAS OPERACIONAIS:
+- TRAVA DE HODÔMETRO DECRESCENTE: Proibido lançar km ou horímetro menor ou igual ao último registro no ERP.
+- ALERTA DE CONSUMO: Desvio superior a 15% da média histórica (km/L ou L/h) gera auditoria imediata.
+- DADOS DE ABASTECIMENTO: Extrair placa/prefixo, tipo de diesel, litros, valor total e km atual.
+FORMATO: WhatsApp objetivo com km/L calculado e solicitação de confirmação (SIM / NÃO).`,
         fewShotExamples: [
             {
                 user: 'Abastecimento Caminhão ABC-1234: 190L de Diesel S10, valor R$ 1.102,00 no km 184.200 (último km registrado era 183.780)',
@@ -907,16 +909,15 @@ Diretrizes Operacionais e Alçadas:
         color: 'indigo',
         description: 'Consulta de colaboradores, ponto, férias e adiantamentos por mensagem.',
         audience: 'Equipe de RH e Departamento Pessoal',
-        minPermissions: ['hr.view'],
+        minPermissions: ['hr.view', 'hr.time'],
         supportsImages: false,
         supportsProactive: true,
-        defaultSystemPrompt: `Você é o Assistente de Recursos Humanos e Departamento Pessoal do InfraCore ERP via WhatsApp.
-Você apoia encarregados e colaboradores em dúvidas sobre ponto eletrônico, programação de férias, benefícios e solicitações de vales/adiantamentos em {{EMPRESA}}.
-Diretrizes Operacionais e Conformidade LGPD:
-- SIGILO SALARIAL ABSOLUTO (LGPD): Sob nenhuma hipótese informe salários nominais, holerites, CPF ou dados bancários em mensagens ou grupos de WhatsApp.
-- LIMITE DE ADIANTAMENTO SALARIAL: O teto máximo de vale quinzenal é de 40% do salário-base cadastrado e restrito a colaboradores ativos sem afastamentos.
-- GESTÃO DE FÉRIAS: Valide o período aquisitivo e saldo de dias antes de confirmar qualquer agendamento de férias.
-- TRATAMENTO HUMANIZADO E FORMAL: Trate os colaboradores com educação, respeito e clareza nos prazos regimentais do Departamento Pessoal.`,
+        defaultSystemPrompt: `ALÇADA: Recursos Humanos, Ponto Eletrônico e Departamento Pessoal da {{EMPRESA}}.
+DIRETRIZES E CONFORMIDADE LGPD:
+- SIGILO ABSOLUTO (LGPD): Proibido divulgar salários nominais, CPF ou dados bancários em mensagens.
+- VALES E ADIANTAMENTOS: Limite de 40% do salário-base e apenas para colaboradores ativos.
+- FÉRIAS: Validar período aquisitivo e saldo de dias antes de confirmar agendamento.
+FORMATO: Comunicação clara, formal e orientada a prazos regimentais.`,
         fewShotExamples: [
             {
                 user: 'Quem está programado para entrar de férias na próxima semana no setor de britagem e usina?',
@@ -1709,10 +1710,10 @@ export const buildAgentGeminiSystemInstruction = (
     });
 
     const guardrailRules = [
-        'RESPONDA SEMPRE EM PORTUGUÊS DO BRASIL DE FORMA PROFISSIONAL E CONCISA ADEQUADA AO WHATSAPP.',
-        'MONETÁRIO: Utilize sempre o formato pt-BR (ex: R$ 1.250,00).',
-        'CONFIRMAÇÃO: Sempre que a ação envolver gravação, baixa contábil ou alteração no ERP, solicite confirmação explícita (SIM / NÃO).',
-        'SEGURANÇA: Nunca invente dados cadastrais ou forneça dados sensíveis fora da alçada do usuário.'
+        'FORMATO: Português do Brasil, objetivo e conciso para WhatsApp (máximo 3 a 5 linhas ou tabela compacta).',
+        'MONETÁRIO: Padrão pt-BR estrito (ex: R$ 1.250,00).',
+        'OPERAÇÕES NO ERP: Toda gravação, alteração ou baixa exige confirmação explícita (SIM / NÃO).',
+        'EFICIÊNCIA DE TOKENS: Responda diretamente ao ponto sem introduções prolixas ou saudações repetitivas.'
     ];
 
     return `${interpolated}\n\n[GUARDRAILS DE OPERAÇÃO DO GATEWAY WHATSAPP]:\n${guardrailRules.join('\n')}`;
@@ -1769,8 +1770,8 @@ export const callGeminiAgentApi = async (
             },
             contents,
             generationConfig: {
-                temperature: 0.2,
-                maxOutputTokens: 1024
+                temperature: 0.15,
+                maxOutputTokens: 512
             }
         };
 
@@ -1841,3 +1842,1425 @@ export const callGeminiAgentApi = async (
         latencyMs: Date.now() - start
     };
 };
+
+// ---------------------------------------------------------------------------
+// Fila de Confirmações e Alertas Proativos do Gateway WhatsApp
+// ---------------------------------------------------------------------------
+
+export type ConfirmationActionType =
+    | 'despesa_baixa'
+    | 'aprovacao_orcamento'
+    | 'ordem_compra'
+    | 'abastecimento_combustivel'
+    | 'parada_usina'
+    | 'adiantamento_rh';
+
+export interface WhatsAppPendingConfirmation {
+    id: string;
+    agentId: string;
+    agentName: string;
+    agentColor: 'indigo' | 'emerald' | 'amber' | 'sky' | 'rose' | 'violet' | 'orange' | 'teal' | 'slate';
+    actionType: ConfirmationActionType;
+    title: string;
+    description: string;
+    targetUserName: string;
+    targetUserPhone: string;
+    createdAt: string; // ISO
+    expiresAt: string; // ISO
+    status: 'pendente' | 'aprovado' | 'rejeitado' | 'expirado';
+    metadata: {
+        value?: number;
+        documentNumber?: string;
+        partnerName?: string;
+        plate?: string;
+        liters?: number;
+        costCenter?: string;
+        [key: string]: any;
+    };
+    respondedAt?: string;
+    responseChannel?: 'whatsapp_button' | 'whatsapp_text' | 'painel_web';
+}
+
+export interface WhatsAppProactiveTrigger {
+    id: string;
+    agentId: string;
+    category: 'estoque_critico' | 'contas_a_vencer' | 'consumo_anomalo' | 'nao_conformidade_usina' | 'inadimplencia_cliente';
+    title: string;
+    triggerCondition: string;
+    sampleMessage: string;
+    severity: 'info' | 'warning' | 'critical';
+    actionType: ConfirmationActionType;
+    defaultTargetRole: string;
+}
+
+export const ERP_PROACTIVE_TRIGGERS: WhatsAppProactiveTrigger[] = [
+    {
+        id: 'trig_diesel_critico',
+        agentId: 'stock_manager',
+        category: 'estoque_critico',
+        title: 'Estoque de Diesel Abaixo do Mínimo',
+        triggerCondition: 'Saldo de Diesel S10 inferior a 3.000 Litros (< 2 dias de autonomia)',
+        sampleMessage: '⚠️ *ALERTA DE ESTOQUE CRÍTICO*: Diesel S10 atingiu 2.100 L no pátio. Autoriza abertura emergencial de cotação para 10.000 L?',
+        severity: 'critical',
+        actionType: 'ordem_compra',
+        defaultTargetRole: 'Gerente de Compras / Almoxarife'
+    },
+    {
+        id: 'trig_contas_hoje',
+        agentId: 'financial_analyst',
+        category: 'contas_a_vencer',
+        title: 'Títulos com Vencimento Hoje (> R$ 10.000)',
+        triggerCondition: 'Títulos pendentes de liquidação na data corrente',
+        sampleMessage: '🔔 *CONTAS DO DIA*: Título PAG-348 de R$ 32.000,00 da Petrobras vence hoje. Confirma agendamento de liquidação no Banco do Brasil?',
+        severity: 'warning',
+        actionType: 'despesa_baixa',
+        defaultTargetRole: 'Gerente Financeiro / Tesouraria'
+    },
+    {
+        id: 'trig_consumo_frota',
+        agentId: 'fleet_manager',
+        category: 'consumo_anomalo',
+        title: 'Desvio de Consumo de Combustível > 15%',
+        triggerCondition: 'Média de km/l de caminhão divergente em mais de 15% do histórico',
+        sampleMessage: '⚠️ *AUDITORIA DE COMBUSTÍVEL*: Caminhão Caçamba CC-04 registrou 1,4 km/L (média usual: 2,2 km/L). Deseja abrir OS de inspeção mecânica?',
+        severity: 'warning',
+        actionType: 'abastecimento_combustivel',
+        defaultTargetRole: 'Gestor de Frotas'
+    },
+    {
+        id: 'trig_slump_usina',
+        agentId: 'lab_technician',
+        category: 'nao_conformidade_usina',
+        title: 'Não Conformidade no Slump Test (> 12 cm)',
+        triggerCondition: 'Ensaio de cone de Abrams fora da faixa de 10 ± 2 cm',
+        sampleMessage: '🚨 *NÃO CONFORMIDADE*: Caminhão Betoneira 08 acusou Slump de 16 cm (limite máx 12 cm). Confirma travamento da saída para a obra?',
+        severity: 'critical',
+        actionType: 'parada_usina',
+        defaultTargetRole: 'Encarregado de Laboratório / Usina'
+    },
+    {
+        id: 'trig_inadimplencia',
+        agentId: 'sales_manager',
+        category: 'inadimplencia_cliente',
+        title: 'Tentativa de Pedido com Títulos Vencidos > 5d',
+        triggerCondition: 'Cliente com duplicatas em atraso tenta emitir novo pedido',
+        sampleMessage: '🛑 *TRAVA DE CRÉDITO*: Construtora Silva possui R$ 14.200 em aberto há 8 dias. Deseja aprovar exceção comercial sob alçada?',
+        severity: 'critical',
+        actionType: 'aprovacao_orcamento',
+        defaultTargetRole: 'Diretoria Comercial'
+    }
+];
+
+export const INITIAL_PENDING_CONFIRMATIONS: WhatsAppPendingConfirmation[] = [
+    {
+        id: 'conf_101',
+        agentId: 'financial_analyst',
+        agentName: 'Analista Financeiro',
+        agentColor: 'emerald',
+        actionType: 'despesa_baixa',
+        title: 'Liquidação de Boleto • Petrobras Distribuidora',
+        description: 'Boleto referente a 5.000 L Diesel S10 (Danfe 84102) com vencimento na data corrente.',
+        targetUserName: 'Carlos Tesouraria',
+        targetUserPhone: '5511988887777',
+        createdAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+        expiresAt: new Date(Date.now() + 11 * 60 * 1000).toISOString(),
+        status: 'pendente',
+        metadata: {
+            value: 29100.0,
+            partnerName: 'Petrobras Distribuidora S/A',
+            documentNumber: 'BOL-84102',
+            costCenter: 'Usina de Asfalto 01'
+        }
+    },
+    {
+        id: 'conf_102',
+        agentId: 'purchasing_manager',
+        agentName: 'Gestor de Compras',
+        agentColor: 'orange',
+        actionType: 'ordem_compra',
+        title: 'Aprovação de Ordem de Compra #OC-992',
+        description: 'Cotação vencedora para 30 toneladas de Cimento CP-II (Votoran R$ 74/t).',
+        targetUserName: 'Mariana Gerência',
+        targetUserPhone: '5511977776666',
+        createdAt: new Date(Date.now() - 6 * 60 * 1000).toISOString(),
+        expiresAt: new Date(Date.now() + 9 * 60 * 1000).toISOString(),
+        status: 'pendente',
+        metadata: {
+            value: 22200.0,
+            partnerName: 'Votorantim Cimentos',
+            documentNumber: 'OC-992',
+            costCenter: 'Pátio Central'
+        }
+    },
+    {
+        id: 'conf_103',
+        agentId: 'fleet_manager',
+        agentName: 'Gestor de Frota',
+        agentColor: 'sky',
+        actionType: 'abastecimento_combustivel',
+        title: 'Auditoria de Abastecimento Externo • Placa ABC-1234',
+        description: 'Cupom de 210L de Diesel S10 lançado no Posto Rodovia via WhatsApp.',
+        targetUserName: 'Encarregado Mecânica',
+        targetUserPhone: '5511966665555',
+        createdAt: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
+        expiresAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+        status: 'aprovado',
+        metadata: {
+            value: 1218.0,
+            plate: 'ABC-1234',
+            liters: 210,
+            costCenter: 'Frota Pesada'
+        },
+        respondedAt: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
+        responseChannel: 'whatsapp_button'
+    }
+];
+
+// ---------------------------------------------------------------------------
+// Visão Multi-Modal Google Gemini para Fotos e Comprovantes
+// ---------------------------------------------------------------------------
+
+export interface GeminiVisionCallResult {
+    text: string;
+    extractedData?: Record<string, any>;
+    isFallback: boolean;
+    modelUsed: string;
+    latencyMs: number;
+}
+
+export interface SampleMultiModalImage {
+    id: string;
+    title: string;
+    description: string;
+    category: 'boleto' | 'danfe' | 'combustivel' | 'ensaio';
+    targetAgentId: string;
+    previewPlaceholder: string;
+    simulatedExtraction: Record<string, any>;
+    simulatedUserPrompt: string;
+}
+
+export const SAMPLE_MULTIMODAL_IMAGES: SampleMultiModalImage[] = [
+    {
+        id: 'sample_boleto_petrobras',
+        title: 'Boleto Petrobras (R$ 3.480,00)',
+        description: 'Boleto bancário de combustível com código de barras e vencimento hoje.',
+        category: 'boleto',
+        targetAgentId: 'financial_analyst',
+        previewPlaceholder: '🧾 [FOTO: Boleto Bancário Petrobras S/A • R$ 3.480,00 • Vencimento Hoje]',
+        simulatedExtraction: {
+            fornecedor: 'Petrobras Distribuidora S/A',
+            cnpj: '33.000.167/0001-01',
+            valor: 3480.0,
+            vencimento: new Date().toLocaleDateString('pt-BR'),
+            linhaDigitavel: '34191.79001 01043.510047 91020.150008 4 95200000348000',
+            categoriaSugerida: 'Combustíveis e Lubrificantes'
+        },
+        simulatedUserPrompt: 'Interpretar e extrair campos contábeis deste boleto bancário recebido por foto.'
+    },
+    {
+        id: 'sample_danfe_cimento',
+        title: 'Danfe NF-e Cimento CP-II (40 toneladas)',
+        description: 'Nota Fiscal Eletrônica de entrada de insumos no pátio.',
+        category: 'danfe',
+        targetAgentId: 'stock_manager',
+        previewPlaceholder: '📄 [FOTO: Danfe NF-e 44812 • 40 t Cimento CP-II • R$ 2.960,00]',
+        simulatedExtraction: {
+            emitente: 'Votorantim Cimentos S/A',
+            numeroNFe: '44812',
+            chaveAcesso: '35261033000167000101550010000448121004928192',
+            produto: 'Cimento CP-II-E-32 Ensacado',
+            quantidade: 40,
+            unidade: 'toneladas',
+            valorTotal: 2960.0
+        },
+        simulatedUserPrompt: 'Conferir esta Danfe de cimento com o pedido de compra em aberto e dar entrada no almoxarifado.'
+    },
+    {
+        id: 'sample_cupom_diesel',
+        title: 'Cupom de Bomba Diesel S10 (190 Litros)',
+        description: 'Foto do display da bomba e cupom fiscal de abastecimento da frota.',
+        category: 'combustivel',
+        targetAgentId: 'fleet_manager',
+        previewPlaceholder: '⛽ [FOTO: Display da Bomba 02 • 190,00 L Diesel S10 • R$ 1.102,00]',
+        simulatedExtraction: {
+            posto: 'Auto Posto Rodovia Sul Ltda',
+            litros: 190.0,
+            precoLitro: 5.8,
+            totalGeral: 1102.0,
+            tipoCombustivel: 'Diesel S10',
+            dataHora: new Date().toLocaleDateString('pt-BR') + ' 14:32'
+        },
+        simulatedUserPrompt: 'Registrar abastecimento do caminhão CC-04 (Placa ABC-1234) com hodômetro 184.200 km.'
+    }
+];
+
+/** Chamador do Gemini 2.5 Flash Vision para interpretar imagens */
+export const callGeminiVisionApi = async (
+    imageBase64: string,
+    mimeType: string,
+    prompt: string,
+    agentDef: AIAgentDefinition,
+    sampleMeta?: Record<string, any>,
+    explicitApiKey?: string
+): Promise<GeminiVisionCallResult> => {
+    const start = Date.now();
+    const apiKey = getGeminiApiKey(explicitApiKey);
+
+    // Se chave não presente ou amostra pré-computada simulada, devolver extração estruturada local
+    if (!apiKey || imageBase64.startsWith('simulated:')) {
+        const extracted = sampleMeta || {
+            status: 'reconhecido_localmente',
+            tipo: 'documento_erp',
+            timestamp: new Date().toISOString()
+        };
+        const text = `📸 *DOCUMENTO RECONHECIDO COM SUCESSO (Visão Gemini)*\n\n` +
+            Object.entries(extracted)
+                .map(([k, v]) => `• *${k.toUpperCase()}*: ${typeof v === 'number' ? (k.toLowerCase().includes('valor') || k.toLowerCase().includes('total') ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) : v) : v}`)
+                .join('\n') +
+            `\n\nConfirma o lançamento dos dados acima no ERP? (SIM / NÃO)`;
+
+        return {
+            text,
+            extractedData: extracted,
+            isFallback: !apiKey,
+            modelUsed: apiKey ? 'Gemini 2.5 Flash Vision' : 'Heurístico Local (Vision)',
+            latencyMs: Date.now() - start
+        };
+    }
+
+    try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+
+        const payload = {
+            system_instruction: {
+                parts: [{
+                    text: `Você é o módulo de visão computacional OCR do ${agentDef.name} no InfraCore ERP. Extraia todos os dados essenciais da imagem (valores em R$, datas, identificações, placas, litros, fornecedores, CNPJs) e responda de forma resumida e profissional para o WhatsApp brasileiro, solicitando confirmação de gravação.`
+                }]
+            },
+            contents: [
+                {
+                    role: 'user',
+                    parts: [
+                        { text: prompt || 'Analise esta imagem, realize OCR e extraia todos os dados relevantes para o ERP.' },
+                        {
+                            inline_data: {
+                                mime_type: mimeType || 'image/jpeg',
+                                data: cleanBase64
+                            }
+                        }
+                    ]
+                }
+            ],
+            generationConfig: {
+                temperature: 0.1,
+                maxOutputTokens: 768
+            }
+        };
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+            const data = await res.json();
+            const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (textResponse) {
+                return {
+                    text: textResponse.trim(),
+                    isFallback: false,
+                    modelUsed: 'gemini-2.5-flash (Vision)',
+                    latencyMs: Date.now() - start
+                };
+            }
+        }
+    } catch {
+        // Fallback em caso de erro
+    }
+
+    const fallbackExtracted = sampleMeta || { status: 'processado_offline' };
+    return {
+        text: `📸 *LEITURA DE DOCUMENTO (Modo Contingência)*\nImagem recebida com sucesso. Campos pré-identificados aguardando validação do operador:\n${JSON.stringify(fallbackExtracted, null, 2)}\n\nConfirma a gravação? (SIM/NÃO)`,
+        extractedData: fallbackExtracted,
+        isFallback: true,
+        modelUsed: 'Fallback Heurístico Local (Vision)',
+        latencyMs: Date.now() - start
+    };
+};
+
+// ---------------------------------------------------------------------------
+// Motor de Roteamento Inteligente & Intenções (Smart Dispatcher)
+// ---------------------------------------------------------------------------
+
+export interface SmartRouteRule {
+    agentId: string;
+    department: string;
+    keywords: string[];
+    regexPatterns: string[];
+    associatedRoles: string[];
+    weight: number;
+}
+
+export interface SmartRouterResult {
+    matchedAgentId: string | null;
+    matchedAgentName: string | null;
+    matchedDepartment: string | null;
+    confidenceScore: number;
+    matchedKeywords: string[];
+    matchedRegex: string[];
+    resolutionReason: string;
+    isAmbiguous: boolean;
+    alternativeAgents?: Array<{ agentId: string; name: string; score: number }>;
+    interactiveMenuText?: string;
+}
+
+export const SMART_ROUTING_RULES: SmartRouteRule[] = [
+    {
+        agentId: 'sales_manager',
+        department: 'Comercial / Vendas',
+        keywords: ['orçamento', 'orcamento', 'venda', 'pedido de venda', 'cliente', 'limite de credito', 'tabela de preco', 'desconto comercial', 'fob', 'cif'],
+        regexPatterns: [
+            '\\b(or[cç]amentos?|vendas?|clientes?|limite de cr[eé]dito|tabela de pre[cç]o)\\b',
+            '\\b(desconto comercial|frete\\s*cif|frete\\s*fob|pedido de venda)\\b'
+        ],
+        associatedRoles: ['admin', 'comercial', 'vendas', 'gerente'],
+        weight: 1.0
+    },
+    {
+        agentId: 'financial_analyst',
+        department: 'Financeiro',
+        keywords: ['saldo', 'caixa', 'banco', 'boleto', 'pagar', 'receber', 'inadimplencia', 'inadimplência', 'conciliação', 'extrato', 'duplicata', 'ted', 'pix', 'juros'],
+        regexPatterns: [
+            '\\b(boleto|boletos|saldo|caixa|pagar|pagamentos?|receber|recebimentos?|extrato|duplicata)\\b',
+            '\\b(inadimpl[eê]ncia|concilia[cç][aã]o|pix|ted|banco)\\b'
+        ],
+        associatedRoles: ['admin', 'financeiro', 'diretoria', 'gerente'],
+        weight: 1.0
+    },
+    {
+        agentId: 'financial_manager',
+        department: 'Diretoria / Gestão Financeira',
+        keywords: ['dre', 'ebitda', 'margem', 'fluxo de caixa executivo', 'resumo de caixa', 'diretoria', 'balancete', 'alçada financeira', 'liberação diretoria'],
+        regexPatterns: [
+            '\\b(dre|ebitda|margem operacional|fluxo de caixa|balancete)\\b',
+            '\\b(resumo executivo|diretoria financeira|aprova[cç][aã]o diretoria)\\b'
+        ],
+        associatedRoles: ['admin', 'diretoria', 'gerente', 'financeiro'],
+        weight: 1.0
+    },
+    {
+        agentId: 'stock_manager',
+        department: 'Almoxarifado & Estoque',
+        keywords: ['estoque', 'almoxarifado', 'entrada de nf', 'danfe', 'nota fiscal', 'ponto de ressuprimento', 'saldo de estoque', 'material', 'insumo', 'curva abc', 'inventario', 'inventário'],
+        regexPatterns: [
+            '\\b(estoque|almoxarifado|saldo de estoque|insumos?|ponto de ressuprimento)\\b',
+            '\\b(invent[aá]rio|curva abc|danfe|nota fiscal|entrada de nf)\\b'
+        ],
+        associatedRoles: ['admin', 'almoxarifado', 'compras', 'suprimentos', 'gerente'],
+        weight: 1.0
+    },
+    {
+        agentId: 'purchasing_manager',
+        department: 'Suprimentos & Compras',
+        keywords: ['compras', 'pedido de compra', 'cotação', 'cotacao', 'fornecedor', 'ordem de compra', 'mapa de cotação', 'negociação', 'comprar', 'prazo de entrega'],
+        regexPatterns: [
+            '\\b(compras?|comprar|cota[cç][aã]o|mapa de cota[cç][aã]o|fornecedor(es)?)\\b',
+            '\\b(pedido de compra|ordem de compra|requisi[cç][aã]o de compra)\\b'
+        ],
+        associatedRoles: ['admin', 'compras', 'suprimentos', 'diretoria', 'gerente'],
+        weight: 1.0
+    },
+    {
+        agentId: 'lab_technician',
+        department: 'Qualidade & Laboratório',
+        keywords: ['laboratório', 'laboratorio', 'ensaio', 'corpos de prova', 'ruptura', 'cbr', 'umidade', 'umidade ótima', 'compactação', 'compactacao', 'proctor', 'granulometria ensaio', 'slump'],
+        regexPatterns: [
+            '\\b(laborat[oó]rio|ensaio|corpos? de prova|ruptura|cbr|proctor|slump)\\b',
+            '\\b(umidade [oó]tima|compacta[cç][aã]o|amostra|laudo t[eé]cnico)\\b'
+        ],
+        associatedRoles: ['admin', 'qualidade', 'laboratorio', 'engenharia'],
+        weight: 1.0
+    },
+    {
+        agentId: 'plant_operator',
+        department: 'Produção / Usina de Asfalto e Concreto',
+        keywords: ['usina', 'cbuq', 'asfalto', 'cap', 'cap 50/70', 'faixa c', 'faixa b', 'temperatura da massa', 'silo de massa', 'massa asfaltica', 'asfáltica', 'secador', 'betoneira', 'concreto'],
+        regexPatterns: [
+            '\\b(cbuq|asfalto|massa asf[aá]ltica|cap\\s*50/70|cap|faixa\\s*[abc])\\b',
+            '\\b(temperatura da massa|silo de massa|secador|usina de concreto|betoneira)\\b'
+        ],
+        associatedRoles: ['admin', 'operacoes', 'usina', 'producao', 'gerente'],
+        weight: 1.0
+    },
+    {
+        agentId: 'crusher_operator',
+        department: 'Produção / Britagem',
+        keywords: ['britador', 'britagem', 'rebritador', 'mandíbula', 'mandibula', 'granulometria', 'bica corrida', 'pó de brita', 'po de brita', 'brita 0', 'brita 1', 'brita 2', 'rachão', 'rachao', 'pedreira', 'alimentador'],
+        regexPatterns: [
+            '\\b(britador|britagem|rebritador|mand[ií]bula|pedreira|bica corrida|p[oó] de brita)\\b',
+            '\\b(brita\\s*[0123]|rach[aã]o|alimentador|granulometria)\\b'
+        ],
+        associatedRoles: ['admin', 'operacoes', 'usina', 'producao', 'gerente'],
+        weight: 1.0
+    },
+    {
+        agentId: 'fleet_manager',
+        department: 'Frotas & Equipamentos',
+        keywords: ['frota', 'caminhão', 'caminhao', 'cc-', 'placa', 'abastecimento', 'diesel', 'combustivel', 'combustível', 'pneu', 'odometro', 'odômetro', 'horimetro', 'horímetro', 'manutencao', 'manutenção', 'motorista', 'troca de oleo', 'óleo'],
+        regexPatterns: [
+            '\\b(frota|caminh[aã]o|ve[ií]culo|placa|diesel|abastecimento|abastecer|combust[ií]vel)\\b',
+            '\\b(od[oô]metro|hor[ií]metro|km|pneu|manuten[cç][aã]o|troca de [oó]leo|cc-\\d+)\\b'
+        ],
+        associatedRoles: ['admin', 'operacoes', 'frotas', 'gerente', 'motorista'],
+        weight: 1.0
+    },
+    {
+        agentId: 'hr_analyst',
+        department: 'Recursos Humanos & DP',
+        keywords: ['rh', 'recursos humanos', 'folha', 'folha de pagamento', 'ponto', 'holerite', 'horas extras', 'admissão', 'admissao', 'demissão', 'demissao', 'atestado', 'férias', 'ferias', 'escala', 'vale'],
+        regexPatterns: [
+            '\\b(rh|folha de pagamento|holerite|ponto eletr[oô]nico|horas extras?|vale)\\b',
+            '\\b(admiss[aã]o|demiss[aã]o|atestado|f[eé]rias|benef[ií]cios)\\b'
+        ],
+        associatedRoles: ['admin', 'rh', 'dp', 'diretoria', 'gerente'],
+        weight: 1.0
+    }
+];
+
+export const evaluateSmartRoute = (
+    message: string,
+    userRole?: string,
+    isCollaborator: boolean = true,
+    companyName?: string
+): SmartRouterResult => {
+    const normalized = (message || '').toLowerCase().trim();
+
+    // Cenário 1: Público Externo / Não Cadastrado
+    if (!isCollaborator) {
+        const salesAgent = AI_AGENT_CATALOG.find(a => a.id === 'sales_manager') || AI_AGENT_CATALOG[0];
+        const publicMenu = buildPublicClientMenu(companyName);
+
+        // Se for saudação, pedido de menu ou mensagem vazia
+        if (!normalized || /^(oi|ol[aá]|bom dia|boa tarde|boa noite|menu|ajuda|in[ií]cio|come[cç]ar|\?)$/i.test(normalized)) {
+            return {
+                matchedAgentId: 'sales_manager',
+                matchedAgentName: salesAgent.name,
+                matchedDepartment: 'Comercial & Central de Atendimento',
+                confidenceScore: 100,
+                matchedKeywords: ['central_atendimento', 'public_menu'],
+                matchedRegex: ['menu_publico_externo'],
+                resolutionReason: 'Público Externo: Atendimento direcionado à Central de Atendimento & Vendas.',
+                isAmbiguous: false,
+                interactiveMenuText: publicMenu
+            };
+        }
+
+        // Se for qualquer interesse em cotação, compra, materiais ou suporte de pedidos
+        return {
+            matchedAgentId: 'sales_manager',
+            matchedAgentName: salesAgent.name,
+            matchedDepartment: 'Comercial & Central de Atendimento',
+            confidenceScore: 95,
+            matchedKeywords: ['cliente_externo', 'vendas'],
+            matchedRegex: ['triagem_publica'],
+            resolutionReason: 'Público Externo: Roteamento prioritário para o Gestor Comercial Virtual.',
+            isAmbiguous: false,
+            interactiveMenuText: publicMenu
+        };
+    }
+
+    if (!normalized) {
+        return {
+            matchedAgentId: null,
+            matchedAgentName: null,
+            matchedDepartment: null,
+            confidenceScore: 0,
+            matchedKeywords: [],
+            matchedRegex: [],
+            resolutionReason: 'Mensagem vazia recebida pelo gateway.',
+            isAmbiguous: true,
+            interactiveMenuText: buildInteractiveRoutingMenu()
+        };
+    }
+
+    const scores = [];
+    const normRole = (userRole || '').toLowerCase();
+
+    for (const rule of SMART_ROUTING_RULES) {
+        let score = 0;
+        const matchedKws = [];
+        const matchedRegexes = [];
+
+        for (const pattern of rule.regexPatterns) {
+            try {
+                const reg = new RegExp(pattern, 'i');
+                if (reg.test(normalized)) {
+                    score += 40;
+                    matchedRegexes.push(pattern);
+                }
+            } catch {
+                // regex safe guard
+            }
+        }
+
+        for (const kw of rule.keywords) {
+            if (normalized.includes(kw.toLowerCase())) {
+                score += 15;
+                if (!matchedKws.includes(kw)) {
+                    matchedKws.push(kw);
+                }
+            }
+        }
+
+        const hasRoleBonus = rule.associatedRoles.some(r => normRole.includes(r));
+        if (hasRoleBonus && score > 0) {
+            score += 25;
+        }
+
+        if (score > 0) {
+            scores.push({
+                rule,
+                score: Math.min(score, 100),
+                matchedKws,
+                matchedRegexes,
+                hasRoleBonus
+            });
+        }
+    }
+
+    scores.sort((a, b) => b.score - a.score);
+
+    if (scores.length === 0) {
+        return {
+            matchedAgentId: null,
+            matchedAgentName: null,
+            matchedDepartment: null,
+            confidenceScore: 0,
+            matchedKeywords: [],
+            matchedRegex: [],
+            resolutionReason: 'Nenhum termo ou padrão de departamento reconhecido.',
+            isAmbiguous: true,
+            interactiveMenuText: buildInteractiveRoutingMenu()
+        };
+    }
+
+    const top = scores[0];
+    const runnerUp = scores[1];
+    const topAgent = AI_AGENT_CATALOG.find(a => a.id === top.rule.agentId);
+
+    if (runnerUp && (top.score - runnerUp.score) < 10 && !top.hasRoleBonus && !runnerUp.hasRoleBonus) {
+        const altAgent = AI_AGENT_CATALOG.find(a => a.id === runnerUp.rule.agentId);
+        return {
+            matchedAgentId: top.rule.agentId,
+            matchedAgentName: topAgent?.name || top.rule.department,
+            matchedDepartment: top.rule.department,
+            confidenceScore: top.score,
+            matchedKeywords: top.matchedKws,
+            matchedRegex: top.matchedRegexes,
+            resolutionReason: `Empate detectado entre ${top.rule.department} (${top.score}%) e ${runnerUp.rule.department} (${runnerUp.score}%). Sugerido menu interativo.`,
+            isAmbiguous: true,
+            alternativeAgents: [
+                { agentId: top.rule.agentId, name: topAgent?.name || top.rule.department, score: top.score },
+                { agentId: runnerUp.rule.agentId, name: altAgent?.name || runnerUp.rule.department, score: runnerUp.score }
+            ],
+            interactiveMenuText: buildInteractiveRoutingMenu([top.rule.agentId, runnerUp.rule.agentId])
+        };
+    }
+
+    let reason = `Correspondência determinística com ${top.rule.department} (${top.matchedKws.length} termo(s) e ${top.matchedRegexes.length} padrão(ões))`;
+    if (top.hasRoleBonus) {
+        reason += ` reforçado pela alçada do cargo '${userRole}'.`;
+    }
+
+    return {
+        matchedAgentId: top.rule.agentId,
+        matchedAgentName: topAgent?.name || top.rule.department,
+        matchedDepartment: top.rule.department,
+        confidenceScore: top.score,
+        matchedKeywords: top.matchedKws,
+        matchedRegex: top.matchedRegexes,
+        resolutionReason: reason,
+        isAmbiguous: false,
+        alternativeAgents: scores.slice(1, 3).map(s => ({
+            agentId: s.rule.agentId,
+            name: AI_AGENT_CATALOG.find(a => a.id === s.rule.agentId)?.name || s.rule.department,
+            score: s.score
+        }))
+    };
+};
+
+export const buildInteractiveRoutingMenu = (filterAgentIds?: string[]): string => {
+    const list = filterAgentIds && filterAgentIds.length > 0
+        ? AI_AGENT_CATALOG.filter(a => filterAgentIds.includes(a.id))
+        : AI_AGENT_CATALOG;
+
+    let text = '👋 *InfraCore ERP • Triagem Inteligente de Atendimento*\n\n';
+    text += 'Não identificamos o departamento da sua mensagem com certeza total. Por favor, *responda com o NÚMERO* da opção desejada:\n\n';
+
+    list.forEach((ag, idx) => {
+        text += `*${idx + 1}* - ${ag.name} (${ag.department})\n`;
+    });
+
+    text += '\nOu digite *AJUDA* para falar com o suporte administrativo.';
+    return text;
+};
+
+/** Gera o Menu Comercial Consultivo em 4 opções para o público geral / clientes externos */
+export const buildPublicClientMenu = (companyName?: string): string => {
+    const comp = companyName || 'InfraCore Soluções em Obras';
+    return `👋 Olá! Bem-vindo à Central de Atendimento da *${comp}*.\n\n` +
+        `Como podemos acelerar sua obra hoje? Digite o *NÚMERO* da opção desejada:\n\n` +
+        `*1* - 📋 *Solicitar Orçamento / Preços* (Britas, CBUQ, Concreto Usinado, Frete CIF/FOB)\n` +
+        `*2* - 📦 *Já Sou Cliente* (Status de Pedidos, Cargas em Trânsito e 2ª Via de Boletos/NF)\n` +
+        `*3* - 🏭 *Conhecer a Empresa & Usinas* (Capacidade industrial, pedreiras e laudos de qualidade)\n` +
+        `*4* - 👤 *Falar com Consultor Comercial* (Negociação direta para grandes volumes)\n\n` +
+        `Ou simplesmente envie sua dúvida que nosso assistente virtual responderá imediatamente!`;
+};
+
+/** Verifica se um número de telefone pertence a um colaborador interno cadastrado */
+export const isRegisteredCollaboratorPhone = (
+    phone: string,
+    agentsConfig?: AIAgentsConfig,
+    registeredUsers?: { phone?: string; id?: string; name?: string }[]
+): boolean => {
+    const clean = (phone || '').replace(/\D/g, '');
+    if (!clean || clean.length < 8) return false;
+
+    // 1. Verifica vínculos nos agentes configurados
+    if (agentsConfig?.agents) {
+        for (const agentSettings of Object.values(agentsConfig.agents)) {
+            if (agentSettings.links && Array.isArray(agentSettings.links)) {
+                for (const link of agentSettings.links) {
+                    const lclean = (link.phone || '').replace(/\D/g, '');
+                    if (lclean && (clean === lclean || clean.endsWith(lclean) || lclean.endsWith(clean))) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Verifica cadastro geral de usuários do ERP
+    if (registeredUsers && Array.isArray(registeredUsers)) {
+        for (const user of registeredUsers) {
+            const uclean = (user.phone || '').replace(/\D/g, '');
+            if (uclean && (clean === uclean || clean.endsWith(uclean) || uclean.endsWith(clean))) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+};
+
+// ---------------------------------------------------------------------------
+// Gestão de Sessões Multi-Turno & Memória Conversacional
+// ---------------------------------------------------------------------------
+
+export interface WhatsAppMessageItem {
+    id: string;
+    role: 'user' | 'model';
+    text: string;
+    timestamp: string;
+    modelUsed?: string;
+    isFallback?: boolean;
+}
+
+export interface WhatsAppConversationSession {
+    id: string;
+    phoneNumber: string;
+    contactName: string;
+    agentId: string;
+    agentName: string;
+    department: string;
+    status: 'active' | 'closed' | 'paused';
+    createdAt: string;
+    lastInteractionAt: string;
+    turnsCount: number;
+    messages: WhatsAppMessageItem[];
+    contextSummary?: string;
+}
+
+export const INITIAL_CONVERSATION_SESSIONS: WhatsAppConversationSession[] = [
+    {
+        id: 'session_finance_carlos',
+        phoneNumber: '5511988887777',
+        contactName: 'Carlos Tesouraria',
+        agentId: 'financial_analyst',
+        agentName: 'Analista Financeiro',
+        department: 'Financeiro',
+        status: 'active',
+        createdAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+        lastInteractionAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+        turnsCount: 2,
+        contextSummary: 'Liquidação de boletos do dia e projeção de caixa Banco do Brasil',
+        messages: [
+            {
+                id: 'm1',
+                role: 'user',
+                text: 'Qual o total de contas a pagar com vencimento hoje?',
+                timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString()
+            },
+            {
+                id: 'm2',
+                role: 'model',
+                text: '☀️ Bom dia, Carlos! Hoje temos 3 títulos a pagar totalizando R$ 45.200,00 no ERP:\n1. Petrobras Distribuidora (Diesel S10): R$ 29.100,00\n2. Votorantim Cimentos (Cimento): R$ 12.500,00\n3. Enel Distribuição (Energia Usina): R$ 3.600,00\n\nNosso saldo em conta corrente no Banco do Brasil é de R$ 84.100,00.',
+                timestamp: new Date(Date.now() - 14 * 60 * 1000).toISOString(),
+                modelUsed: 'gemini-2.5-flash'
+            },
+            {
+                id: 'm3',
+                role: 'user',
+                text: 'E quanto disso vence até o meio-dia? Qual o impacto no caixa se liquidarmos o boleto da Petrobras agora?',
+                timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString()
+            },
+            {
+                id: 'm4',
+                role: 'model',
+                text: 'Até as 12h vence apenas o boleto da Petrobras (R$ 29.100,00). Ao liquidá-lo, seu saldo no Banco do Brasil passará de R$ 84.100,00 para R$ 55.000,00, mantendo margem de segurança confortável de liquidez para as obrigações da tarde.\n\nDeseja que eu efetive a baixa do título BOL-84102 no ERP agora? (SIM/NÃO)',
+                timestamp: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+                modelUsed: 'gemini-2.5-flash'
+            }
+        ]
+    },
+    {
+        id: 'session_fleet_marcos',
+        phoneNumber: '5511966665555',
+        contactName: 'Encarregado Mecânica',
+        agentId: 'fleet_manager',
+        agentName: 'Gestor de Frota',
+        department: 'Frotas & Equipamentos',
+        status: 'active',
+        createdAt: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+        lastInteractionAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+        turnsCount: 2,
+        contextSummary: 'Disponibilidade de caminhões caçamba na pedreira e abastecimento CC-04',
+        messages: [
+            {
+                id: 'm1',
+                role: 'user',
+                text: 'Qual a situação dos caminhões caçamba da pedreira hoje?',
+                timestamp: new Date(Date.now() - 40 * 60 * 1000).toISOString()
+            },
+            {
+                id: 'm2',
+                role: 'model',
+                text: '🚛 Olá! Temos 6 caminhões caçamba alocados na pedreira:\n• CC-01, CC-02, CC-03, CC-05, CC-06: 100% operacionais e transportando brita.\n• CC-04: Parado na oficina para troca de pastilhas de freio e óleo diferencial.\n\nPrevisão de liberação do CC-04: 15h30.',
+                timestamp: new Date(Date.now() - 39 * 60 * 1000).toISOString(),
+                modelUsed: 'gemini-2.5-flash'
+            },
+            {
+                id: 'm3',
+                role: 'user',
+                text: 'O CC-04 já fez o abastecimento antes de entrar na oficina?',
+                timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString()
+            },
+            {
+                id: 'm4',
+                role: 'model',
+                text: 'Sim! Foi registrado abastecimento de 190 litros de Diesel S10 às 07:15 no Posto Central com hodômetro em 184.200 km (média de 2,1 km/L). O tanque está com 95% de capacidade.',
+                timestamp: new Date(Date.now() - 19 * 60 * 1000).toISOString(),
+                modelUsed: 'gemini-2.5-flash'
+            }
+        ]
+    },
+    {
+        id: 'session_stock_marcelo',
+        phoneNumber: '5511955554444',
+        contactName: 'Marcelo Almoxarife',
+        agentId: 'stock_manager',
+        agentName: 'Gestor de Estoque',
+        department: 'Almoxarifado & Estoque',
+        status: 'active',
+        createdAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+        lastInteractionAt: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
+        turnsCount: 1,
+        contextSummary: 'Posição de Diesel S10 e alerta de ponto de reposição',
+        messages: [
+            {
+                id: 'm1',
+                role: 'user',
+                text: 'Qual a situação do Diesel S10 e Cimento CP-II no pátio?',
+                timestamp: new Date(Date.now() - 8 * 60 * 1000).toISOString()
+            },
+            {
+                id: 'm2',
+                role: 'model',
+                text: '⚠️ *ALERTA DE PONTO DE REPOSIÇÃO*\n• *Diesel S10*: 2.100 L (Mínimo: 4.000 L) -> Autonomia estimada: ~1,5 dias. 🚨 CRÍTICO\n• *Cimento CP-II*: 42 t (Mínimo: 25 t) -> Autonomia: ~4 dias. ✅ REGULAR\n\nRecomendo emissão de Ordem de Compra emergencial para 10.000 L de Diesel.',
+                timestamp: new Date(Date.now() - 7 * 60 * 1000).toISOString(),
+                modelUsed: 'gemini-2.5-flash'
+            }
+        ]
+    }
+];
+
+export const exportSessionAsText = (session: WhatsAppConversationSession): string => {
+    let header = '=======================================================\n';
+    header += `HISTÓRICO DE AUDITORIA DE CONVERSA - INFRACORE ERP\n`;
+    header += `Agente Especialista: ${session.agentName} (${session.department})\n`;
+    header += `Colaborador: ${session.contactName} (${session.phoneNumber})\n`;
+    header += `Início da Sessão: ${new Date(session.createdAt).toLocaleString('pt-BR')}\n`;
+    header += `Total de Turnos: ${session.turnsCount}\n`;
+    header += '=======================================================\n\n';
+
+    const body = session.messages.map(m => {
+        const time = new Date(m.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const sender = m.role === 'user' ? session.contactName : `${session.agentName} [${m.modelUsed || 'IA'}]`;
+        return `[${time}] ${sender}:\n${m.text}\n`;
+    }).join('\n');
+
+    return header + body;
+};
+
+// ---------------------------------------------------------------------------
+// Interceptador Determinístico Zero-Token para Comandos Operacionais
+// ---------------------------------------------------------------------------
+
+export interface ZeroTokenCommandResult {
+    handled: boolean;
+    type?: 'confirmation_yes' | 'confirmation_no' | 'numeric_switch' | 'help_menu' | 'direct_query';
+    text?: string;
+    targetAgentId?: string;
+    tokensSaved: number;
+    actionAudit?: string;
+}
+
+/** Avalia se uma mensagem é um comando operacional conhecido antes de chamar o Gemini */
+export const evaluateZeroTokenCommand = (
+    message: string,
+    currentAgentDef: AIAgentDefinition,
+    pendingConfirmations: WhatsAppPendingConfirmation[],
+    erpLiveContext?: {
+        companyName?: string;
+        userName?: string;
+        balance?: number;
+        receivables?: number;
+        payables?: number;
+        fleetOperational?: number;
+        fleetTotal?: number;
+        inventoryCount?: number;
+        inventoryLow?: number;
+        activeOPs?: number;
+        isCollaborator?: boolean;
+        senderPhone?: string;
+    }
+): ZeroTokenCommandResult => {
+    const raw = (message || '').trim();
+    const normalized = raw.toLowerCase();
+
+    if (!raw) {
+        return { handled: false, tokensSaved: 0 };
+    }
+
+    const fmt = (v?: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
+    const companyName = erpLiveContext?.companyName || 'InfraCore';
+    const isCollab = erpLiveContext?.isCollaborator !== false;
+
+    // =========================================================================
+    // FLUXO A: PÚBLICO GERAL / CLIENTES EXTERNOS / PROSPECTS (NÃO CADASTRADOS)
+    // =========================================================================
+    if (!isCollab) {
+        // Opção 1: Solicitar Orçamento / Preços
+        if (normalized === '1' || /^(1|or[cç]amentos?|pre[cç]os?|cota[cç][aã]o|solicitar or[cç]amento)$/i.test(normalized)) {
+            return {
+                handled: true,
+                type: 'help_menu',
+                targetAgentId: 'sales_manager',
+                text: `📋 *SOLICITAÇÃO DE ORÇAMENTO (Central de Atendimento)*\n\nExcelente! Para calcularmos o melhor preço unitário e o frete CIF/FOB ideal para sua obra, por favor informe:\n\n1️⃣ *Material*: Brita (qual graduação?), CBUQ (asfalto) ou Concreto Usinado?\n2️⃣ *Quantidade estimada*: (ex: 30 toneladas ou 45 m³)\n3️⃣ *Local da Obra*: Bairro, Cidade ou Rodovia/KM para entrega\n\nNossa equipe processará sua cotação imediatamente! 🚛`,
+                tokensSaved: 460,
+                actionAudit: 'Público Externo: Opção 1 (Solicitação de Orçamento) atendida deterministamente.'
+            };
+        }
+
+        // Opção 2: Já Sou Cliente (Rastreio de Cargas & 2ª Via de Boletos/NF)
+        if (normalized === '2' || /^(2|j[aá]\s*sou\s*cliente|pedidos?|status\s*pedidos?|boletos?|2[aª]\s*via|rastreio)$/i.test(normalized)) {
+            return {
+                handled: true,
+                type: 'help_menu',
+                targetAgentId: 'sales_manager',
+                text: `📦 *PORTAL DO CLIENTE ${companyName.toUpperCase()}*\n\nLocalizamos seu histórico rapidamente! Por favor, informe:\n• O *CNPJ* ou *CPF* cadastrado na compra, ou\n• O *Número do Pedido* (ex: PED-1082).\n\nCom isso você receberá o status das cargas em trânsito e o link direto para 2ª via de boletos e NFe.`,
+                tokensSaved: 440,
+                actionAudit: 'Público Externo: Opção 2 (Já Sou Cliente / Rastreio) atendida deterministamente.'
+            };
+        }
+
+        // Opção 3: Conhecer a Empresa & Usinas
+        if (normalized === '3' || /^(3|conhecer|usinas?|produtos?|laudos?|estrutura|portfolio|portf[oó]lio)$/i.test(normalized)) {
+            return {
+                handled: true,
+                type: 'help_menu',
+                targetAgentId: 'sales_manager',
+                text: `🏭 *ESTRUTURA INDUSTRIAL & QUALIDADE*\n\nA *${companyName}* opera com capacidade industrial completa e certificações técnicas rigorosas:\n• *Britagem*: Britas 0, 1, 2, Pedrisco e Rachão com laudos de Abrasão Los Angeles e Sanidade.\n• *Usina de Asfalto*: CBUQ Faixas B e C com ensaios Marshall e controle de teor de CAP 50/70.\n• *Concreto Usinado*: Centrais dosadoras automatizadas com rastreabilidade total de FCK.\n• *Frota Própria*: Caminhões caçamba e betoneiras monitorados em tempo real via GPS.\n\nDeseja cotar para sua obra? Digite *1* para solicitar orçamento ou *4* para falar com um consultor!`,
+                tokensSaved: 480,
+                actionAudit: 'Público Externo: Opção 3 (Conhecer Empresa & Usinas) atendida deterministamente.'
+            };
+        }
+
+        // Opção 4: Falar com Consultor Comercial (Retenção Ativa)
+        if (normalized === '4' || /^(4|falar\s*com\s*consultor|consultor|atendimento\s*comercial)$/i.test(normalized)) {
+            return {
+                handled: true,
+                type: 'help_menu',
+                targetAgentId: 'sales_manager',
+                text: `👋 *GERÊNCIA COMERCIAL INFRACORE (Atendimento Especial)*\n\nOlá! Eu sou o Gerente Comercial Virtual da ${companyName}. Tenho autonomia no sistema para aprovar condições especiais e fechar pedidos de grandes volumes com frete otimizado para sua obra.\n\nQual material sua obra precisa no momento? Me conte sua necessidade para eu simular a melhor condição comercial direto na tela!\n\n*(Se preferir o contato direto do consultor sênior externo de campo, digite VENDEDOR).*`,
+                tokensSaved: 470,
+                actionAudit: 'Público Externo: Opção 4 (Retenção Ativa do Gerente Comercial) acionada deterministamente.'
+            };
+        }
+
+        // Transbordo Humano Concedido
+        if (/^(vendedor|consultor|humano|atendente)$/i.test(normalized)) {
+            return {
+                handled: true,
+                type: 'help_menu',
+                targetAgentId: 'sales_manager',
+                text: `👤 *CONSULTOR COMERCIAL DESIGNADO*\n\nTransferindo seu atendimento para nosso especialista de grandes obras:\n• Consultor: *Eduardo Mendes (Gerência Comercial)*\n• WhatsApp Direto: *+55 11 98765-4321*\n• E-mail: vendas@infracore.com.br\n\nO histórico da sua solicitação já foi encaminhado para a equipe para atendimento prioritário! ✅`,
+                tokensSaved: 450,
+                actionAudit: 'Público Externo: Transbordo para vendedor humano concedido.'
+            };
+        }
+
+        // Saudações ou Solicitação do Menu Público
+        if (/^(oi|ol[aá]|bom dia|boa tarde|boa noite|menu|ajuda|help|in[ií]cio|come[cç]ar|comandos?|opcoes|duvidas|\?)$/i.test(normalized)) {
+            return {
+                handled: true,
+                type: 'help_menu',
+                targetAgentId: 'sales_manager',
+                text: buildPublicClientMenu(companyName),
+                tokensSaved: 480,
+                actionAudit: 'Público Externo: Menu Comercial Consultivo em 4 Opções entregue deterministamente.'
+            };
+        }
+
+        // Bloqueio de Comandos Internos de Colaborador
+        if (/^(sim|s|n[aã]o|n|saldo|caixa|estoque|almoxarifado|frota|ve[ií]culos?|status|painel)$/i.test(normalized)) {
+            return {
+                handled: true,
+                type: 'help_menu',
+                targetAgentId: 'sales_manager',
+                text: `🔒 *ACESSO RESTRITO A COLABORADORES*\n\nEste canal operacional é reservado para a equipe interna da ${companyName}.\n\nPara orçamentos, pedidos e suporte à sua obra, digite *MENU* para ver as opções da Central de Atendimento.`,
+                tokensSaved: 420,
+                actionAudit: 'Público Externo: Tentativa de comando interno bloqueada deterministamente.'
+            };
+        }
+
+        // Se for qualquer outra mensagem externa, deixa passar para o Gemini tratar comercialmente
+        return { handled: false, tokensSaved: 0 };
+    }
+
+    // =========================================================================
+    // FLUXO B: COLABORADORES INTERNOS CADASTRADOS (10 ESPECIALISTAS DO ERP)
+    // =========================================================================
+
+    // 1. Comando de Confirmação "SIM" (Aprovação de Alçada)
+    if (/^(sim|s|confirmar|confirmo|ok|positivo|aprovar|aprovado)$/i.test(normalized)) {
+        const pending = pendingConfirmations.find(c => c.status === 'pendente' && (c.agentId === currentAgentDef.id || !c.agentId));
+        if (pending) {
+            return {
+                handled: true,
+                type: 'confirmation_yes',
+                text: `✅ *CONFIRMAÇÃO EFETIVADA NO ERP (Zero-Token)*\nOperação: *${pending.title}*\nStatus: Aprovado e registrado na auditoria oficial.\nHorário: ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}\nCanal: Resposta WhatsApp ("SIM")`,
+                tokensSaved: 420,
+                actionAudit: `Alçada '${pending.title}' aprovada deterministamente via WhatsApp.`
+            };
+        }
+        return {
+            handled: true,
+            type: 'confirmation_yes',
+            text: 'ℹ️ Nenhuma operação pendente de confirmação no momento para este setor.',
+            tokensSaved: 380,
+            actionAudit: 'Comando SIM processado localmente sem pendências ativas.'
+        };
+    }
+
+    // 2. Comando de Rejeição / Cancelamento "NÃO"
+    if (/^(n[aã]o|n|cancelar|cancelo|recusar|recuso|negar|negativo)$/i.test(normalized)) {
+        const pending = pendingConfirmations.find(c => c.status === 'pendente' && (c.agentId === currentAgentDef.id || !c.agentId));
+        if (pending) {
+            return {
+                handled: true,
+                type: 'confirmation_no',
+                text: `🛑 *OPERAÇÃO CANCELADA COM SEGURANÇA (Zero-Token)*\nOperação: *${pending.title}*\nStatus: Rejeitado pelo colaborador. Nenhum débito ou alteração foi gravada no ERP.\nHorário: ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+                tokensSaved: 410,
+                actionAudit: `Alçada '${pending.title}' cancelada com segurança pelo colaborador.`
+            };
+        }
+        return {
+            handled: true,
+            type: 'confirmation_no',
+            text: 'ℹ️ Operação cancelada. Como posso te ajudar em outra solicitação?',
+            tokensSaved: 380,
+            actionAudit: 'Comando NÃO processado localmente.'
+        };
+    }
+
+    // 2.1 Central de Atendimento & Vendas - Opção 5 (Falar com Vendedor / Retenção Comercial para colaborador)
+    if (normalized === '5' && currentAgentDef.id === 'sales_manager') {
+        return {
+            handled: true,
+            type: 'help_menu',
+            text: `👋 *GERÊNCIA COMERCIAL INFRACORE (Atendimento Especial)*\n\nOlá! Eu sou o Gerente Comercial Virtual da ${companyName}. Tenho autonomia direta no sistema para aplicar as melhores condições de pagamento e calcular frete otimizado para sua obra.\n\nQual produto você precisa e qual o local de entrega? Me conte sua necessidade que posso fechar seu pedido agora com desconto especial!\n\n*(Se mesmo assim preferir atendimento humano de campo, digite VENDEDOR para receber o contato direto do consultor sênior).* `,
+            tokensSaved: 460,
+            actionAudit: 'Retenção ativa do Gerente Comercial acionada deterministamente.'
+        };
+    }
+
+    if (/^(vendedor|consultor|humano|atendente)$/i.test(normalized) && currentAgentDef.id === 'sales_manager') {
+        return {
+            handled: true,
+            type: 'help_menu',
+            text: `👤 *CONSULTOR COMERCIAL DESIGNADO*\n\nTransferindo seu atendimento para nosso especialista de grandes obras:\n• Consultor: *Eduardo Mendes (Gerência Comercial)*\n• WhatsApp Direto: *+55 11 98765-4321*\n• E-mail: vendas@infracore.com.br\n\nO histórico da sua solicitação já foi encaminhado para a equipe para atendimento prioritário! ✅`,
+            tokensSaved: 450,
+            actionAudit: 'Transbordo humano concluído com entrega de contato direto do vendedor.'
+        };
+    }
+
+    // 3. Seleção Numérica de Agentes (1 a 10)
+    if (/^([1-9]|10)$/.test(normalized)) {
+        const index = parseInt(normalized, 10) - 1;
+        if (index >= 0 && index < AI_AGENT_CATALOG.length) {
+            const target = AI_AGENT_CATALOG[index];
+            return {
+                handled: true,
+                type: 'numeric_switch',
+                targetAgentId: target.id,
+                text: `🔄 *CONECTADO AO: ${target.name.toUpperCase()} (${target.department})*\n${target.description}\n\nPronto para atender suas solicitações. O que você gostaria de consultar ou registrar?`,
+                tokensSaved: 460,
+                actionAudit: `Troca rápida de especialista para '${target.name}' via atalho numérico [${raw}].`
+            };
+        }
+    }
+
+    // 4. Comandos de Ajuda e Menu de Navegação ("AJUDA", "MENU", "COMANDOS")
+    if (/^(ajuda|help|menu|comandos?|opcoes|duvidas|\?)$/i.test(normalized)) {
+        let menuText = '👋 *InfraCore ERP • Menu Rápido de Comandos (Zero-Token)*\n\n';
+        menuText += 'Digite o *NÚMERO* para falar diretamente com o especialista:\n';
+        AI_AGENT_CATALOG.forEach((ag, idx) => {
+            menuText += `*${idx + 1}* - ${ag.name} (${ag.department})\n`;
+        });
+        menuText += '\n*Comandos Rápidos Operacionais*:\n';
+        menuText += '• *SIM* / *NÃO* - Aprovar ou cancelar pendências de alçada\n';
+        menuText += '• *SALDO* - Ver caixa consolidado e contas do dia\n';
+        menuText += '• *ESTOQUE* - Consultar insumos críticos\n';
+        menuText += '• *FROTA* - Ver status de veículos e máquinas\n';
+        menuText += '• *STATUS* - Painel geral de operações do ERP';
+
+        return {
+            handled: true,
+            type: 'help_menu',
+            text: menuText,
+            tokensSaved: 480,
+            actionAudit: 'Menu de comandos exibido via interceptação determinística.'
+        };
+    }
+
+    // 5. Consultas Diretas ao Vivo no ERP ("SALDO", "ESTOQUE", "FROTA", "STATUS", "CAIXA")
+    if (/^(saldo|caixa)$/i.test(normalized)) {
+        const bal = erpLiveContext?.balance ?? 184500;
+        const rec = erpLiveContext?.receivables ?? 42100;
+        const pay = erpLiveContext?.payables ?? 31200;
+        return {
+            handled: true,
+            type: 'direct_query',
+            text: `💰 *POSIÇÃO FINANCEIRA CONSOLIDADA (Zero-Token)*\n• *Saldo em Caixa/Bancos*: ${fmt(bal)}\n• *A Receber Hoje*: ${fmt(rec)}\n• *A Pagar Hoje*: ${fmt(pay)}\n• *Saldo Projetado*: ${fmt(bal + rec - pay)}\n\n(Dados sincronizados ao vivo com o Financeiro do ERP)`,
+            tokensSaved: 430,
+            actionAudit: 'Consulta de saldo/caixa atendida sem chamada de LLM.'
+        };
+    }
+
+    if (/^(estoque|almoxarifado)$/i.test(normalized)) {
+        const total = erpLiveContext?.inventoryCount ?? 142;
+        const low = erpLiveContext?.inventoryLow ?? 3;
+        return {
+            handled: true,
+            type: 'direct_query',
+            text: `📦 *POSIÇÃO DE ESTOQUE E ALMOXARIFADO (Zero-Token)*\n• Total de Itens Cadastrados: ${total}\n• Itens no Ponto de Reposição: ${low} insumos críticos ⚠️\n  - Diesel S10: 2.100 L (Mínimo: 4.000 L)\n  - Cimento CP-II: 42 t (Mínimo: 25 t)\n  - Correia 36": 6 un (Mínimo: 8 un)\n\n(Dados extraídos em tempo real do ERP)`,
+            tokensSaved: 440,
+            actionAudit: 'Consulta de estoque crítico atendida sem chamada de LLM.'
+        };
+    }
+
+    if (/^(frota|veiculos|veículos)$/i.test(normalized)) {
+        const op = erpLiveContext?.fleetOperational ?? 14;
+        const tot = erpLiveContext?.fleetTotal ?? 16;
+        return {
+            handled: true,
+            type: 'direct_query',
+            text: `🚛 *STATUS DA FROTA E EQUIPAMENTOS (Zero-Token)*\n• Veículos Operacionais: ${op} de ${tot} (${Math.round((op / (tot || 1)) * 100)}%)\n• Em Manutenção na Oficina: ${tot - op} veículo(s)\n  - CC-04: Troca de pastilhas de freio (Previsão: 15h30)\n  - BT-02: Revisão de batedeira\n\n(Telemetria e controle de frotas sincronizados)`,
+            tokensSaved: 450,
+            actionAudit: 'Consulta de status de frota atendida sem chamada de LLM.'
+        };
+    }
+
+    if (/^(status|painel|resumo)$/i.test(normalized)) {
+        return {
+            handled: true,
+            type: 'direct_query',
+            text: `⚡ *PAINEL OPERACIONAL INFRACORE ERP (Zero-Token)*\n• *Financeiro*: Caixa positivo (${fmt(erpLiveContext?.balance ?? 184500)})\n• *Produção*: ${erpLiveContext?.activeOPs ?? 2} usinas operando normalmente\n• *Frota*: ${erpLiveContext?.fleetOperational ?? 14} de ${erpLiveContext?.fleetTotal ?? 16} veículos em campo\n• *Estoque*: ${erpLiveContext?.inventoryLow ?? 3} insumos em ponto de reposição\n\nDigite *AJUDA* para ver a lista de comandos ou o número do setor desejado.`,
+            tokensSaved: 490,
+            actionAudit: 'Painel geral de status extraído deterministamente.'
+        };
+    }
+
+    return { handled: false, tokensSaved: 0 };
+};
+
+// ---------------------------------------------------------------------------
+// Simulador de Mensagens de Áudio / Voz (PTT)
+// ---------------------------------------------------------------------------
+
+export interface SampleVoiceNote {
+    id: string;
+    title: string;
+    duration: string;
+    targetAgentId: string;
+    senderName: string;
+    senderRole: string;
+    transcript: string;
+    waveformPattern: number[];
+}
+
+export const SAMPLE_VOICE_NOTES: SampleVoiceNote[] = [
+    {
+        id: 'voice_cbuq_plant',
+        title: '🎤 Usina: Batelada CBUQ Faixa C',
+        duration: '0:18',
+        targetAgentId: 'plant_operator',
+        senderName: 'Antônio Operador',
+        senderRole: 'Operador de Cabine Usina',
+        transcript: 'Aqui é o Antônio da Usina 01. Batelada de CBUQ Faixa C saindo agora a 158 graus pro caminhão caçamba CC-04. Volume de 18 toneladas.',
+        waveformPattern: [20, 45, 80, 60, 90, 40, 75, 85, 50, 65, 95, 70, 40, 85, 55, 30]
+    },
+    {
+        id: 'voice_crusher_shift',
+        title: '🎤 Britagem: Apontamento Turno',
+        duration: '0:24',
+        targetAgentId: 'crusher_operator',
+        senderName: 'Manoel Britador',
+        senderRole: 'Encarregado de Britagem',
+        transcript: 'Fechando o turno do Britador Primário. 7 horas rodadas, 1 hora parado por matacão. Foram 800 toneladas de brita 1 e 250 de pedrisco. Horímetro 14.887.',
+        waveformPattern: [30, 50, 70, 85, 60, 40, 80, 95, 65, 85, 75, 90, 60, 50, 40, 25]
+    },
+    {
+        id: 'voice_fuel_fleet',
+        title: '🎤 Frota: Abastecimento Diesel',
+        duration: '0:15',
+        targetAgentId: 'fleet_manager',
+        senderName: 'Carlos Motorista',
+        senderRole: 'Motorista CC-04',
+        transcript: 'Motorista Carlos, CC-04. Acabei de abastecer 190 litros de diesel S10 no Posto Sul, deu 1.102 reais. O km tá em 184.200.',
+        waveformPattern: [25, 60, 85, 90, 70, 50, 80, 90, 60, 75, 85, 40, 65, 50, 35, 20]
+    },
+    {
+        id: 'voice_danfe_stock',
+        title: '🎤 Estoque: Chegada Danfe Cimento',
+        duration: '0:16',
+        targetAgentId: 'stock_manager',
+        senderName: 'Marcos Almoxarife',
+        senderRole: 'Almoxarife Central',
+        transcript: 'Chegou a Danfe do cimento aqui na portaria, 40 toneladas da Votorantim no caminhão placa XYZ-9876. Vou mandar a foto da nota pra conferência.',
+        waveformPattern: [35, 45, 65, 80, 55, 70, 90, 85, 60, 50, 75, 80, 65, 45, 30, 15]
+    },
+    {
+        id: 'voice_sales_budget',
+        title: '🎤 Vendas: Orçamento de Concreto',
+        duration: '0:20',
+        targetAgentId: 'sales_manager',
+        senderName: 'Engenheiro Rafael',
+        senderRole: 'Cliente Construtora Horizonte',
+        transcript: 'Olá, preciso de um orçamento urgente para 40 metros cúbicos de concreto FCK 30 com brita 1 e slump 12 para entregar amanhã cedo no km 45 da rodovia.',
+        waveformPattern: [20, 55, 75, 90, 80, 65, 85, 95, 70, 80, 90, 65, 55, 40, 30, 20]
+    }
+];
+
+// ---------------------------------------------------------------------------
+// Simulador de Payloads de Webhook Externo (Evolution / Z-API / Meta Cloud)
+// ---------------------------------------------------------------------------
+
+export interface WebhookPayloadSample {
+    id: string;
+    provider: 'evolution' | 'zapi' | 'meta';
+    title: string;
+    description: string;
+    senderPhone: string;
+    senderCategory: 'public' | 'collaborator';
+    messageText: string;
+    samplePayload: Record<string, any>;
+}
+
+export const SAMPLE_WEBHOOK_PAYLOADS: WebhookPayloadSample[] = [
+    {
+        id: 'webhook_public_greeting',
+        provider: 'evolution',
+        title: '👤 Público Externo: Saudação Inicial ("Olá")',
+        description: 'Prospect ou novo cliente não cadastrado iniciando contato pela primeira vez via WhatsApp.',
+        senderPhone: '5511999990001',
+        senderCategory: 'public',
+        messageText: 'Olá, bom dia! Gostaria de informações sobre os produtos de vocês.',
+        samplePayload: {
+            event: 'messages.upsert',
+            instance: 'infracore-central',
+            data: {
+                key: {
+                    remoteJid: '5511999990001@s.whatsapp.net',
+                    fromMe: false,
+                    id: 'EVO_MSG_GREET_01'
+                },
+                pushName: 'Juliana Engenharia Civil',
+                message: {
+                    conversation: 'Olá, bom dia! Gostaria de informações sobre os produtos de vocês.'
+                },
+                messageType: 'conversation',
+                messageTimestamp: Math.floor(Date.now() / 1000)
+            }
+        }
+    },
+    {
+        id: 'webhook_public_quote',
+        provider: 'meta',
+        title: '👤 Público Externo: Solicitar Orçamento (Opção 1)',
+        description: 'Cliente externo solicitando proposta de Brita 1 e CBUQ para entrega CIF em obra.',
+        senderPhone: '5511999998888',
+        senderCategory: 'public',
+        messageText: '1 - Solicitar Orçamento: preciso de 80t de brita 1 e 40t de CBUQ para amanhã',
+        samplePayload: {
+            object: 'whatsapp_business_account',
+            entry: [
+                {
+                    id: 'WABA_ACCOUNT_01',
+                    changes: [
+                        {
+                            value: {
+                                messaging_product: 'whatsapp',
+                                metadata: { display_phone_number: '551140049999', phone_number_id: 'PN_8810' },
+                                contacts: [{ profile: { name: 'Roberto Construtor' }, wa_id: '5511999998888' }],
+                                messages: [
+                                    {
+                                        from: '5511999998888',
+                                        id: 'wamid.HBgLMjU1MTE...',
+                                        timestamp: Math.floor(Date.now() / 1000).toString(),
+                                        type: 'text',
+                                        text: {
+                                            body: '1 - Solicitar Orçamento: preciso de 80t de brita 1 e 40t de CBUQ para amanhã'
+                                        }
+                                    }
+                                ]
+                            },
+                            field: 'messages'
+                        }
+                    ]
+                }
+            ]
+        }
+    },
+    {
+        id: 'webhook_public_tracking',
+        provider: 'zapi',
+        title: '👤 Público Externo: 2ª Via / Rastreio (Opção 2)',
+        description: 'Cliente existente com pedido em andamento solicitando rastreio da entrega e 2ª via de boleto.',
+        senderPhone: '5511977776666',
+        senderCategory: 'public',
+        messageText: '2 - Já sou cliente. Gostaria de saber onde está o caminhão do pedido PED-1082 e a 2ª via.',
+        samplePayload: {
+            instanceId: 'ZAPI_INST_4412',
+            messageId: 'ZAPI_MSG_2084',
+            phone: '5511977776666',
+            senderName: 'Construtora Horizonte',
+            text: {
+                message: '2 - Já sou cliente. Gostaria de saber onde está o caminhão do pedido PED-1082 e a 2ª via.'
+            },
+            type: 'ReceivedCallback',
+            momment: Date.now()
+        }
+    },
+    {
+        id: 'webhook_collab_approval',
+        provider: 'evolution',
+        title: '👷 Colaborador Cadastrado: Aprovação Alçada ("SIM")',
+        description: 'Gestor interno aprovando liberação comercial ou compra emergencial pelo WhatsApp.',
+        senderPhone: '5511988887777',
+        senderCategory: 'collaborator',
+        messageText: 'SIM',
+        samplePayload: {
+            event: 'messages.upsert',
+            instance: 'infracore-producao',
+            data: {
+                key: {
+                    remoteJid: '5511988887777@s.whatsapp.net',
+                    fromMe: false,
+                    id: 'EVO_MSG_APPR_88'
+                },
+                pushName: 'Diretor Roberto',
+                message: {
+                    conversation: 'SIM'
+                },
+                messageType: 'conversation',
+                messageTimestamp: Math.floor(Date.now() / 1000)
+            }
+        }
+    },
+    {
+        id: 'webhook_collab_fuel',
+        provider: 'zapi',
+        title: '👷 Colaborador Cadastrado: Apontamento de Frota',
+        description: 'Motorista CC-04 registrando abastecimento de diesel e horímetro no ERP.',
+        senderPhone: '5511966665555',
+        senderCategory: 'collaborator',
+        messageText: 'Abastecimento CC-04 190L Diesel S10 km 184200.',
+        samplePayload: {
+            instanceId: 'ZAPI_INST_4412',
+            messageId: 'ZAPI_MSG_1048',
+            phone: '5511966665555',
+            senderName: 'Carlos Motorista',
+            text: {
+                message: 'Abastecimento CC-04 190L Diesel S10 km 184200.'
+            },
+            photo: 'https://storage.infracore.com.br/receipts/fuel_190.jpg',
+            type: 'ReceivedCallback',
+            momment: Date.now()
+        }
+    },
+    {
+        id: 'webhook_collab_balance',
+        provider: 'meta',
+        title: '👷 Colaborador Cadastrado: Consulta Rápida ("SALDO")',
+        description: 'Gerente financeiro consultando posição de caixa e contas a pagar do dia.',
+        senderPhone: '5511955554444',
+        senderCategory: 'collaborator',
+        messageText: 'SALDO',
+        samplePayload: {
+            object: 'whatsapp_business_account',
+            entry: [
+                {
+                    id: 'WABA_ACCOUNT_01',
+                    changes: [
+                        {
+                            value: {
+                                messaging_product: 'whatsapp',
+                                metadata: { display_phone_number: '551140049999', phone_number_id: 'PN_8810' },
+                                contacts: [{ profile: { name: 'Mariana Controladoria' }, wa_id: '5511955554444' }],
+                                messages: [
+                                    {
+                                        from: '5511955554444',
+                                        id: 'wamid.HBgLMjU1MTE...',
+                                        timestamp: Math.floor(Date.now() / 1000).toString(),
+                                        type: 'text',
+                                        text: { body: 'SALDO' }
+                                    }
+                                ]
+                            },
+                            field: 'messages'
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+];

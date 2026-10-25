@@ -24,6 +24,7 @@ export const APP_PERMISSIONS: PermissionCategory[] = [
             { id: 'clients.delete', name: 'Excluir Clientes', description: 'Remover clientes da base' },
             { id: 'clients.financial', name: 'Dados Financeiros (Cliente)', description: 'Ver/Editar crédito e prazos' },
             { id: 'clients.manage', name: 'Gestão Completa de Clientes', description: 'Acesso unificado a visualização, criação e alteração' },
+            { id: 'sales.pdv', name: 'Operação de PDV (Frente de Caixa)', description: 'Permissão para operar terminal de ponto de venda e emissão de cupom/venda rápida' },
             { id: 'sales.view.sales', name: 'Visualizar Vendas (Compatibilidade)', description: 'Identificador compatível para consulta comercial' },
             { id: 'sales.create.sales', name: 'Criar Vendas (Compatibilidade)', description: 'Identificador compatível para lançamento de pedidos' }
         ]
@@ -140,9 +141,10 @@ export const PERMISSION_MAP: Record<string, PermissionItem> = ALL_PERMISSIONS_FL
 }, {} as Record<string, PermissionItem>);
 
 export const PERMISSION_ALIAS_MAP: Record<string, string[]> = {
-    'sales.view': ['sales.view.sales'],
+    'sales.view': ['sales.view.sales', 'sales.pdv'],
+    'sales.pdv': ['sales.view', 'sales.create'],
     'sales.view.sales': ['sales.view'],
-    'sales.create': ['sales.create.sales'],
+    'sales.create': ['sales.create.sales', 'sales.pdv'],
     'sales.create.sales': ['sales.create'],
     'clients.manage': ['clients.view', 'clients.create', 'clients.edit'],
     'employees.view': ['hr.view'],

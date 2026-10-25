@@ -53,12 +53,19 @@ import {
    Mail,
    Building2,
    Disc,
-   MapPin
+   MapPin,
+   Camera,
+   Image as ImageIcon,
+   Eye,
+   Receipt,
+   CreditCard,
+   ExternalLink,
+   CheckCircle2
 } from 'lucide-react';
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, CartesianGrid } from 'recharts';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
-import { PurchaseOrder, PurchaseItem, Supplier, InventoryItem, MaintenanceRecord, Employee } from '../types';
+import { PurchaseOrder, PurchaseItem, Supplier, InventoryItem, MaintenanceRecord, Employee, AppAttachment } from '../types';
 import { printDocument, exportToCSV } from '../utils/exportUtils';
 
 const Purchases = () => {
@@ -85,6 +92,7 @@ const Purchases = () => {
       currentUser,
       hasPermission,
       addMaintenanceRecord,
+      settings,
    } = useApp();
 
    const { addToast } = useToast();
@@ -110,7 +118,20 @@ const Purchases = () => {
    const [selectedSupplier, setSelectedSupplier] = useState<string>('');
    const [orderItems, setOrderItems] = useState<PurchaseItem[]>([]);
    const [isStockDirect, setIsStockDirect] = useState(true);
-   const [tempAttachments, setTempAttachments] = useState<any[]>([]);
+   const [tempAttachments, setTempAttachments] = useState<AppAttachment[]>([]);
+
+   // Central de Comprovantes & Vouchers
+   const [isAddVoucherModalOpen, setIsAddVoucherModalOpen] = useState(false);
+   const [voucherOrderTarget, setVoucherOrderTarget] = useState<PurchaseOrder | null>(null);
+   const [voucherType, setVoucherType] = useState<string>('nf');
+   const [voucherTitle, setVoucherTitle] = useState<string>('');
+   const [voucherNote, setVoucherNote] = useState<string>('');
+   const [voucherFile, setVoucherFile] = useState<File | null>(null);
+   const [voucherPreviewUrl, setVoucherPreviewUrl] = useState<string | null>(null);
+   const [isProcessingVoucher, setIsProcessingVoucher] = useState(false);
+
+   // Visualizador Lightbox de Comprovantes
+   const [lightboxAttachment, setLightboxAttachment] = useState<AppAttachment | null>(null);
 
    // Financial & Shipping
    const [paymentTerms, setPaymentTerms] = useState<string>('30 DDL');
@@ -246,6 +267,256 @@ const Purchases = () => {
    // Format currency helper
    const formatCurrency = (val: number) => {
       return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+   };
+
+   // Image compression helper (Client-side HTML5 canvas, max 1280px, 80% JPEG quality)
+   const compressImageFile = (file: File, maxWidth = 1280, maxHeight = 1280, quality = 0.8): Promise<string> => {
+      return new Promise((resolve, reject) => {
+         const reader = new FileReader();
+         reader.readAsDataURL(file);
+         reader.onload = (event) => {
+            const img = new window.Image();
+            img.src = event.target?.result as string;
+            img.onload = () => {
+               let width = img.width;
+               let height = img.height;
+
+               if (width > height) {
+                  if (width > maxWidth) {
+                     height = Math.round((height * maxWidth) / width);
+                     width = maxWidth;
+                  }
+               } else {
+                  if (height > maxHeight) {
+                     width = Math.round((width * maxHeight) / height);
+                     height = maxHeight;
+                  }
+               }
+
+               const canvas = document.createElement('canvas');
+               canvas.width = width;
+               canvas.height = height;
+               const ctx = canvas.getContext('2d');
+               if (ctx) {
+                  ctx.drawImage(img, 0, 0, width, height);
+                  const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                  resolve(dataUrl);
+               } else {
+                  resolve(event.target?.result as string);
+               }
+            };
+            img.onerror = (err) => reject(err);
+         };
+         reader.onerror = (err) => reject(err);
+      });
+   };
+
+   // File to base64 DataURL helper (e.g. for PDF)
+   const readFileAsDataURL = (file: File): Promise<string> => {
+      return new Promise((resolve, reject) => {
+         const reader = new FileReader();
+         reader.readAsDataURL(file);
+         reader.onload = () => resolve(reader.result as string);
+         reader.onerror = (err) => reject(err);
+      });
+   };
+
+   // Voucher Categories definition
+   const VOUCHER_CATEGORIES: Record<string, {
+      key: string;
+      label: string;
+      shortLabel: string;
+      badgeColor: string;
+      badgeDark: string;
+      iconType: 'file-text' | 'credit-card' | 'camera' | 'receipt' | 'file';
+      description: string;
+   }> = {
+      nf: {
+         key: 'nf',
+         label: 'Nota Fiscal / DANFE',
+         shortLabel: 'Nota Fiscal',
+         badgeColor: 'bg-blue-100 text-blue-800 border-blue-200',
+         badgeDark: 'dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-800',
+         iconType: 'file-text',
+         description: 'Documento fiscal oficial emitido pelo fornecedor'
+      },
+      payment: {
+         key: 'payment',
+         label: 'Comprovante de Pagamento',
+         shortLabel: 'Pagamento',
+         badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+         badgeDark: 'dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-800',
+         iconType: 'credit-card',
+         description: 'Comprovante PIX, TED, Boleto Liquidado ou Recibo'
+      },
+      item_photo: {
+         key: 'item_photo',
+         label: 'Foto do Objeto / Carga Recebida',
+         shortLabel: 'Foto do Item',
+         badgeColor: 'bg-purple-100 text-purple-800 border-purple-200',
+         badgeDark: 'dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-800',
+         iconType: 'camera',
+         description: 'Registro visual do material conferido no almoxarifado'
+      },
+      delivery_receipt: {
+         key: 'delivery_receipt',
+         label: 'Recibo / Canhoto de Entrega',
+         shortLabel: 'Canhoto',
+         badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
+         badgeDark: 'dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-800',
+         iconType: 'receipt',
+         description: 'Canhoto de nota assinado ou comprovante de transporte'
+      },
+      quote: {
+         key: 'quote',
+         label: 'Cotação / Proposta Comercial',
+         shortLabel: 'Cotação',
+         badgeColor: 'bg-slate-100 text-slate-800 border-slate-200',
+         badgeDark: 'dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
+         iconType: 'file',
+         description: 'Orçamento prévio ou minuta de negociação com fornecedor'
+      }
+   };
+
+   const getVoucherCategoryInfo = (type?: string) => {
+      if (type && VOUCHER_CATEGORIES[type]) {
+         return VOUCHER_CATEGORIES[type];
+      }
+      if (type?.toLowerCase().includes('pdf')) {
+         return {
+            key: 'pdf',
+            label: 'Documento PDF',
+            shortLabel: 'PDF',
+            badgeColor: 'bg-blue-100 text-blue-800 border-blue-200',
+            badgeDark: 'dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-800',
+            iconType: 'file-text' as const,
+            description: 'Arquivo PDF anexado'
+         };
+      }
+      if (type?.toLowerCase().includes('image') || type?.toLowerCase().includes('png') || type?.toLowerCase().includes('jpg')) {
+         return {
+            key: 'photo',
+            label: 'Foto / Registro Visual',
+            shortLabel: 'Foto',
+            badgeColor: 'bg-purple-100 text-purple-800 border-purple-200',
+            badgeDark: 'dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-800',
+            iconType: 'camera' as const,
+            description: 'Imagem anexada'
+         };
+      }
+      return {
+         key: 'generic',
+         label: 'Comprovante / Anexo',
+         shortLabel: 'Anexo',
+         badgeColor: 'bg-slate-100 text-slate-800 border-slate-200',
+         badgeDark: 'dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
+         iconType: 'file' as const,
+         description: 'Arquivo anexo'
+      };
+   };
+
+   const handleOpenAddVoucher = (order?: PurchaseOrder | null) => {
+      setVoucherOrderTarget(order || null);
+      setVoucherType('nf');
+      setVoucherTitle('');
+      setVoucherNote('');
+      setVoucherFile(null);
+      setVoucherPreviewUrl(null);
+      setIsAddVoucherModalOpen(true);
+   };
+
+   const handleVoucherFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setIsProcessingVoucher(true);
+      try {
+         let dataUrl = '';
+         if (file.type.startsWith('image/')) {
+            dataUrl = await compressImageFile(file);
+         } else {
+            dataUrl = await readFileAsDataURL(file);
+         }
+         setVoucherFile(file);
+         setVoucherPreviewUrl(dataUrl);
+         if (!voucherTitle) {
+            setVoucherTitle(file.name.replace(/\.[^/.]+$/, ''));
+         }
+      } catch (err) {
+         console.error("Erro ao carregar comprovante:", err);
+         addToast("Falha ao processar arquivo de comprovante.", 'error');
+      } finally {
+         setIsProcessingVoucher(false);
+      }
+   };
+
+   const handleSaveVoucher = () => {
+      if (!voucherFile && !voucherPreviewUrl) {
+         addToast("Selecione um arquivo de comprovante ou tire uma foto.", 'warning');
+         return;
+      }
+
+      const categoryInfo = getVoucherCategoryInfo(voucherType);
+      const now = new Date();
+      const formattedDate = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const sizeStr = voucherFile
+         ? (voucherFile.size > 1024 * 1024
+            ? (voucherFile.size / (1024 * 1024)).toFixed(1) + ' MB'
+            : (voucherFile.size / 1024).toFixed(1) + ' KB')
+         : 'Otimizado';
+
+      const finalName = voucherTitle.trim()
+         ? `${voucherTitle.trim()}${voucherNote.trim() ? ` — ${voucherNote.trim()}` : ''}`
+         : (voucherFile?.name || `${categoryInfo.shortLabel}`);
+
+      const newAttachment: AppAttachment = {
+         id: `ATT-${Date.now()}`,
+         name: finalName,
+         type: voucherType,
+         date: formattedDate,
+         size: sizeStr,
+         url: voucherPreviewUrl || undefined
+      };
+
+      if (voucherOrderTarget) {
+         const updatedAttachments = [...(voucherOrderTarget.attachments || []), newAttachment];
+         const updatedOrder: PurchaseOrder = {
+            ...voucherOrderTarget,
+            attachments: updatedAttachments
+         };
+         updatePurchaseOrder(updatedOrder);
+         if (selectedOrder && selectedOrder.id === voucherOrderTarget.id) {
+            setSelectedOrder(updatedOrder);
+         }
+         addToast(`Comprovante "${categoryInfo.shortLabel}" arquivado com sucesso na ordem!`, 'success');
+      } else {
+         // Anexando na tela de novo pedido
+         setTempAttachments(prev => [...prev, newAttachment]);
+         addToast(`Comprovante "${categoryInfo.shortLabel}" adicionado ao pedido!`, 'success');
+      }
+
+      setIsAddVoucherModalOpen(false);
+      setVoucherFile(null);
+      setVoucherPreviewUrl(null);
+      setVoucherOrderTarget(null);
+      setVoucherTitle('');
+      setVoucherNote('');
+   };
+
+   const handleDeleteVoucher = (order: PurchaseOrder, attachmentId: string) => {
+      if (!isAdmin) {
+         addToast("Apenas administradores têm permissão para excluir comprovantes arquivados.", 'warning');
+         return;
+      }
+      if (!window.confirm("Deseja realmente remover este comprovante da ordem de compra?")) return;
+
+      const updatedAttachments = (order.attachments || []).filter(at => at.id !== attachmentId);
+      const updatedOrder = { ...order, attachments: updatedAttachments };
+      updatePurchaseOrder(updatedOrder);
+      if (selectedOrder && selectedOrder.id === order.id) {
+         setSelectedOrder(updatedOrder);
+      }
+      addToast("Comprovante removido com sucesso.", 'info');
    };
 
    // Cart Management
@@ -570,68 +841,157 @@ const Purchases = () => {
    }, [unifiedInventory, stockSearch, stockCategoryFilter, stockLevelFilter]);
 
    const handlePrintPurchaseOrder = (order: PurchaseOrder) => {
+      const supplierData = suppliers.find(s => s.id === order.supplierId || s.name.toLowerCase() === order.supplierName.toLowerCase());
+      const supplierDoc = supplierData?.document || 'CNPJ/CPF não informado';
+      const supplierAddress = supplierData?.address
+         ? `${supplierData.address.street || ''}${supplierData.address.neighborhood ? `, ${supplierData.address.neighborhood}` : ''} - ${supplierData.address.city || ''}/${supplierData.address.state || ''}`
+         : 'Endereço comercial cadastrado no fornecedor';
+      const supplierPhone = supplierData?.phone || 'Não informado';
+      const supplierEmail = supplierData?.email || 'Não informado';
+      const supplierContact = supplierData?.contactPerson || 'Representante Comercial';
+
+      const companyName = settings?.companyName || 'INFRACORE ENGENHARIA E CONSTRUÇÕES LTDA';
+      const companyDoc = settings?.document || '12.345.678/0001-90';
+      const companyAddress = settings?.address || 'Av. Principal da Indústria, 1000 - Polo Industrial';
+      const companyPhone = settings?.phone || '(11) 4002-8922';
+      const companyEmail = settings?.email || 'suprimentos@infracore.com.br';
+
+      const orderSubtotalCalc = order.subtotal || order.items.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0);
+      const hasAttachments = order.attachments && order.attachments.length > 0;
+
+      const attachmentsHtml = hasAttachments ? `
+         <table style="width:100%; border-collapse:collapse; margin-top:8px; font-size:11px;">
+            <thead>
+               <tr style="background:#f1f5f9; text-align:left; color:#475569; font-size:10px; text-transform:uppercase;">
+                  <th style="padding:6px 10px; border:1px solid #cbd5e1;">Tipo de Comprovante</th>
+                  <th style="padding:6px 10px; border:1px solid #cbd5e1;">Documento / Descrição</th>
+                  <th style="padding:6px 10px; border:1px solid #cbd5e1; text-align:center;">Data Arquivamento</th>
+                  <th style="padding:6px 10px; border:1px solid #cbd5e1; text-align:center;">Rastreabilidade</th>
+               </tr>
+            </thead>
+            <tbody>
+               ${order.attachments?.map(at => {
+                  const meta = getVoucherCategoryInfo(at.type);
+                  return `
+                     <tr>
+                        <td style="padding:6px 10px; border:1px solid #cbd5e1; font-weight:bold; color:#0f172a;">${meta.label}</td>
+                        <td style="padding:6px 10px; border:1px solid #cbd5e1; color:#334155;">${at.name}</td>
+                        <td style="padding:6px 10px; border:1px solid #cbd5e1; text-align:center; color:#64748b;">${at.date || '-'}</td>
+                        <td style="padding:6px 10px; border:1px solid #cbd5e1; text-align:center; color:#059669; font-weight:bold;">✓ Arquivado no ERP</td>
+                     </tr>
+                  `;
+               }).join('')}
+            </tbody>
+         </table>
+      ` : `
+         <p style="margin:4px 0 0 0; font-size:11px; color:#64748b; font-style:italic;">
+            Nenhum comprovante fiscal ou de pagamento vinculado até a emissão desta ordem. Os comprovantes físicos e digitais devem ser protocolados na entrada do almoxarifado.
+         </p>
+      `;
+
       const html = `
-         <div class="header">
+         <div class="header" style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:4px solid #0891b2; padding-bottom:16px; margin-bottom:20px;">
             <div class="company-info">
-               <h1 style="color: #0891b2; font-size:24px; margin:0;">INFRACORE ERP</h1>
-               <p style="margin:2px 0; color:#64748b; font-size:12px;">Sistemas de Gestão para Engenharia e Indústria</p>
+               <h1 style="color:#0891b2; font-size:22px; margin:0; font-weight:900; letter-spacing:-0.5px;">${companyName}</h1>
+               <p style="margin:2px 0; color:#334155; font-size:11px; font-weight:bold;">CNPJ: ${companyDoc} • Tel: ${companyPhone} • ${companyEmail}</p>
+               <p style="margin:2px 0; color:#64748b; font-size:11px;">${companyAddress}</p>
             </div>
-            <div class="doc-info" style="text-align: right;">
-               <h2 style="margin:0; font-size:18px;">ORDEM DE COMPRA OFICIAL</h2>
-               <p style="margin:2px 0; font-size:12px;">Nº: <strong>${order.id}</strong> | Emissão: ${order.date}</p>
+            <div class="doc-info" style="text-align:right;">
+               <span style="background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:4px; font-size:10px; font-weight:900; letter-spacing:0.5px; text-transform:uppercase;">AUTORIZAÇÃO DE FORNECIMENTO</span>
+               <h2 style="margin:6px 0 2px 0; font-size:18px; font-weight:900; color:#0f172a;">ORDEM DE COMPRA (PO)</h2>
+               <p style="margin:0; font-size:13px; font-weight:bold; color:#0891b2;">Nº ${order.id}</p>
+               <p style="margin:2px 0; font-size:11px; color:#64748b;">Emissão: <strong>${order.date}</strong></p>
             </div>
          </div>
 
-         <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin:20px 0; display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+         <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px; margin:15px 0; display:grid; grid-template-columns:1.2fr 1fr; gap:16px;">
             <div>
-               <h3 style="margin:0 0 6px 0; font-size:11px; text-transform:uppercase; color:#64748b;">DADOS DO FORNECEDOR</h3>
-               <p style="margin:0; font-size:15px; font-weight:bold; color:#1e293b;">${order.supplierName}</p>
-               <p style="margin:4px 0 0 0; font-size:12px; color:#475569;">Condição de Pagamento: <strong>${order.paymentTerms || 'Conforme Acordo'}</strong></p>
+               <h3 style="margin:0 0 6px 0; font-size:10px; text-transform:uppercase; color:#64748b; letter-spacing:0.5px; font-weight:900;">DADOS DO FORNECEDOR / EMITENTE</h3>
+               <p style="margin:0; font-size:14px; font-weight:bold; color:#0f172a;">${order.supplierName}</p>
+               <p style="margin:2px 0; font-size:11px; color:#475569;"><strong>CNPJ/CPF:</strong> ${supplierDoc}</p>
+               <p style="margin:2px 0; font-size:11px; color:#475569;"><strong>Endereço:</strong> ${supplierAddress}</p>
+               <p style="margin:2px 0; font-size:11px; color:#475569;"><strong>Contato:</strong> ${supplierContact} | <strong>Tel:</strong> ${supplierPhone}</p>
             </div>
-            <div>
-               <h3 style="margin:0 0 6px 0; font-size:11px; text-transform:uppercase; color:#64748b;">SITUAÇÃO DO PEDIDO</h3>
-               <p style="margin:0; font-size:15px; font-weight:bold; color:#0891b2;">${order.status.toUpperCase()}</p>
-               <p style="margin:4px 0 0 0; font-size:12px; color:#475569;">Plano Contábil: <strong>${order.ledgerName || 'Material de Consumo'}</strong></p>
+            <div style="border-left:1px solid #e2e8f0; padding-left:16px;">
+               <h3 style="margin:0 0 6px 0; font-size:10px; text-transform:uppercase; color:#64748b; letter-spacing:0.5px; font-weight:900;">CONDIÇÕES COMERCIAIS & OPERACIONAIS</h3>
+               <p style="margin:2px 0; font-size:11px; color:#1e293b;"><strong>Situação do Pedido:</strong> <span style="font-weight:900; color:${order.status === 'Recebido' ? '#059669' : order.status === 'Aprovado' ? '#0284c7' : '#d97706'}">${order.status.toUpperCase()}</span></p>
+               <p style="margin:2px 0; font-size:11px; color:#475569;"><strong>Condição de Pagamento:</strong> ${order.paymentTerms || 'Conforme Acordo'}</p>
+               <p style="margin:2px 0; font-size:11px; color:#475569;"><strong>Classificação Contábil:</strong> [${order.ledgerCode || '2.02.03'}] ${order.ledgerName || 'Material de Consumo'}</p>
+               <p style="margin:2px 0; font-size:11px; color:#475569;"><strong>Emissor / Gestão:</strong> ${currentUser?.name || 'Departamento de Suprimentos'}</p>
             </div>
          </div>
 
          <table style="width:100%; border-collapse:collapse; margin-top:10px;">
             <thead>
-               <tr style="background:#f1f5f9; text-align:left; font-size:11px; text-transform:uppercase; color:#475569;">
-                  <th style="padding:10px; border:1px solid #cbd5e1;">Descrição do Item</th>
-                  <th style="padding:10px; border:1px solid #cbd5e1; text-align:center;">Qtd</th>
-                  <th style="padding:10px; border:1px solid #cbd5e1; text-align:center;">UN</th>
-                  <th style="padding:10px; border:1px solid #cbd5e1; text-align:right;">Valor Unit.</th>
-                  <th style="padding:10px; border:1px solid #cbd5e1; text-align:right;">Subtotal</th>
+               <tr style="background:#f1f5f9; text-align:left; font-size:10px; text-transform:uppercase; color:#475569;">
+                  <th style="padding:8px 10px; border:1px solid #cbd5e1;">Item / Descrição do Material</th>
+                  <th style="padding:8px 10px; border:1px solid #cbd5e1; text-align:center;">Qtd</th>
+                  <th style="padding:8px 10px; border:1px solid #cbd5e1; text-align:center;">UN</th>
+                  <th style="padding:8px 10px; border:1px solid #cbd5e1; text-align:right;">Valor Unit.</th>
+                  <th style="padding:8px 10px; border:1px solid #cbd5e1; text-align:right;">Subtotal</th>
                </tr>
             </thead>
             <tbody>
-               ${order.items.map(item => `
-                  <tr style="font-size:12px;">
-                     <td style="padding:8px 10px; border:1px solid #cbd5e1;"><strong>${item.name}</strong></td>
-                     <td style="padding:8px 10px; border:1px solid #cbd5e1; text-align:center;">${item.quantity}</td>
-                     <td style="padding:8px 10px; border:1px solid #cbd5e1; text-align:center;">${item.unit || 'UN'}</td>
-                     <td style="padding:8px 10px; border:1px solid #cbd5e1; text-align:right;">${formatCurrency(item.price)}</td>
-                     <td style="padding:8px 10px; border:1px solid #cbd5e1; text-align:right; font-weight:bold;">${formatCurrency(item.price * item.quantity)}</td>
+               ${order.items.map((item, idx) => `
+                  <tr style="font-size:11px; background:${idx % 2 === 0 ? '#ffffff' : '#fcfcfd'};">
+                     <td style="padding:7px 10px; border:1px solid #cbd5e1;"><strong>${item.name}</strong></td>
+                     <td style="padding:7px 10px; border:1px solid #cbd5e1; text-align:center;">${item.quantity}</td>
+                     <td style="padding:7px 10px; border:1px solid #cbd5e1; text-align:center;">${item.unit || 'UN'}</td>
+                     <td style="padding:7px 10px; border:1px solid #cbd5e1; text-align:right;">${formatCurrency(item.price)}</td>
+                     <td style="padding:7px 10px; border:1px solid #cbd5e1; text-align:right; font-weight:bold;">${formatCurrency(item.price * item.quantity)}</td>
                   </tr>
                `).join('')}
             </tbody>
          </table>
 
-         <div style="margin-top:20px; text-align:right; border-top:2px solid #0891b2; padding-top:10px;">
-            <p style="margin:0; font-size:16px; font-weight:900; color:#0e7490;">VALOR TOTAL DO PEDIDO: ${formatCurrency(order.total)}</p>
+         <div style="margin-top:15px; display:flex; justify-content:flex-end;">
+            <table style="width:320px; border-collapse:collapse; font-size:11px;">
+               <tr>
+                  <td style="padding:5px 10px; border-bottom:1px solid #e2e8f0; color:#64748b;">Subtotal dos Itens:</td>
+                  <td style="padding:5px 10px; border-bottom:1px solid #e2e8f0; text-align:right; font-weight:bold;">${formatCurrency(orderSubtotalCalc)}</td>
+               </tr>
+               ${order.shippingCost ? `
+               <tr>
+                  <td style="padding:5px 10px; border-bottom:1px solid #e2e8f0; color:#64748b;">Frete / Transporte:</td>
+                  <td style="padding:5px 10px; border-bottom:1px solid #e2e8f0; text-align:right; font-weight:bold;">${formatCurrency(order.shippingCost)}</td>
+               </tr>` : ''}
+               <tr style="background:#f0fdfa;">
+                  <td style="padding:8px 10px; border-top:2px solid #0891b2; font-size:13px; font-weight:900; color:#0e7490;">VALOR TOTAL:</td>
+                  <td style="padding:8px 10px; border-top:2px solid #0891b2; text-align:right; font-size:15px; font-weight:900; color:#0e7490;">${formatCurrency(order.total)}</td>
+               </tr>
+            </table>
          </div>
 
-         <div style="margin-top: 40px; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; font-size: 11px; color: #475569; background:#fbfcfe;">
-            <h4 style="margin: 0 0 6px 0; font-size: 11px; color: #0891b2; text-transform:uppercase;">INSTRUÇÕES DE ENTREGA & FISCAL</h4>
-            <p style="margin: 2px 0;">1. O recebimento está condicionado à apresentação do DANFE correspondente e conferência física.</p>
-            <p style="margin: 2px 0;">2. Em caso de divergência de qualidade ou quantidade, o lote será rejeitado na portaria.</p>
-            <p style="margin: 2px 0;">3. Dados cadastrais e faturamento conforme emitido pelo departamento de suprimentos.</p>
+         <div style="margin-top:20px; border:1px solid #e2e8f0; border-radius:8px; padding:12px; background:#fafbfc;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+               <h4 style="margin:0; font-size:10px; text-transform:uppercase; color:#0891b2; letter-spacing:0.5px; font-weight:900;">
+                  RASTREABILIDADE DIGITAL & COMPROVANTES VINCULADOS
+               </h4>
+               <span style="font-size:10px; color:#64748b; font-weight:bold;">${order.attachments?.length || 0} anexo(s) auditado(s)</span>
+            </div>
+            ${attachmentsHtml}
          </div>
 
-         <div style="margin-top: 60px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px;">
-            <div style="border-top: 1px solid #000; text-align:center; font-size:11px; padding-top:6px;">Gestor de Compras / Suprimentos</div>
-            <div style="border-top: 1px solid #000; text-align:center; font-size:11px; padding-top:6px;">Diretoria de Operações / Aprovação</div>
+         <div style="margin-top:20px; border:1px solid #e2e8f0; padding:10px 12px; border-radius:8px; font-size:10px; color:#475569; background:#fbfcfe; line-height:1.4;">
+            <h5 style="margin:0 0 4px 0; font-size:10px; color:#0891b2; text-transform:uppercase; font-weight:900;">INSTRUÇÕES FISCAIS E DE RECEBIMENTO</h5>
+            <p style="margin:2px 0;">1. O recebimento físico e descarga estão condicionados à apresentação do DANFE correspondente com chave de acesso regular.</p>
+            <p style="margin:2px 0;">2. Em caso de avaria ou divergência qualitativa/quantitativa em relação a esta Ordem, o lote será retido ou devolvido na portaria.</p>
+            <p style="margin:2px 0;">3. É obrigatório fazer constar nas Informações Complementares do DANFE o número desta Ordem de Compra: <strong>${order.id}</strong>.</p>
+         </div>
+
+         <div style="margin-top:40px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px;">
+            <div style="border-top:1px solid #334155; text-align:center; font-size:10px; padding-top:6px;">
+               <strong>Departamento de Suprimentos</strong><br/>
+               <span style="color:#64748b;">${currentUser?.name || 'Emissor Autorizado'}</span>
+            </div>
+            <div style="border-top:1px solid #334155; text-align:center; font-size:10px; padding-top:6px;">
+               <strong>Diretoria de Operações</strong><br/>
+               <span style="color:#64748b;">Aprovação Financeira / Técnica</span>
+            </div>
+            <div style="border-top:1px solid #334155; text-align:center; font-size:10px; padding-top:6px;">
+               <strong>Aceite do Fornecedor / Transportador</strong><br/>
+               <span style="color:#64748b;">Carimbo, Data e Assinatura</span>
+            </div>
          </div>
       `;
       printDocument(`Ordem_Compra_${order.id}_${order.supplierName.replace(/\s+/g, '_')}`, html);
@@ -1216,6 +1576,18 @@ const Purchases = () => {
                               <td className="px-6 py-4">
                                  <p className="font-mono text-xs font-black text-cyan-700 dark:text-cyan-400">{order.id}</p>
                                  <p className="text-[10px] text-slate-500 mt-0.5">{order.date}</p>
+                                 {order.attachments && order.attachments.length > 0 && (
+                                    <span
+                                       onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedOrder(order);
+                                       }}
+                                       className="inline-flex items-center gap-1 text-[9px] font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/40 px-1.5 py-0.5 rounded mt-1 border border-cyan-200 dark:border-cyan-800 cursor-pointer hover:bg-cyan-100 transition-colors"
+                                       title="Ver Comprovantes Arquivados"
+                                    >
+                                       <Paperclip size={10} /> {order.attachments.length} {order.attachments.length === 1 ? 'comprovante' : 'comprovantes'}
+                                    </span>
+                                 )}
                               </td>
                               <td className="px-6 py-4">
                                  <p className="font-bold text-slate-800 dark:text-white">{order.supplierName}</p>
@@ -1521,37 +1893,70 @@ const Purchases = () => {
                            </div>
                         </div>
 
-                        {/* Attachments Section */}
+                        {/* Attachments Section - Central de Comprovantes */}
                         <div className="pt-3 border-t border-slate-100 dark:border-gray-700">
-                           <h4 className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                              <Paperclip size={13} className="text-cyan-600" /> Notas & Cotações Anexas
-                           </h4>
-                           <div className="border-2 border-dashed border-slate-100 dark:border-gray-700 rounded-xl p-3 flex flex-col items-center justify-center text-center cursor-pointer hover:border-cyan-400 transition-colors relative">
-                              <input
-                                 type="file"
-                                 className="absolute inset-0 opacity-0 cursor-pointer"
-                                 onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) {
-                                       const at = { id: Date.now().toString(), name: file.name, date: new Date().toLocaleDateString('pt-BR'), size: (file.size / 1024).toFixed(1) + ' KB', type: file.type };
-                                       setTempAttachments([...tempAttachments, at]);
-                                    }
-                                 }}
-                              />
-                              <Upload size={16} className="text-slate-300 mb-1" />
-                              <span className="text-[9px] font-bold text-slate-400 uppercase">Anexar proposta / minuta</span>
+                           <div className="flex items-center justify-between mb-2">
+                              <h4 className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                 <Paperclip size={13} className="text-cyan-600" /> Comprovantes & Cotações ({tempAttachments.length})
+                              </h4>
+                              <button
+                                 type="button"
+                                 onClick={() => handleOpenAddVoucher(null)}
+                                 className="text-[10px] font-bold text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 flex items-center gap-1 hover:underline"
+                              >
+                                 <Plus size={12} /> Adicionar
+                              </button>
                            </div>
 
-                           <div className="space-y-1 mt-2 max-h-20 overflow-y-auto">
-                              {tempAttachments.map(at => (
-                                 <div key={at.id} className="flex items-center justify-between p-1.5 bg-slate-50 dark:bg-gray-800 rounded-lg text-xs">
-                                    <span className="text-[10px] truncate max-w-[150px]">{at.name}</span>
-                                    <button type="button" onClick={() => setTempAttachments(tempAttachments.filter(a => a.id !== at.id))} className="text-slate-300 hover:text-rose-500">
-                                       <XCircle size={12} />
-                                    </button>
-                                 </div>
-                              ))}
+                           <div
+                              onClick={() => handleOpenAddVoucher(null)}
+                              className="border-2 border-dashed border-slate-200 dark:border-gray-700 hover:border-cyan-500 dark:hover:border-cyan-400 rounded-xl p-3 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-slate-50/50 dark:bg-gray-800/30 group"
+                           >
+                              <div className="p-2 bg-white dark:bg-gray-700 rounded-full shadow-sm text-cyan-600 mb-1 group-hover:scale-110 transition-transform">
+                                 <Upload size={14} />
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">Anexar Cotação, NF ou Recibo</span>
+                              <span className="text-[8px] text-slate-400">PDF ou Foto otimizada (Câmera / Arquivo)</span>
                            </div>
+
+                           {tempAttachments.length > 0 && (
+                              <div className="space-y-1.5 mt-2.5 max-h-40 overflow-y-auto pr-1">
+                                 {tempAttachments.map(at => {
+                                    const meta = getVoucherCategoryInfo(at.type);
+                                    return (
+                                       <div key={at.id} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-gray-800 rounded-xl border border-slate-100 dark:border-gray-700 text-xs hover:border-slate-200 transition-colors">
+                                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                                             <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase border ${meta.badgeColor} ${meta.badgeDark}`}>
+                                                {meta.shortLabel}
+                                             </span>
+                                             <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate">{at.name}</span>
+                                          </div>
+                                          <div className="flex items-center gap-1.5 ml-2">
+                                             <span className="text-[8px] text-slate-400">{at.size}</span>
+                                             {at.url && (
+                                                <button
+                                                   type="button"
+                                                   onClick={() => setLightboxAttachment(at)}
+                                                   className="text-slate-400 hover:text-cyan-600 transition-colors"
+                                                   title="Visualizar Comprovante"
+                                                >
+                                                   <Eye size={12} />
+                                                </button>
+                                             )}
+                                             <button
+                                                type="button"
+                                                onClick={() => setTempAttachments(tempAttachments.filter(a => a.id !== at.id))}
+                                                className="text-slate-300 hover:text-rose-500 transition-colors"
+                                                title="Remover"
+                                             >
+                                                <XCircle size={13} />
+                                             </button>
+                                          </div>
+                                       </div>
+                                    );
+                                 })}
+                              </div>
+                           )}
                         </div>
 
                         {/* Financial Settings */}
@@ -2299,100 +2704,532 @@ const Purchases = () => {
             </div>
          )}
 
-         {/* ORDER DETAILS MODAL */}
+         {/* ORDER DETAILS MODAL - CENTRAL PROFISSIONAL DE ORDENS & COMPROVANTES */}
          {selectedOrder && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden">
-                  <div className="p-6 border-b dark:border-gray-700 flex justify-between items-center bg-slate-50 dark:bg-gray-800/50">
-                     <div>
-                        <h3 className="font-bold text-xl text-slate-900 dark:text-white flex items-center gap-2">
-                           Ordem {selectedOrder.id}
-                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusColor(selectedOrder.status)}`}>
-                              {selectedOrder.status}
-                           </span>
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-1">Data: {selectedOrder.date} • Fornecedor: {selectedOrder.supplierName}</p>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-4xl border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden my-6">
+                  {/* Modal Header */}
+                  <div className="p-6 border-b dark:border-gray-700 flex justify-between items-center bg-slate-50 dark:bg-gray-800/60">
+                     <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-cyan-600 text-white rounded-xl shadow-md shadow-cyan-600/20">
+                           <FileText size={20} />
+                        </div>
+                        <div>
+                           <div className="flex items-center gap-2">
+                              <h3 className="font-black text-xl text-slate-900 dark:text-white">
+                                 Ordem {selectedOrder.id}
+                              </h3>
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border tracking-wider ${getStatusColor(selectedOrder.status)}`}>
+                                 {selectedOrder.status}
+                              </span>
+                           </div>
+                           <p className="text-xs text-slate-500 mt-0.5">
+                              Emissão: <strong>{selectedOrder.date}</strong> • Fornecedor: <strong className="text-slate-700 dark:text-slate-300">{selectedOrder.supplierName}</strong>
+                           </p>
+                        </div>
                      </div>
-                     <button onClick={() => setSelectedOrder(null)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+                     <button
+                        onClick={() => setSelectedOrder(null)}
+                        className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
+                     >
+                        <X size={20} />
+                     </button>
                   </div>
 
-                  <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+                  <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+                     {/* Itens da Ordem */}
                      <div>
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Itens da Ordem</h4>
+                        <div className="flex justify-between items-center mb-3">
+                           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                              <Package size={13} className="text-cyan-600" /> Itens do Pedido ({selectedOrder.items?.length || 0})
+                           </h4>
+                           <span className="text-xs font-bold text-slate-500">
+                              Subtotal: {formatCurrency(selectedOrder.subtotal || selectedOrder.items.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0))}
+                           </span>
+                        </div>
                         <div className="bg-slate-50 dark:bg-gray-900/50 rounded-xl overflow-hidden border border-slate-100 dark:border-gray-700">
                            <table className="w-full text-sm">
-                              <thead className="bg-slate-100 dark:bg-gray-800 text-[10px] font-black uppercase text-slate-500">
+                              <thead className="bg-slate-100 dark:bg-gray-800 text-[10px] font-black uppercase text-slate-500 tracking-wider">
                                  <tr>
-                                    <th className="px-4 py-2 text-left">Item</th>
-                                    <th className="px-4 py-2 text-center">Quant.</th>
-                                    <th className="px-4 py-2 text-right">Preço</th>
-                                    <th className="px-4 py-2 text-right">Total</th>
+                                    <th className="px-4 py-2.5 text-left">Item / Descrição</th>
+                                    <th className="px-4 py-2.5 text-center">Quant.</th>
+                                    <th className="px-4 py-2.5 text-center">UN</th>
+                                    <th className="px-4 py-2.5 text-right">Preço Unit.</th>
+                                    <th className="px-4 py-2.5 text-right">Subtotal</th>
                                  </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
+                              <tbody className="divide-y divide-slate-100 dark:divide-gray-700 text-xs">
                                  {selectedOrder.items.map((it, idx) => (
-                                    <tr key={idx}>
+                                    <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-gray-800/50 transition-colors">
                                        <td className="px-4 py-3 font-bold text-slate-700 dark:text-gray-300">{it.name}</td>
-                                       <td className="px-4 py-3 text-center">{it.quantity} {it.unit}</td>
+                                       <td className="px-4 py-3 text-center font-bold">{it.quantity}</td>
+                                       <td className="px-4 py-3 text-center text-slate-400 uppercase">{it.unit || 'UN'}</td>
                                        <td className="px-4 py-3 text-right">{formatCurrency(it.price)}</td>
-                                       <td className="px-4 py-3 text-right font-bold">{formatCurrency(it.price * it.quantity)}</td>
+                                       <td className="px-4 py-3 text-right font-black text-slate-800 dark:text-white">{formatCurrency(it.price * it.quantity)}</td>
                                     </tr>
                                  ))}
                               </tbody>
-                              <tfoot className="bg-slate-50 dark:bg-gray-800/50 font-bold">
+                              <tfoot className="bg-slate-100/60 dark:bg-gray-800/80 font-bold border-t dark:border-gray-700">
+                                 {selectedOrder.shippingCost ? (
+                                    <tr>
+                                       <td colSpan={4} className="px-4 py-2 text-right uppercase text-[10px] text-slate-500">Frete / Entrega</td>
+                                       <td className="px-4 py-2 text-right text-xs font-bold text-slate-600 dark:text-slate-300">{formatCurrency(selectedOrder.shippingCost)}</td>
+                                    </tr>
+                                 ) : null}
                                  <tr>
-                                    <td colSpan={3} className="px-4 py-3 text-right uppercase text-[10px] text-slate-500">Total da Ordem</td>
-                                    <td className="px-4 py-3 text-right text-cyan-600">{formatCurrency(selectedOrder.total)}</td>
+                                    <td colSpan={4} className="px-4 py-3 text-right uppercase text-[11px] font-black text-slate-600 dark:text-slate-300">Valor Total do Pedido</td>
+                                    <td className="px-4 py-3 text-right text-base font-black text-cyan-600 dark:text-cyan-400">{formatCurrency(selectedOrder.total)}</td>
                                  </tr>
                               </tfoot>
                            </table>
                         </div>
                      </div>
 
-                     <div className="grid grid-cols-2 gap-6">
-                        <div>
-                           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Classificação Financeira</h4>
-                           <div className="p-3 bg-cyan-50 dark:bg-cyan-900/10 rounded-lg border border-cyan-100 dark:border-cyan-900/30">
-                              <p className="text-[10px] font-mono font-bold text-cyan-700 dark:text-cyan-400">[{selectedOrder.ledgerCode || '2.02.03'}]</p>
-                              <p className="text-xs font-bold text-cyan-900 dark:text-cyan-200">{selectedOrder.ledgerName || 'Material de Consumo'}</p>
+                     {/* Informações Financeiras & Fornecedor */}
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="p-3.5 bg-slate-50 dark:bg-gray-900/40 rounded-xl border border-slate-100 dark:border-gray-700">
+                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Classificação Contábil</span>
+                           <p className="text-xs font-mono font-bold text-cyan-700 dark:text-cyan-400">[{selectedOrder.ledgerCode || '2.02.03'}]</p>
+                           <p className="text-xs font-bold text-slate-800 dark:text-white truncate">{selectedOrder.ledgerName || 'Material de Consumo'}</p>
+                        </div>
+                        <div className="p-3.5 bg-slate-50 dark:bg-gray-900/40 rounded-xl border border-slate-100 dark:border-gray-700">
+                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Condição Comercial</span>
+                           <p className="text-xs font-bold text-slate-800 dark:text-white">{selectedOrder.paymentTerms || 'Conforme Acordo'}</p>
+                           <p className="text-[10px] text-slate-500">Previsão Financeira</p>
+                        </div>
+                        <div className="p-3.5 bg-slate-50 dark:bg-gray-900/40 rounded-xl border border-slate-100 dark:border-gray-700">
+                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Conta de Pagamento</span>
+                           <p className="text-xs font-bold text-slate-800 dark:text-white truncate">
+                              {accounts.find(a => a.id === selectedOrder.targetAccountId)?.name || 'Conta Operacional'}
+                           </p>
+                           <p className="text-[10px] text-emerald-600 font-bold">Fluxo Integrado</p>
+                        </div>
+                     </div>
+
+                     {/* CENTRAL DE COMPROVANTES & RASTREABILIDADE FISCAL */}
+                     <div className="pt-2">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3 pb-2 border-b border-slate-100 dark:border-gray-700">
+                           <div>
+                              <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                                 <ShieldCheck size={16} className="text-cyan-600" />
+                                 Comprovantes & Rastreabilidade Digital
+                                 <span className="px-2 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-900/40 text-cyan-800 dark:text-cyan-300 text-[10px] font-bold">
+                                    {selectedOrder.attachments?.length || 0}
+                                 </span>
+                              </h4>
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                 Notas fiscais, comprovantes de pagamento, fotos da mercadoria e recibos vinculados a esta ordem
+                              </p>
                            </div>
+                           <button
+                              type="button"
+                              onClick={() => handleOpenAddVoucher(selectedOrder)}
+                              className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all hover:scale-[1.02]"
+                           >
+                              <Plus size={14} /> Adicionar Comprovante
+                           </button>
+                        </div>
+
+                        {/* Galeria de Comprovantes */}
+                        {selectedOrder.attachments && selectedOrder.attachments.length > 0 ? (
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {selectedOrder.attachments.map(at => {
+                                 const meta = getVoucherCategoryInfo(at.type);
+                                 const isImage = at.url && (at.url.startsWith('data:image/') || at.type?.includes('image') || at.name.match(/\.(jpg|jpeg|png|webp)$/i));
+
+                                 return (
+                                    <div
+                                       key={at.id}
+                                       className="p-3 bg-slate-50 dark:bg-gray-800/80 rounded-xl border border-slate-200 dark:border-gray-700 flex flex-col justify-between hover:border-cyan-300 dark:hover:border-cyan-600 transition-all shadow-sm"
+                                    >
+                                       <div className="flex items-start gap-3">
+                                          {/* Miniatura ou Ícone */}
+                                          <div
+                                             onClick={() => at.url && setLightboxAttachment(at)}
+                                             className={`w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-900 cursor-pointer ${at.url ? 'hover:opacity-90' : ''}`}
+                                          >
+                                             {isImage && at.url ? (
+                                                <img src={at.url} alt={at.name} className="w-full h-full object-cover" />
+                                             ) : (
+                                                <div className="text-cyan-600 dark:text-cyan-400 flex flex-col items-center">
+                                                   {meta.iconType === 'credit-card' ? <CreditCard size={20} /> :
+                                                    meta.iconType === 'camera' ? <Camera size={20} /> :
+                                                    meta.iconType === 'receipt' ? <Receipt size={20} /> :
+                                                    <FileText size={20} />}
+                                                </div>
+                                             )}
+                                          </div>
+
+                                          {/* Dados do Anexo */}
+                                          <div className="flex-1 min-w-0">
+                                             <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border ${meta.badgeColor} ${meta.badgeDark}`}>
+                                                   {meta.shortLabel}
+                                                </span>
+                                                <span className="text-[9px] text-emerald-600 font-bold flex items-center gap-0.5">
+                                                   <CheckCircle2 size={10} /> Auditado
+                                                </span>
+                                             </div>
+                                             <p className="text-xs font-bold text-slate-800 dark:text-white truncate" title={at.name}>
+                                                {at.name}
+                                             </p>
+                                             <p className="text-[10px] text-slate-400 mt-0.5">
+                                                {at.date} • {at.size}
+                                             </p>
+                                          </div>
+                                       </div>
+
+                                       {/* Ações do Comprovante */}
+                                       <div className="mt-3 pt-2 border-t border-slate-200/70 dark:border-gray-700 flex items-center justify-end gap-1.5">
+                                          {at.url && (
+                                             <button
+                                                type="button"
+                                                onClick={() => setLightboxAttachment(at)}
+                                                className="px-2.5 py-1 text-slate-600 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                                title="Visualizar Comprovante"
+                                             >
+                                                <Eye size={12} /> Ver
+                                             </button>
+                                          )}
+                                          {at.url && (
+                                             <a
+                                                href={at.url}
+                                                download={at.name}
+                                                className="px-2.5 py-1 text-slate-600 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                                title="Baixar Arquivo"
+                                             >
+                                                <Download size={12} /> Baixar
+                                             </a>
+                                          )}
+                                          {isAdmin && (
+                                             <button
+                                                type="button"
+                                                onClick={() => handleDeleteVoucher(selectedOrder, at.id)}
+                                                className="p-1 text-slate-300 hover:text-rose-500 rounded-lg transition-colors ml-1"
+                                                title="Excluir Comprovante"
+                                             >
+                                                <Trash2 size={13} />
+                                             </button>
+                                          )}
+                                       </div>
+                                    </div>
+                                 );
+                              })}
+                           </div>
+                        ) : (
+                           <div className="p-6 bg-slate-50 dark:bg-gray-800/40 rounded-2xl border-2 border-dashed border-slate-200 dark:border-gray-700 text-center">
+                              <div className="w-12 h-12 mx-auto rounded-full bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 flex items-center justify-center mb-2">
+                                 <Paperclip size={20} />
+                              </div>
+                              <h5 className="text-xs font-bold text-slate-800 dark:text-white">Nenhum comprovante anexado a esta ordem</h5>
+                              <p className="text-[11px] text-slate-400 max-w-md mx-auto mt-1 mb-4">
+                                 Anexe a Nota Fiscal (DANFE), comprovante de pagamento bancário ou fotos da carga recebida na portaria/almoxarifado para auditoria completa.
+                              </p>
+                              <button
+                                 type="button"
+                                 onClick={() => handleOpenAddVoucher(selectedOrder)}
+                                 className="px-4 py-2 bg-white dark:bg-gray-700 hover:bg-slate-100 dark:hover:bg-gray-600 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-all"
+                              >
+                                 <Plus size={14} /> Anexar Primeiro Comprovante
+                              </button>
+                           </div>
+                        )}
+                     </div>
+                  </div>
+
+                  {/* Modal Footer */}
+                  <div className="p-5 bg-slate-50 dark:bg-gray-800/80 border-t dark:border-gray-700 flex flex-wrap justify-between items-center gap-3">
+                     <div className="flex items-center gap-2">
+                        <button
+                           onClick={() => handlePrintPurchaseOrder(selectedOrder)}
+                           className="px-5 py-2.5 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-gray-600 transition-colors shadow-sm"
+                        >
+                           <Printer size={15} /> Imprimir Ordem Oficial / PDF
+                        </button>
+                     </div>
+
+                     <div className="flex items-center gap-2">
+                        <button
+                           onClick={() => setSelectedOrder(null)}
+                           className="px-5 py-2.5 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-600 transition-colors"
+                        >
+                           Fechar
+                        </button>
+                        {selectedOrder.status === 'Aprovado' && (
+                           <button
+                              onClick={() => {
+                                 setSelectedOrder(null);
+                                 handleOpenReceiveInspection(selectedOrder);
+                              }}
+                              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20 flex items-center gap-2 uppercase tracking-wider transition-colors"
+                           >
+                              <Package size={15} /> Receber Material na Portaria
+                           </button>
+                        )}
+                     </div>
+                  </div>
+               </div>
+            </div>
+         )}
+
+         {/* MODAL CENTRALIZADO: ADICIONAR COMPROVANTE (FOTO / PDF / CATEGORIZADO) */}
+         {isAddVoucherModalOpen && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
+               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg border dark:border-gray-700 animate-in zoom-in duration-200 overflow-hidden my-6">
+                  {/* Modal Header */}
+                  <div className="p-5 border-b dark:border-gray-700 bg-slate-50 dark:bg-gray-800/60 flex justify-between items-center">
+                     <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-cyan-600 text-white rounded-xl shadow-md shadow-cyan-600/20">
+                           <Upload size={18} />
                         </div>
                         <div>
-                           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Anexos ({selectedOrder.attachments?.length || 0})</h4>
-                           <div className="space-y-1.5">
-                              {selectedOrder.attachments?.map(at => (
-                                 <div key={at.id} className="flex items-center gap-2 p-2 bg-slate-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
-                                    <File size={14} className="text-cyan-600" />
-                                    <span className="text-[10px] font-bold truncate flex-1">{at.name}</span>
-                                    <span className="text-[8px] text-slate-400">{at.size}</span>
-                                 </div>
-                              ))}
-                              {(!selectedOrder.attachments || selectedOrder.attachments.length === 0) && (
-                                 <p className="text-[10px] text-slate-400 italic">Nenhum comprovante anexado.</p>
-                              )}
+                           <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                              Adicionar Comprovante
+                           </h3>
+                           <p className="text-xs text-slate-500">
+                              {voucherOrderTarget ? `Vinculado à Ordem #${voucherOrderTarget.id}` : 'Novo Pedido em Elaboração'}
+                           </p>
+                        </div>
+                     </div>
+                     <button
+                        onClick={() => setIsAddVoucherModalOpen(false)}
+                        className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
+                     >
+                        <X size={18} />
+                     </button>
+                  </div>
+
+                  <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+                     {/* 1. Tipo de Comprovante */}
+                     <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                           Tipo de Comprovante *
+                        </label>
+                        <select
+                           value={voucherType}
+                           onChange={e => setVoucherType(e.target.value)}
+                           className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-cyan-500"
+                        >
+                           <option value="nf">📑 Nota Fiscal / DANFE / Cupom Fiscal</option>
+                           <option value="payment">💵 Comprovante de Pagamento (PIX / TED / Boleto)</option>
+                           <option value="item_photo">📸 Foto do Objeto / Carga Recebida (Almoxarifado)</option>
+                           <option value="delivery_receipt">✍️ Recibo de Entrega / Canhoto Assinado</option>
+                           <option value="quote">📄 Cotação / Proposta Comercial do Fornecedor</option>
+                        </select>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                           {VOUCHER_CATEGORIES[voucherType]?.description}
+                        </p>
+                     </div>
+
+                     {/* 2. Título / Descrição Opcional */}
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                              Identificação / Título
+                           </label>
+                           <input
+                              type="text"
+                              placeholder="Ex: DANFE 048.912"
+                              value={voucherTitle}
+                              onChange={e => setVoucherTitle(e.target.value)}
+                              className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-medium text-slate-800 dark:text-white"
+                           />
+                        </div>
+                        <div>
+                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                              Nota / Observação
+                           </label>
+                           <input
+                              type="text"
+                              placeholder="Ex: Chave NF, Lote 4"
+                              value={voucherNote}
+                              onChange={e => setVoucherNote(e.target.value)}
+                              className="w-full bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl p-2.5 text-xs font-medium text-slate-800 dark:text-white"
+                           />
+                        </div>
+                     </div>
+
+                     {/* 3. Seletor de Arquivo com Câmera Direta e Compressão */}
+                     <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                           Arquivo do Comprovante (Foto ou PDF) *
+                        </label>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                           {/* Botão Câmera Direta */}
+                           <label className="border-2 border-dashed border-cyan-200 dark:border-cyan-900/50 hover:border-cyan-500 bg-cyan-50/50 dark:bg-cyan-950/20 rounded-xl p-3 flex flex-col items-center justify-center text-center cursor-pointer transition-all group">
+                              <input
+                                 type="file"
+                                 accept="image/*"
+                                 capture="environment"
+                                 className="hidden"
+                                 onChange={handleVoucherFileSelect}
+                              />
+                              <Camera size={22} className="text-cyan-600 mb-1 group-hover:scale-110 transition-transform" />
+                              <span className="text-xs font-bold text-cyan-800 dark:text-cyan-300">Tirar Foto Agora</span>
+                              <span className="text-[9px] text-slate-400">Câmera de celular/tablet</span>
+                           </label>
+
+                           {/* Botão Escolher Arquivo / PDF */}
+                           <label className="border-2 border-dashed border-slate-200 dark:border-gray-700 hover:border-cyan-500 bg-slate-50 dark:bg-gray-900/30 rounded-xl p-3 flex flex-col items-center justify-center text-center cursor-pointer transition-all group">
+                              <input
+                                 type="file"
+                                 accept="image/*,application/pdf"
+                                 className="hidden"
+                                 onChange={handleVoucherFileSelect}
+                              />
+                              <Upload size={22} className="text-slate-400 group-hover:text-cyan-600 mb-1 group-hover:scale-110 transition-transform" />
+                              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Escolher Arquivo</span>
+                              <span className="text-[9px] text-slate-400">PDF, JPG, PNG ou WEBP</span>
+                           </label>
+                        </div>
+
+                        {/* Pré-visualização do Arquivo Selecionado */}
+                        {isProcessingVoucher && (
+                           <div className="p-4 bg-slate-50 dark:bg-gray-900 rounded-xl border border-slate-200 dark:border-gray-700 flex items-center justify-center gap-2 text-xs font-bold text-cyan-600">
+                              <Loader size={16} className="animate-spin" /> Otimizando e comprimindo arquivo...
                            </div>
+                        )}
+
+                        {voucherPreviewUrl && !isProcessingVoucher && (
+                           <div className="p-3 bg-slate-50 dark:bg-gray-900 rounded-xl border border-emerald-200 dark:border-emerald-900/50">
+                              <div className="flex items-center gap-3">
+                                 {voucherPreviewUrl.startsWith('data:image/') ? (
+                                    <img
+                                       src={voucherPreviewUrl}
+                                       alt="Preview"
+                                       className="w-16 h-16 object-cover rounded-lg border border-slate-200 dark:border-gray-700"
+                                    />
+                                 ) : (
+                                    <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-lg flex items-center justify-center">
+                                       <FileText size={24} />
+                                    </div>
+                                 )}
+                                 <div className="flex-1 min-w-0">
+                                    <span className="text-[9px] font-bold text-emerald-600 flex items-center gap-1 mb-0.5">
+                                       <CheckCircle2 size={12} /> Arquivo Carregado e Comprimido
+                                    </span>
+                                    <p className="text-xs font-bold text-slate-800 dark:text-white truncate">
+                                       {voucherFile?.name || 'Documento selecionado'}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400">
+                                       Tamanho: {voucherFile ? (voucherFile.size / 1024).toFixed(1) + ' KB' : 'Otimizado'}
+                                    </p>
+                                 </div>
+                              </div>
+                           </div>
+                        )}
+
+                        <div className="mt-2 flex items-center gap-1 text-[10px] text-slate-400">
+                           <Info size={12} className="text-cyan-600 flex-shrink-0" />
+                           <span>Compressão inteligente ativa: fotos são redimensionadas para economizar armazenamento mantendo legibilidade.</span>
                         </div>
                      </div>
                   </div>
 
-                  <div className="p-6 bg-slate-50 dark:bg-gray-800/80 border-t dark:border-gray-700 flex justify-end gap-3">
+                  {/* Modal Footer */}
+                  <div className="p-5 bg-slate-50 dark:bg-gray-800/80 border-t dark:border-gray-700 flex justify-end gap-2.5">
                      <button
-                        onClick={() => handlePrintPurchaseOrder(selectedOrder)}
-                        className="px-6 py-2 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 transition-colors"
+                        type="button"
+                        onClick={() => setIsAddVoucherModalOpen(false)}
+                        className="px-5 py-2.5 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 transition-colors"
                      >
-                        <Printer size={16} /> Imprimir / PDF
+                        Cancelar
                      </button>
-                     <button onClick={() => setSelectedOrder(null)} className="px-6 py-2 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl text-sm font-bold">Fechar</button>
-                     {selectedOrder.status === 'Aprovado' && (
+                     <button
+                        type="button"
+                        onClick={handleSaveVoucher}
+                        disabled={isProcessingVoucher || (!voucherFile && !voucherPreviewUrl)}
+                        className="px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-md shadow-cyan-600/20 flex items-center gap-1.5 transition-colors"
+                     >
+                        <Save size={14} /> Salvar Comprovante
+                     </button>
+                  </div>
+               </div>
+            </div>
+         )}
+
+         {/* MODAL LIGHTBOX / VISUALIZADOR DE COMPROVANTES EM TELA CHEIA */}
+         {lightboxAttachment && (
+            <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+               <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-gray-700 overflow-hidden flex flex-col max-h-[90vh]">
+                  {/* Lightbox Header */}
+                  <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+                     <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                           {getVoucherCategoryInfo(lightboxAttachment.type).shortLabel}
+                        </span>
+                        <div>
+                           <h4 className="text-sm font-bold text-white truncate max-w-md">{lightboxAttachment.name}</h4>
+                           <p className="text-[10px] text-slate-400">{lightboxAttachment.date} • {lightboxAttachment.size}</p>
+                        </div>
+                     </div>
+                     <div className="flex items-center gap-2">
+                        {lightboxAttachment.url && (
+                           <a
+                              href={lightboxAttachment.url}
+                              download={lightboxAttachment.name}
+                              className="p-2 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                              title="Baixar Arquivo"
+                           >
+                              <Download size={18} />
+                           </a>
+                        )}
                         <button
-                           onClick={() => {
-                              setSelectedOrder(null);
-                              handleOpenReceiveInspection(selectedOrder);
-                           }}
-                           className="px-6 py-2 bg-green-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-green-600/20"
+                           onClick={() => setLightboxAttachment(null)}
+                           className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
                         >
-                           Receber Material
+                           <X size={20} />
                         </button>
+                     </div>
+                  </div>
+
+                  {/* Lightbox Content */}
+                  <div className="p-4 flex-1 overflow-auto flex items-center justify-center bg-slate-950 min-h-[300px]">
+                     {lightboxAttachment.url && (lightboxAttachment.url.startsWith('data:image/') || lightboxAttachment.type?.includes('image') || lightboxAttachment.name.match(/\.(jpg|jpeg|png|webp)$/i)) ? (
+                        <img
+                           src={lightboxAttachment.url}
+                           alt={lightboxAttachment.name}
+                           className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg"
+                        />
+                     ) : lightboxAttachment.url && lightboxAttachment.url.startsWith('data:application/pdf') ? (
+                        <div className="w-full h-[65vh] flex flex-col items-center justify-center text-white p-6">
+                           <FileText size={56} className="text-cyan-400 mb-3" />
+                           <h5 className="font-bold text-base mb-1">Documento PDF Vinculado</h5>
+                           <p className="text-xs text-slate-400 mb-4">{lightboxAttachment.name}</p>
+                           <div className="flex gap-2">
+                              <a
+                                 href={lightboxAttachment.url}
+                                 target="_blank"
+                                 rel="noopener noreferrer"
+                                 className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow"
+                              >
+                                 <ExternalLink size={14} /> Abrir PDF em Nova Aba
+                              </a>
+                              <a
+                                 href={lightboxAttachment.url}
+                                 download={lightboxAttachment.name}
+                                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-2"
+                              >
+                                 <Download size={14} /> Download
+                              </a>
+                           </div>
+                        </div>
+                     ) : (
+                        <div className="text-center text-slate-400 p-8">
+                           <FileText size={48} className="mx-auto mb-2 text-cyan-400" />
+                           <p className="text-sm font-bold text-white mb-1">{lightboxAttachment.name}</p>
+                           <p className="text-xs text-slate-400 mb-4">Comprovante arquivado eletronicamente.</p>
+                           {lightboxAttachment.url && (
+                              <a
+                                 href={lightboxAttachment.url}
+                                 download={lightboxAttachment.name}
+                                 className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold inline-flex items-center gap-2"
+                              >
+                                 <Download size={14} /> Baixar Comprovante
+                              </a>
+                           )}
+                        </div>
                      )}
                   </div>
                </div>

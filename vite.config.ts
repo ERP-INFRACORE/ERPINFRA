@@ -47,7 +47,6 @@ export default defineConfig(({ mode }) => {
           skipWaiting: true,
           clientsClaim: true,
           cleanupOutdatedCaches: true,
-          // Caching strategies
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -56,7 +55,7 @@ export default defineConfig(({ mode }) => {
                 cacheName: 'google-fonts-cache',
                 expiration: {
                   maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 365 // <== 365 days
+                  maxAgeSeconds: 60 * 60 * 24 * 365
                 },
                 cacheableResponse: {
                   statuses: [0, 200]
@@ -70,7 +69,7 @@ export default defineConfig(({ mode }) => {
                 cacheName: 'gstatic-fonts-cache',
                 expiration: {
                   maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 365 // <== 365 days
+                  maxAgeSeconds: 60 * 60 * 24 * 365
                 },
                 cacheableResponse: {
                   statuses: [0, 200]
@@ -92,26 +91,35 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       target: 'esnext',
-      sourcemap: mode === 'development',
-      chunkSizeWarningLimit: 600,
+      sourcemap: false,
+      chunkSizeWarningLimit: 1000,
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (id.includes('node_modules')) {
-              if (id.includes('react-router-dom') || id.includes('@remix-run/router')) {
-                return 'vendor-router';
-              }
-              if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
-                return 'vendor-react';
-              }
-              if (id.includes('@supabase')) {
-                return 'vendor-supabase';
-              }
-              if (id.includes('lucide-react')) {
+            const normalizedId = id.replace(/\\/g, '/');
+            if (normalizedId.includes('/node_modules/')) {
+              if (normalizedId.includes('/lucide-react/')) {
                 return 'vendor-icons';
               }
-              if (id.includes('recharts') || id.includes('d3-') || id.includes('victory-vendor')) {
+              if (normalizedId.includes('/@supabase/')) {
+                return 'vendor-supabase';
+              }
+              if (
+                normalizedId.includes('/recharts/') ||
+                normalizedId.includes('/d3-') ||
+                normalizedId.includes('/victory-vendor/')
+              ) {
                 return 'vendor-charts';
+              }
+              if (
+                normalizedId.includes('/react/') ||
+                normalizedId.includes('/react-dom/') ||
+                normalizedId.includes('/react-router/') ||
+                normalizedId.includes('/react-router-dom/') ||
+                normalizedId.includes('/@remix-run/') ||
+                normalizedId.includes('/scheduler/')
+              ) {
+                return 'vendor-react';
               }
               return 'vendor-utils';
             }

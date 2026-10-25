@@ -57,6 +57,41 @@ export const exportToCSV = (data: any[], fileName: string, customHeaders?: strin
     URL.revokeObjectURL(url);
 };
 
+export const exportCustomTableToCSV = (headers: string[], rows: (string | number)[][], fileName: string, metadataHeader?: string) => {
+    const csvContent = [
+        ...(metadataHeader ? [metadataHeader, ''] : []),
+        headers.join(';'),
+        ...rows.map(row =>
+            row.map(cell => {
+                let val = cell ?? '';
+                if (typeof val === 'number') {
+                    val = Number.isInteger(val) ? String(val) : val.toFixed(2).replace('.', ',');
+                } else if (typeof val === 'string') {
+                    val = val.replace(/"/g, '""');
+                    if (val.includes(';') || val.includes('\n') || val.includes('"')) {
+                        val = `"${val}"`;
+                    }
+                }
+                return val;
+            }).join(';')
+        )
+    ].join('\n');
+
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${fileName}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+};
+
 export const exportDashboardToExcel = (contextData: any) => {
     const { financials, transactions = [], sales = [], employees = [], inventory = [], fleet = [], settings } = contextData || {};
 
@@ -120,19 +155,26 @@ export const exportDashboardToExcel = (contextData: any) => {
     URL.revokeObjectURL(url);
 };
 
-export const printDocument = (title: string, htmlContent: string) => {
+export const printDocument = (title: string, htmlContent: string, options?: { orientation?: 'portrait' | 'landscape' }) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
         alert("Por favor, permita pop-ups para imprimir documentos.");
         return;
     }
 
+    const orientation = options?.orientation || 'portrait';
     const trimmed = htmlContent.trim().toLowerCase();
     const isFullDocument = trimmed.startsWith('<!doctype') || trimmed.startsWith('<html');
 
     if (isFullDocument) {
         // If content is already a full HTML document, write it directly and ensure window.print is called
         let finalHtml = htmlContent;
+
+        // Apply landscape orientation if requested
+        if (orientation === 'landscape' && finalHtml.includes('size: A4 portrait')) {
+            finalHtml = finalHtml.replace('size: A4 portrait;', 'size: A4 landscape; margin: 12mm;');
+        }
+
         if (!finalHtml.includes('window.print()')) {
             const printScript = `
                 <script>
@@ -245,7 +287,10 @@ export const printDocument = (title: string, htmlContent: string) => {
                     text-align: center; 
                 }
                 @media print {
-                    @page { margin: 2cm; }
+                    @page { 
+                        size: A4 ${orientation}; 
+                        margin: 15mm; 
+                    }
                     body { padding: 0; }
                 }
             </style>

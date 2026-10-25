@@ -12,6 +12,7 @@ export interface Address {
   number: string;
   complement?: string;
   district: string;
+  neighborhood?: string;
   city: string;
   state: string; // UF
   zipCode: string; // CEP
@@ -71,6 +72,10 @@ export interface Employee {
   cpf?: string;
   photo?: string;
   vacationDaysAvailable?: number;
+  cnh?: string;
+  cnhCategory?: string;
+  cnhExpiry?: string;
+  costCenter?: string;
 }
 
 export interface InventoryItem {
@@ -91,6 +96,9 @@ export interface InventoryItem {
   brand?: string;
   supplierId?: string;
   color?: string; // For UI
+  unitCost?: number;
+  lastPurchaseDate?: string;
+  supplierName?: string;
 }
 
 export interface StockMovement {
@@ -129,6 +137,45 @@ export interface Transaction {
   paymentMethod?: string;
   competenceDate?: string;
   notes?: string;
+  // Cross-Domain & Reconciliation Extensions
+  financialAccountId?: string;
+  reconciliationDate?: string;
+  settledAt?: string;
+  tags?: string[];
+}
+
+export interface FinancialAccount {
+  id: string;
+  name: string;
+  type: 'Corrente' | 'Poupança' | 'Investimento' | 'Espécie' | 'Cartão' | 'Outro' | string;
+  balance: number;
+  initialBalance?: number;
+  initialBalanceDate?: string;
+  color?: string;
+  code?: string;
+  bank?: string;
+  bankCode?: string;
+  bankName?: string;
+  nickname?: string;
+  agency?: string;
+  agencyDigit?: string;
+  accountNumber?: string;
+  accountDigit?: string;
+  creditLimit?: number;
+  pixType?: string;
+  pixKeyType?: string;
+  pixKey?: string;
+  isDefault?: boolean;
+  status?: 'Ativo' | 'Inativo';
+}
+
+export interface PlanOfAccountNode {
+  id: string;
+  code: string;
+  name: string;
+  type?: 'Receita' | 'Despesa';
+  parentId?: string | null;
+  children?: PlanOfAccountNode[];
 }
 
 export interface SalesItem {
@@ -164,6 +211,10 @@ export interface Sale extends Transaction {
   grossWeight?: number; // Peso Saída / Bruto
   netWeight?: number; // Peso Líquido
   weightNotes?: string;
+
+  // Cross-Domain & Production Links
+  productionOrderId?: string;
+  costCenter?: string;
 }
 
 export interface PurchaseItem {
@@ -193,6 +244,8 @@ export interface PurchaseOrder {
   ledgerName?: string;
   accountId?: string;
   competenceDate?: string;
+  costCenter?: string;
+  department?: string;
 }
 
 export interface FuelLog {
@@ -232,6 +285,13 @@ export interface FleetVehicle {
   lastMaintenance?: string; // Data da última manutenção
   maintenanceHistory?: MaintenanceRecord[];
   fuelLogs?: FuelLog[];
+  // Cross-Domain & Extended Telemetry
+  renavam?: string;
+  color?: string;
+  colorName?: string;
+  costCenter?: string;
+  department?: string;
+  telemetryData?: { speed?: number; latitude?: number; longitude?: number; lastUpdate?: string };
 }
 
 export interface MaintenanceRecord {
@@ -309,6 +369,11 @@ export interface ProductionOrder {
   operator?: string;
   qualityTests?: QualityTest[];
   rawMaterialsDeducted?: boolean;
+  // Cross-Domain Links
+  clientId?: string;
+  saleId?: string;
+  vehicleId?: string;
+  costCenter?: string;
 }
 
 export interface Budget {

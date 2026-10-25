@@ -581,39 +581,119 @@ CREATE TABLE IF NOT EXISTS salary_advances (
 -- ============================================
 -- ÍNDICES PARA PERFORMANCE (Opcional - execute depois se desejar)
 -- ============================================
--- Descomente para criar índices de performance:
+-- FUNÇÃO E TRIGGERS DE ATUALIZAÇÃO AUTOMÁTICA (updated_at)
+-- ============================================
+-- Atualiza automaticamente a coluna updated_at a cada UPDATE
 
--- CREATE INDEX IF NOT EXISTS idx_clients_status ON clients(status);
--- CREATE INDEX IF NOT EXISTS idx_clients_document ON clients(document);
--- CREATE INDEX IF NOT EXISTS idx_suppliers_status ON suppliers(status);
--- CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(status);
--- CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
--- CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
--- CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
--- CREATE INDEX IF NOT EXISTS idx_sales_clientId ON sales("clientId");
--- CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(status);
--- CREATE INDEX IF NOT EXISTS idx_inventory_category ON inventory(category);
--- CREATE INDEX IF NOT EXISTS idx_fleet_status ON fleet(status);
--- CREATE INDEX IF NOT EXISTS idx_fleet_plate ON fleet(plate);
--- CREATE INDEX IF NOT EXISTS idx_production_orders_status ON production_orders(status);
--- CREATE INDEX IF NOT EXISTS idx_payroll_employeeId ON payroll("employeeId");
--- CREATE INDEX IF NOT EXISTS idx_payroll_month ON payroll(month);
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Aplicação idempotente de Triggers em todas as tabelas com updated_at
+DO $$
+DECLARE
+    tbl text;
+    tables text[] := ARRAY[
+        'app_roles', 'users', 'settings', 'clients', 'suppliers', 
+        'employees', 'inventory', 'financial_accounts', 'transactions', 
+        'sales', 'budgets', 'purchase_orders', 'fleet', 
+        'maintenance_records', 'tires', 'production_units', 
+        'production_formulas', 'production_orders', 'payroll', 
+        'vacations', 'salary_advances'
+    ];
+BEGIN
+    FOREACH tbl IN ARRAY tables LOOP
+        EXECUTE format('DROP TRIGGER IF EXISTS trg_update_updated_at ON %I;', tbl);
+        EXECUTE format('CREATE TRIGGER trg_update_updated_at BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();', tbl);
+    END LOOP;
+END;
+$$;
 
 -- ============================================
--- ROW LEVEL SECURITY (RLS) - Básico
+-- ÍNDICES PARA PERFORMANCE E CONSULTAS FREQUENTES
 -- ============================================
--- Habilitar RLS para proteção de dados (opcional)
--- ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+-- Índices idempotentes em chaves estrangeiras, status e datas críticas
 
--- Política para permitir acesso autenticado (ajuste conforme necessidade)
--- CREATE POLICY "Enable all access for authenticated users" ON clients
---     FOR ALL USING (auth.role() = 'authenticated');
+-- Usuários e Perfis
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_roleId ON users("roleId");
+
+-- Cadastros Principais
+CREATE INDEX IF NOT EXISTS idx_clients_status ON clients(status);
+CREATE INDEX IF NOT EXISTS idx_clients_document ON clients(document);
+CREATE INDEX IF NOT EXISTS idx_clients_name ON clients(name);
+CREATE INDEX IF NOT EXISTS idx_suppliers_status ON suppliers(status);
+CREATE INDEX IF NOT EXISTS idx_suppliers_document ON suppliers(document);
+CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(status);
+CREATE INDEX IF NOT EXISTS idx_employees_cpf ON employees(cpf);
+
+-- Estoque e Movimentações
+CREATE INDEX IF NOT EXISTS idx_inventory_category ON inventory(category);
+CREATE INDEX IF NOT EXISTS idx_inventory_status ON inventory(status);
+CREATE INDEX IF NOT EXISTS idx_inventory_supplierId ON inventory("supplierId");
+CREATE INDEX IF NOT EXISTS idx_stock_movements_itemId ON stock_movements("itemId");
+CREATE INDEX IF NOT EXISTS idx_stock_movements_date ON stock_movements(date);
+
+-- Financeiro
+CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
+CREATE INDEX IF NOT EXISTS idx_transactions_accountId ON transactions("accountId");
+CREATE INDEX IF NOT EXISTS idx_transactions_partnerId ON transactions("partnerId");
+
+-- Vendas e Orçamentos
+CREATE INDEX IF NOT EXISTS idx_sales_clientId ON sales("clientId");
+CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(status);
+CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(date);
+CREATE INDEX IF NOT EXISTS idx_budgets_clientId ON budgets("clientId");
+CREATE INDEX IF NOT EXISTS idx_budgets_status ON budgets(status);
+CREATE INDEX IF NOT EXISTS idx_budgets_date ON budgets(date);
+
+-- Compras
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplierId ON purchase_orders("supplierId");
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_status ON purchase_orders(status);
+
+-- Frota e Manutenção
+CREATE INDEX IF NOT EXISTS idx_fleet_status ON fleet(status);
+CREATE INDEX IF NOT EXISTS idx_fleet_plate ON fleet(plate);
+CREATE INDEX IF NOT EXISTS idx_maintenance_vehicleId ON maintenance_records("vehicleId");
+CREATE INDEX IF NOT EXISTS idx_fuel_logs_vehicleId ON fuel_logs("vehicleId");
+CREATE INDEX IF NOT EXISTS idx_tires_vehicleId ON tires("currentVehicleId");
+
+-- Produção
+CREATE INDEX IF NOT EXISTS idx_production_orders_status ON production_orders(status);
+CREATE INDEX IF NOT EXISTS idx_production_orders_unitId ON production_orders("unitId");
+CREATE INDEX IF NOT EXISTS idx_production_orders_formulaId ON production_orders("formulaId");
+
+-- Recursos Humanos
+CREATE INDEX IF NOT EXISTS idx_payroll_employeeId ON payroll("employeeId");
+CREATE INDEX IF NOT EXISTS idx_payroll_month ON payroll(month);
+CREATE INDEX IF NOT EXISTS idx_time_logs_employeeId ON time_logs("employeeId");
+CREATE INDEX IF NOT EXISTS idx_time_logs_date ON time_logs(date);
+CREATE INDEX IF NOT EXISTS idx_vacations_employeeId ON vacations("employeeId");
+CREATE INDEX IF NOT EXISTS idx_salary_advances_employeeId ON salary_advances("employeeId");
+
+-- Auditoria
+CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_module ON audit_logs(module);
+
+-- ============================================
+-- GOVERNANÇA DE ROW LEVEL SECURITY (RLS)
+-- ============================================
+-- NOTA DE ARQUITETURA:
+-- O InfraCore opera com arquitetura Offline-First e autenticação da aplicação
+-- via chave anônima (anon key). Por diretriz de projeto, o RLS permanece desativado
+-- por padrão nas tabelas públicas para garantir resiliência operacional.
+-- A segurança e integridade de escrita são auditadas em audit_logs e sanitizadas
+-- na camada de abstração (src/services/api.ts).
 
 -- ============================================
 -- FIM DO SCHEMA
 -- ============================================
 -- Schema criado com sucesso!
--- Total de tabelas: 26
+-- Total de tabelas: 28 | Triggers de Timestamp: 21 | Índices de Performance: 35+
 -- ============================================

@@ -13,6 +13,7 @@ import {
   Construction,
   Search,
   ChevronDown,
+  ChevronRight,
   Truck,
   Settings,
   LogOut,
@@ -677,15 +678,15 @@ const Layout = () => {
       >
         <div className="w-full max-w-[1920px] px-3 sm:px-4 lg:px-6 mx-auto h-full">
           <div className="flex items-center justify-between h-full gap-2 lg:gap-4">
-            {/* Mobile Hamburger Button + Logo Area */}
+            {/* Mobile / Tablet Hamburger Button + Logo Area */}
             <div className="flex items-center gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
-                title="Abrir Menu"
+                className="xl:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors"
+                title="Abrir Menu Industrial"
               >
-                <Menu size={20} />
+                <Menu size={22} />
               </button>
               <div
                 onClick={() => navigate('/')}
@@ -702,9 +703,9 @@ const Layout = () => {
               </div>
             </div>
 
-            {/* Horizontal Navigation - Modules as Tabs (All Tabs Visible) */}
+            {/* Horizontal Navigation - Modules as Tabs (Desktop XL+ 1280px+) */}
             {prefs.navMode !== 'sidebar' && (
-              <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 2xl:gap-1.5 flex-nowrap flex-1 justify-start ml-2 xl:ml-3 min-w-0">
+              <nav className="hidden xl:flex items-center gap-0.5 2xl:gap-1.5 flex-nowrap flex-1 justify-start ml-2 xl:ml-3 min-w-0">
                 {navItems.map(item => (
                   <NavLink
                     key={item.path}
@@ -735,7 +736,7 @@ const Layout = () => {
 
             {/* When in Sidebar Mode, show Breadcrumb + Quick Search in Header */}
             {prefs.navMode === 'sidebar' && (
-              <div className="hidden lg:flex items-center gap-3 flex-1 ml-4">
+              <div className="hidden xl:flex items-center gap-3 flex-1 ml-4">
                 <button
                   type="button"
                   onClick={() => updatePref('sidebarCollapsed', !prefs.sidebarCollapsed)}
@@ -797,7 +798,7 @@ const Layout = () => {
 
           {/* Second Deck when in Dual-Deck Mode */}
           {prefs.navMode === 'dual-deck' && (
-            <div className="hidden lg:flex items-center justify-between pt-2 mt-2 border-t border-slate-100 dark:border-slate-700/60 text-xs">
+            <div className="hidden xl:flex items-center justify-between pt-2 mt-2 border-t border-slate-100 dark:border-slate-700/60 text-xs">
               <div className="flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">
                   ● {isSupabaseConfigured ? 'Supabase Sincronizado' : 'Armazenamento Local Ativo'}
@@ -820,53 +821,177 @@ const Layout = () => {
       </header>
 
       {/* =====================================================================
-          MENU MOBILE / TABLET DE PÁTIO (Drawer Responsivo)
+          MENU MOBILE / TABLET INDUSTRIAL DE CANTEIRO (Drawer Ergonômico)
          ===================================================================== */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-[100] lg:hidden flex">
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setIsMobileMenuOpen(false)} />
-          <div className="relative w-72 max-w-[85vw] bg-white dark:bg-slate-900 h-full shadow-2xl border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between p-4 z-10 overflow-y-auto">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                <div className="flex items-center gap-2">
-                  <div className={`${accentBadgeClass} p-1.5 rounded-lg`}>
-                    <Construction size={18} />
-                  </div>
-                  <span className="font-bold text-base text-slate-900 dark:text-white">InfraCore ERP</span>
+        <div className="fixed inset-0 z-[100] xl:hidden flex animate-in fade-in duration-200">
+          {/* Backdrop com fechamento ao clique */}
+          <div
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-label="Fechar menu"
+          />
+
+          <div
+            className={`relative w-84 sm:w-96 max-w-[88vw] bg-white dark:bg-slate-900 h-full shadow-2xl border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between z-10 overflow-hidden ${
+              prefs.reduceMotion ? '' : 'transition-transform duration-300 ease-out'
+            }`}
+          >
+            {/* 1. Header do Drawer: Marca + Botão Fechar */}
+            <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className={`${accentBadgeClass} p-2 rounded-xl shadow-sm`}>
+                  <Construction size={22} strokeWidth={2.5} />
                 </div>
-                <button
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                >
-                  <X size={18} />
-                </button>
+                <div>
+                  <h2 className="font-display font-black text-lg text-slate-900 dark:text-white leading-none">
+                    InfraCore
+                  </h2>
+                  <span className="text-[10px] font-mono tracking-wider font-bold text-slate-500 uppercase">
+                    ERP de Canteiro & Usina
+                  </span>
+                </div>
               </div>
-              <div className="space-y-1">
-                {navItems.map(item => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={({ isActive }) =>
-                      `px-3 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-3 transition-all ${
-                        isActive
-                          ? activeNavClass
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`
-                    }
-                  >
-                    {item.icon}
-                    <span>{item.name}</span>
-                  </NavLink>
-                ))}
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
+                title="Fechar Menu"
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            {/* 2. Cartão de Identificação do Operador & Status de Conexão */}
+            <div className="p-4 bg-slate-100/70 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800/80 shrink-0">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 overflow-hidden shadow-inner ring-2 ring-white dark:ring-slate-800 shrink-0">
+                    {currentUser?.avatar ? (
+                      <img src={currentUser.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <UserIcon size={20} />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate leading-tight">
+                      {currentUser?.name || 'Operador de Campo'}
+                    </p>
+                    <span className="inline-block text-[11px] font-black uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                      {currentRoleName}
+                    </span>
+                  </div>
+                </div>
+                <span
+                  className={`px-2 py-1 rounded-md text-[10px] font-bold font-mono shrink-0 ${
+                    isSupabaseConfigured
+                      ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                      : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                  }`}
+                  title={isSupabaseConfigured ? 'Banco de dados sincronizado' : 'Operando em armazenamento local'}
+                >
+                  {isSupabaseConfigured ? '🟢 ONLINE' : '🟡 LOCAL'}
+                </span>
               </div>
             </div>
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+
+            {/* 3. Barra de Ações Rápidas de Campo (Touch Targets Generosos) */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-950/30 border-b border-slate-200 dark:border-slate-800 grid grid-cols-3 gap-2 shrink-0">
               <button
-                onClick={handleLogout}
-                className="w-full py-2.5 px-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-bold text-sm flex items-center justify-center gap-2"
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsSearchOpen(true);
+                }}
+                className="min-h-[48px] px-2 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 flex flex-col items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all"
+                title="Pesquisa Global Instantânea (Ctrl+K)"
               >
-                <LogOut size={16} /> Sair do Sistema
+                <Search size={18} className="text-cyan-600 dark:text-cyan-400" />
+                <span className="text-[11px] font-bold">Buscar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const nextTheme = prefs.theme === 'high-contrast' ? 'light' : 'high-contrast';
+                  updatePref('theme', nextTheme);
+                }}
+                className={`min-h-[48px] px-2 py-1.5 rounded-xl border flex flex-col items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all ${
+                  prefs.theme === 'high-contrast'
+                    ? 'bg-amber-500 text-slate-950 border-amber-600 font-black'
+                    : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
+                }`}
+                title="Modo Sol Forte / Alto Contraste para canteiro de obras"
+              >
+                <Sun size={18} className={prefs.theme === 'high-contrast' ? 'text-slate-950' : 'text-amber-500'} />
+                <span className="text-[11px] font-bold">
+                  {prefs.theme === 'high-contrast' ? 'Sol Forte ON' : 'Sol Forte'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsNotificationsOpen(true);
+                }}
+                className="relative min-h-[48px] px-2 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 flex flex-col items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all"
+                title="Abrir Central de Notificações"
+              >
+                <Bell size={18} className="text-rose-500" />
+                {systemNotifications.length > 0 && (
+                  <span className="absolute top-1.5 right-2 min-w-[16px] h-[16px] px-1 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center">
+                    {systemNotifications.length}
+                  </span>
+                )}
+                <span className="text-[11px] font-bold">Alertas</span>
+              </button>
+            </div>
+
+            {/* 4. Lista Linear Contínua de Módulos (Ordem Original Preservada com Touch Targets >= 48px) */}
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-1.5">
+              {navItems.map(item => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `min-h-[48px] px-3.5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-3.5 transition-all active:scale-[0.98] ${
+                      isActive
+                        ? `${accentBadgeClass} shadow-md`
+                        : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                    }`
+                  }
+                >
+                  <span className="shrink-0 p-1.5 rounded-lg bg-black/5 dark:bg-white/5">
+                    {item.icon}
+                  </span>
+                  <span className="truncate">{item.name}</span>
+                  <ChevronRight size={16} className="ml-auto opacity-40 shrink-0" />
+                </NavLink>
+              ))}
+            </div>
+
+            {/* 5. Rodapé do Drawer: Studio de Layout e Sair */}
+            <div className="p-3 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 space-y-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsDesignerOpen(true);
+                }}
+                className="w-full min-h-[46px] px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shadow-2xs"
+              >
+                <Palette size={16} className="text-cyan-600 dark:text-cyan-400" />
+                <span>Personalizar Layout & Cores (Alt+L)</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full min-h-[48px] px-4 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 font-bold text-sm flex items-center justify-center gap-2 hover:bg-rose-100 dark:hover:bg-rose-900/60 transition-colors shadow-2xs"
+              >
+                <LogOut size={18} />
+                <span>Encerrar Sessão</span>
               </button>
             </div>
           </div>
@@ -1128,11 +1253,11 @@ const Layout = () => {
         {/* Optional Collapsible Left Sidebar when navMode === 'sidebar' */}
         {prefs.navMode === 'sidebar' && (
           <aside
-            className={`hidden lg:flex flex-col justify-between bg-slate-900 text-white border-r border-slate-800 transition-all duration-200 shrink-0 ${
-              prefs.sidebarCollapsed ? 'w-20' : 'w-60'
+            className={`hidden xl:flex flex-col justify-between bg-slate-900 text-white border-r border-slate-800 transition-all duration-200 shrink-0 ${
+              prefs.sidebarCollapsed ? 'w-20' : 'w-64'
             }`}
           >
-            <div className="p-3 space-y-1.5">
+            <div className="p-3 space-y-1.5 overflow-y-auto">
               <div className="flex items-center justify-between px-2 py-1.5 mb-2 border-b border-slate-800">
                 {!prefs.sidebarCollapsed && (
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -1148,23 +1273,27 @@ const Layout = () => {
                   <PanelLeft size={16} />
                 </button>
               </div>
-              {navItems.map(item => (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  title={item.name}
-                  className={({ isActive }) =>
-                    `px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-3 transition-all ${
-                      isActive
-                        ? `${accentBadgeClass} shadow-md`
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                    } ${prefs.sidebarCollapsed ? 'justify-center' : ''}`
-                  }
-                >
-                  <span className="shrink-0">{item.icon}</span>
-                  {!prefs.sidebarCollapsed && <span className="truncate">{item.name}</span>}
-                </NavLink>
-              ))}
+
+              {/* Lista Linear Contínua de Módulos (Ordem Original Preservada) */}
+              <div className="space-y-1">
+                {navItems.map(item => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    title={item.name}
+                    className={({ isActive }) =>
+                      `px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-3 transition-all ${
+                        isActive
+                          ? `${accentBadgeClass} shadow-md`
+                          : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                      } ${prefs.sidebarCollapsed ? 'justify-center' : ''}`
+                    }
+                  >
+                    <span className="shrink-0">{item.icon}</span>
+                    {!prefs.sidebarCollapsed && <span className="truncate">{item.name}</span>}
+                  </NavLink>
+                ))}
+              </div>
             </div>
 
             <div className="p-3 border-t border-slate-800">

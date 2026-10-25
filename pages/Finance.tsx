@@ -53,11 +53,11 @@ import { useToast } from '../context/ToastContext';
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, AreaChart, Area, Legend } from 'recharts';
 import { useApp } from '../context/AppContext';
 import { Transaction, Sale } from '../types';
-import { printDocument } from '../utils/exportUtils';
+import { printDocument, exportToCSV } from '../utils/exportUtils';
 import { toDeterministicUUID, updateItem } from '../src/services/api';
 import { isSupabaseConfigured } from '../src/lib/supabase';
 
-type FinanceTab = 'overview' | 'cashflow' | 'ledger' | 'receivables' | 'payables' | 'accounts' | 'planning';
+type FinanceTab = 'overview' | 'cashflow' | 'dre' | 'ledger' | 'receivables' | 'payables' | 'accounts' | 'planning';
 
 const formatMoney = (value: number) => {
    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
@@ -124,7 +124,7 @@ const Finance = () => {
       transactions, financials, addTransaction, deleteTransaction, importTransactions, updateTransactionStatus, updateTransaction,
       accounts, addAccount, deleteAccount,
       planOfAccounts, addPlanAccount, deletePlanAccount, updatePlanAccount, hasPermission, currentUser, settings,
-      sales, addAuditLog
+      sales, addAuditLog, productionUnits
    } = useApp();
    const { addToast } = useToast();
 
@@ -171,6 +171,28 @@ const Finance = () => {
    // Cash Flow Specific State
    const [cashflowPeriod, setCashflowPeriod] = useState<'30d' | 'month' | 'next30' | 'next60' | 'next90' | 'year'>('month');
    const [cashflowAccountFilter, setCashflowAccountFilter] = useState<string>('all');
+
+   // DRE & Centros de Custo Specific State
+   const [dreRegime, setDreRegime] = useState<'competencia' | 'caixa'>('competencia');
+   const [drePeriodType, setDrePeriodType] = useState<'month' | 'quarter' | 'year' | 'custom'>('month');
+   const [dreYear, setDreYear] = useState<number>(new Date().getFullYear());
+   const [dreMonth, setDreMonth] = useState<number>(new Date().getMonth() + 1); // 1-12
+   const [dreStartDate, setDreStartDate] = useState<string>('');
+   const [dreEndDate, setDreEndDate] = useState<string>('');
+   const [dreCostCenter, setDreCostCenter] = useState<string>('all');
+   const [dreViewMode, setDreViewMode] = useState<'statement' | 'matrix'>('statement');
+   const [expandedDreGroups, setExpandedDreGroups] = useState<Record<string, boolean>>({
+      '1.01': true,
+      '2.01': true,
+      '2.02': true,
+      '2.03': true,
+      '2.04': true,
+      '2.05': true,
+      '2.06': true,
+      '2.07': true,
+      '1.02': true
+   });
+   const [expandedDreAccounts, setExpandedDreAccounts] = useState<Record<string, boolean>>({});
 
    // Standard Transaction Form
    const [formData, setFormData] = useState<Partial<Transaction>>({
@@ -658,6 +680,518 @@ const Finance = () => {
       a.click();
       URL.revokeObjectURL(url);
       addToast("Plano de Contas exportado com sucesso!", 'success');
+   };
+
+   // =========================================================================
+   // DRE GERENCIAL & CENTROS DE CUSTO: MOTOR DE CÁLCULO E AUDITORIA
+   // =========================================================================
+   const availableCostCenters = useMemo(() => {
+      const set = new Set<string>();
+      transactions.forEach(t => {
+         if (t.costCenter && t.costCenter.trim()) {
+            set.add(t.costCenter.trim());
+         }
+      });
+      if (productionUnits && Array.isArray(productionUnits)) {
+         productionUnits.forEach((u: any) => {
+            if (u.name && u.name.trim()) set.add(u.name.trim());
+         });
+      }
+      ['Administrativo / Sede', 'Obra Rodovia BR-101', 'Obra Ponte Rio das Antas', 'Usina de Concreto', 'Usina de Asfalto (CBUQ)', 'Pedreira & Britagem Central', 'Oficina Central & Frota'].forEach(c => set.add(c));
+      return Array.from(set).sort();
+   }, [transactions, productionUnits]);
+
+   const toggleDreGroup = (groupCode: string) => {
+      setExpandedDreGroups(prev => ({
+         ...prev,
+         [groupCode]: !prev[groupCode]
+      }));
+   };
+
+   const toggleDreAccount = (accountKey: string) => {
+      setExpandedDreAccounts(prev => ({
+         ...prev,
+         [accountKey]: !prev[accountKey]
+      }));
+   };
+
+   const dreData = useMemo(() => {
+      const parseDate = (dStr?: string): Date | null => {
+         if (!dStr) return null;
+         if (dStr.includes('/')) {
+            const parts = dStr.split('/').map(Number);
+            if (parts.length === 3) return new Date(parts[2], parts[1] - 1, parts[0]);
+         }
+         const d = new Date(dStr);
+         return isNaN(d.getTime()) ? null : d;
+      };
+
+      let start: Date;
+      let end: Date;
+
+      if (drePeriodType === 'month') {
+         start = new Date(dreYear, dreMonth - 1, 1, 0, 0, 0);
+         end = new Date(dreYear, dreMonth, 0, 23, 59, 59);
+      } else if (drePeriodType === 'quarter') {
+         const qStartMonth = Math.floor((dreMonth - 1) / 3) * 3;
+         start = new Date(dreYear, qStartMonth, 1, 0, 0, 0);
+         end = new Date(dreYear, qStartMonth + 3, 0, 23, 59, 59);
+      } else if (drePeriodType === 'year') {
+         start = new Date(dreYear, 0, 1, 0, 0, 0);
+         end = new Date(dreYear, 11, 31, 23, 59, 59);
+      } else {
+         start = dreStartDate ? new Date(dreStartDate + 'T00:00:00') : new Date(dreYear, 0, 1);
+         end = dreEndDate ? new Date(dreEndDate + 'T23:59:59') : new Date(dreYear, 11, 31, 23, 59, 59);
+      }
+
+      const periodTxs = transactions.filter(tx => {
+         if (tx.status === 'Cancelado') return false;
+
+         if (dreCostCenter !== 'all') {
+            const txCc = (tx.costCenter || 'Geral').trim().toLowerCase();
+            if (txCc !== dreCostCenter.trim().toLowerCase()) return false;
+         }
+
+         if (dreRegime === 'caixa') {
+            if (tx.status !== 'Conciliado') return false;
+            const d = parseDate(tx.date);
+            if (!d) return false;
+            return d >= start && d <= end;
+         } else {
+            const target = tx.dueDate || tx.date;
+            const d = parseDate(target);
+            if (!d) return false;
+            return d >= start && d <= end;
+         }
+      });
+
+      const classify = (tx: Transaction) => {
+         if (tx.ledgerCode) {
+            if (tx.ledgerCode.startsWith('1.01')) return { groupCode: '1.01', groupName: 'Receita Operacional Bruta', accountCode: tx.ledgerCode, accountName: tx.ledgerName || tx.category };
+            if (tx.ledgerCode.startsWith('1.02')) return { groupCode: '1.02', groupName: 'Receitas Financeiras', accountCode: tx.ledgerCode, accountName: tx.ledgerName || tx.category };
+            if (tx.ledgerCode.startsWith('2.01')) return { groupCode: '2.01', groupName: 'Deduções e Impostos s/ Vendas', accountCode: tx.ledgerCode, accountName: tx.ledgerName || tx.category };
+            if (tx.ledgerCode.startsWith('2.02')) return { groupCode: '2.02', groupName: 'Custos Diretos de Produção (CPV/CSP)', accountCode: tx.ledgerCode, accountName: tx.ledgerName || tx.category };
+            if (tx.ledgerCode.startsWith('2.03')) return { groupCode: '2.03', groupName: 'Custos Operacionais de Frota & Equipamentos', accountCode: tx.ledgerCode, accountName: tx.ledgerName || tx.category };
+            if (tx.ledgerCode.startsWith('2.04')) return { groupCode: '2.04', groupName: 'Despesas com Pessoal Administrativo', accountCode: tx.ledgerCode, accountName: tx.ledgerName || tx.category };
+            if (tx.ledgerCode.startsWith('2.05')) return { groupCode: '2.05', groupName: 'Despesas Administrativas e Gerais', accountCode: tx.ledgerCode, accountName: tx.ledgerName || tx.category };
+            if (tx.ledgerCode.startsWith('2.06')) return { groupCode: '2.06', groupName: 'Despesas Comerciais', accountCode: tx.ledgerCode, accountName: tx.ledgerName || tx.category };
+            if (tx.ledgerCode.startsWith('2.07')) return { groupCode: '2.07', groupName: 'Despesas Financeiras', accountCode: tx.ledgerCode, accountName: tx.ledgerName || tx.category };
+         }
+
+         if (planOfAccounts && Array.isArray(planOfAccounts)) {
+            for (const group of planOfAccounts) {
+               if (group.name && group.name.toLowerCase() === (tx.category || '').toLowerCase()) {
+                  return { groupCode: group.code, groupName: group.name, accountCode: group.code, accountName: group.name };
+               }
+               if (group.children) {
+                  for (const child of group.children) {
+                     if (child.name && child.name.toLowerCase() === (tx.category || '').toLowerCase()) {
+                        return { groupCode: group.code, groupName: group.name, accountCode: child.code, accountName: child.name };
+                     }
+                  }
+               }
+            }
+         }
+
+         const text = `${(tx.category || '').toLowerCase()} ${(tx.description || '').toLowerCase()}`;
+         if (tx.type === 'Receita') {
+            if (text.includes('juro') || text.includes('rendimento') || text.includes('aplica') || text.includes('financeir')) {
+               return { groupCode: '1.02', groupName: 'Receitas Financeiras', accountCode: '1.02.01', accountName: tx.category || 'Receitas Financeiras' };
+            }
+            return { groupCode: '1.01', groupName: 'Receita Operacional Bruta', accountCode: '1.01.99', accountName: tx.category || 'Outras Receitas Operacionais' };
+         } else {
+            if (text.includes('icms') || text.includes('iss') || text.includes('pis') || text.includes('cofins') || text.includes('simples') || text.includes('devolu') || text.includes('imposto s/')) {
+               return { groupCode: '2.01', groupName: 'Deduções e Impostos s/ Vendas', accountCode: '2.01.99', accountName: tx.category || 'Tributos Incidentes s/ Vendas' };
+            }
+            if (text.includes('insumo') || text.includes('brita') || text.includes('cimento') || text.includes('concreto') || text.includes('asfalto') || text.includes('cap') || text.includes('obra') || text.includes('subempreit') || text.includes('usina')) {
+               return { groupCode: '2.02', groupName: 'Custos Diretos de Produção (CPV/CSP)', accountCode: '2.02.99', accountName: tx.category || 'Insumos e Custos Diretos de Obras' };
+            }
+            if (text.includes('diesel') || text.includes('combust') || text.includes('frota') || text.includes('pneu') || text.includes('caminh') || text.includes('maquina') || text.includes('máquina') || text.includes('manuten')) {
+               return { groupCode: '2.03', groupName: 'Custos Operacionais de Frota & Equipamentos', accountCode: '2.03.99', accountName: tx.category || 'Combustíveis e Manutenção de Frota' };
+            }
+            if (text.includes('salario') || text.includes('salário') || text.includes('folha') || text.includes('pro-labore') || text.includes('pró-labore') || text.includes('fgts') || text.includes('inss') || text.includes('va') || text.includes('vr')) {
+               return { groupCode: '2.04', groupName: 'Despesas com Pessoal Administrativo', accountCode: '2.04.99', accountName: tx.category || 'Pessoal e Encargos Administrativos' };
+            }
+            if (text.includes('comiss') || text.includes('market') || text.includes('publicid') || text.includes('propaganda') || text.includes('brinde')) {
+               return { groupCode: '2.06', groupName: 'Despesas Comerciais', accountCode: '2.06.99', accountName: tx.category || 'Comercial e Vendas' };
+            }
+            if (text.includes('tarifa') || text.includes('juro') || text.includes('multa') || text.includes('banc') || text.includes('iof')) {
+               return { groupCode: '2.07', groupName: 'Despesas Financeiras', accountCode: '2.07.99', accountName: tx.category || 'Despesas Financeiras e Tarifas' };
+            }
+            return { groupCode: '2.05', groupName: 'Despesas Administrativas e Gerais', accountCode: '2.05.99', accountName: tx.category || 'Despesas Administrativas Gerais' };
+         }
+      };
+
+      interface AccountNode {
+         code: string;
+         name: string;
+         total: number;
+         txs: Transaction[];
+      }
+      interface GroupNode {
+         code: string;
+         name: string;
+         total: number;
+         accounts: Record<string, AccountNode>;
+      }
+
+      const groups: Record<string, GroupNode> = {
+         '1.01': { code: '1.01', name: 'Receita Operacional Bruta', total: 0, accounts: {} },
+         '2.01': { code: '2.01', name: 'Deduções e Impostos s/ Vendas', total: 0, accounts: {} },
+         '2.02': { code: '2.02', name: 'Custos Diretos de Produção (CPV/CSP)', total: 0, accounts: {} },
+         '2.03': { code: '2.03', name: 'Custos Operacionais de Frota & Equipamentos', total: 0, accounts: {} },
+         '2.04': { code: '2.04', name: 'Despesas com Pessoal Administrativo', total: 0, accounts: {} },
+         '2.05': { code: '2.05', name: 'Despesas Administrativas e Gerais', total: 0, accounts: {} },
+         '2.06': { code: '2.06', name: 'Despesas Comerciais', total: 0, accounts: {} },
+         '2.07': { code: '2.07', name: 'Despesas Financeiras', total: 0, accounts: {} },
+         '1.02': { code: '1.02', name: 'Receitas Financeiras', total: 0, accounts: {} },
+      };
+
+      periodTxs.forEach(tx => {
+         const { groupCode, accountCode, accountName } = classify(tx);
+         const targetGroup = groups[groupCode] || groups['2.05'];
+
+         targetGroup.total += tx.amount;
+
+         if (!targetGroup.accounts[accountCode]) {
+            targetGroup.accounts[accountCode] = {
+               code: accountCode,
+               name: accountName,
+               total: 0,
+               txs: []
+            };
+         }
+         targetGroup.accounts[accountCode].total += tx.amount;
+         targetGroup.accounts[accountCode].txs.push(tx);
+      });
+
+      const grossRevenue = groups['1.01'].total;
+      const deductions = groups['2.01'].total;
+      const netRevenue = grossRevenue - deductions;
+
+      const directCosts = groups['2.02'].total + groups['2.03'].total;
+      const grossProfit = netRevenue - directCosts;
+      const grossMarginPct = netRevenue > 0 ? (grossProfit / netRevenue) * 100 : 0;
+
+      const operatingExpenses = groups['2.04'].total + groups['2.05'].total + groups['2.06'].total;
+      const ebitda = grossProfit - operatingExpenses;
+      const ebitdaMarginPct = netRevenue > 0 ? (ebitda / netRevenue) * 100 : 0;
+
+      const financialRevenues = groups['1.02'].total;
+      const financialExpenses = groups['2.07'].total;
+      const netFinancialResult = financialRevenues - financialExpenses;
+
+      const netIncome = ebitda + netFinancialResult;
+      const netMarginPct = netRevenue > 0 ? (netIncome / netRevenue) * 100 : 0;
+
+      const calcAV = (val: number) => {
+         if (!netRevenue || netRevenue === 0) return 0;
+         return (val / netRevenue) * 100;
+      };
+
+      const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+      const periodLabel = drePeriodType === 'month'
+         ? `${monthNames[dreMonth - 1]} de ${dreYear}`
+         : drePeriodType === 'quarter'
+         ? `${Math.floor((dreMonth - 1) / 3) + 1}º Trimestre de ${dreYear}`
+         : drePeriodType === 'year'
+         ? `Exercício Completo ${dreYear}`
+         : `Período Personalizado (${dreStartDate || 'Início'} até ${dreEndDate || 'Fim'})`;
+
+      return {
+         periodTxs,
+         groups,
+         grossRevenue,
+         deductions,
+         netRevenue,
+         directCosts,
+         grossProfit,
+         grossMarginPct,
+         operatingExpenses,
+         ebitda,
+         ebitdaMarginPct,
+         financialRevenues,
+         financialExpenses,
+         netFinancialResult,
+         netIncome,
+         netMarginPct,
+         calcAV,
+         periodLabel
+      };
+   }, [transactions, dreRegime, drePeriodType, dreYear, dreMonth, dreStartDate, dreEndDate, dreCostCenter, planOfAccounts]);
+
+   const costCenterBreakdown = useMemo(() => {
+      const result: Record<string, { revenue: number; costs: number; expenses: number; ebitda: number; margin: number; count: number }> = {};
+
+      const parseDate = (dStr?: string): Date | null => {
+         if (!dStr) return null;
+         if (dStr.includes('/')) {
+            const parts = dStr.split('/').map(Number);
+            if (parts.length === 3) return new Date(parts[2], parts[1] - 1, parts[0]);
+         }
+         const d = new Date(dStr);
+         return isNaN(d.getTime()) ? null : d;
+      };
+
+      let start: Date;
+      let end: Date;
+      if (drePeriodType === 'month') {
+         start = new Date(dreYear, dreMonth - 1, 1, 0, 0, 0);
+         end = new Date(dreYear, dreMonth, 0, 23, 59, 59);
+      } else if (drePeriodType === 'quarter') {
+         const qStartMonth = Math.floor((dreMonth - 1) / 3) * 3;
+         start = new Date(dreYear, qStartMonth, 1, 0, 0, 0);
+         end = new Date(dreYear, qStartMonth + 3, 0, 23, 59, 59);
+      } else if (drePeriodType === 'year') {
+         start = new Date(dreYear, 0, 1, 0, 0, 0);
+         end = new Date(dreYear, 11, 31, 23, 59, 59);
+      } else {
+         start = dreStartDate ? new Date(dreStartDate + 'T00:00:00') : new Date(dreYear, 0, 1);
+         end = dreEndDate ? new Date(dreEndDate + 'T23:59:59') : new Date(dreYear, 11, 31, 23, 59, 59);
+      }
+
+      const txs = transactions.filter(tx => {
+         if (tx.status === 'Cancelado') return false;
+         if (dreRegime === 'caixa') {
+            if (tx.status !== 'Conciliado') return false;
+            const d = parseDate(tx.date);
+            return d ? (d >= start && d <= end) : false;
+         } else {
+            const d = parseDate(tx.dueDate || tx.date);
+            return d ? (d >= start && d <= end) : false;
+         }
+      });
+
+      txs.forEach(tx => {
+         const cc = (tx.costCenter && tx.costCenter.trim()) || 'Geral / Não Classificado';
+         if (!result[cc]) {
+            result[cc] = { revenue: 0, costs: 0, expenses: 0, ebitda: 0, margin: 0, count: 0 };
+         }
+         result[cc].count += 1;
+         if (tx.type === 'Receita') {
+            result[cc].revenue += tx.amount;
+         } else {
+            const code = tx.ledgerCode || '';
+            if (code.startsWith('2.01') || code.startsWith('2.02') || code.startsWith('2.03')) {
+               result[cc].costs += tx.amount;
+            } else {
+               result[cc].expenses += tx.amount;
+            }
+         }
+      });
+
+      Object.keys(result).forEach(cc => {
+         const item = result[cc];
+         item.ebitda = item.revenue - (item.costs + item.expenses);
+         item.margin = item.revenue > 0 ? (item.ebitda / item.revenue) * 100 : 0;
+      });
+
+      return result;
+   }, [transactions, dreRegime, drePeriodType, dreYear, dreMonth, dreStartDate, dreEndDate]);
+
+   const handleExportDreCsv = () => {
+      const rows: any[] = [];
+      const regimeName = dreRegime === 'competencia' ? 'Competência' : 'Caixa';
+      const ccName = dreCostCenter === 'all' ? 'Consolidado Geral' : dreCostCenter;
+
+      const addRow = (nivel: string, codigo: string, conta: string, valor: number, av: number) => {
+         rows.push({
+            'NÍVEL': nivel,
+            'CÓDIGO': codigo,
+            'CONTA': conta,
+            'REGIME': regimeName,
+            'CENTRO DE CUSTO': ccName,
+            'VALOR (R$)': valor.toFixed(2).replace('.', ','),
+            'ANÁLISE VERTICAL (% AV)': `${av.toFixed(2).replace('.', ',')}%`
+         });
+      };
+
+      addRow('SINTÉTICA', '1.01', 'RECEITA OPERACIONAL BRUTA', dreData.grossRevenue, dreData.calcAV(dreData.grossRevenue));
+      Object.values(dreData.groups['1.01'].accounts).forEach(a => {
+         addRow('ANALÍTICA', a.code, `  ${a.name}`, a.total, dreData.calcAV(a.total));
+      });
+
+      addRow('SINTÉTICA', '2.01', '(-) DEDUÇÕES E TRIBUTOS S/ VENDAS', -dreData.deductions, -dreData.calcAV(dreData.deductions));
+      Object.values(dreData.groups['2.01'].accounts).forEach(a => {
+         addRow('ANALÍTICA', a.code, `  ${a.name}`, -a.total, -dreData.calcAV(a.total));
+      });
+
+      addRow('SUBTOTAL', '=', '(=) RECEITA OPERACIONAL LÍQUIDA', dreData.netRevenue, 100);
+
+      addRow('SINTÉTICA', '2.02', '(-) CUSTOS DIRETOS DE PRODUÇÃO / OBRAS', -dreData.groups['2.02'].total, -dreData.calcAV(dreData.groups['2.02'].total));
+      Object.values(dreData.groups['2.02'].accounts).forEach(a => {
+         addRow('ANALÍTICA', a.code, `  ${a.name}`, -a.total, -dreData.calcAV(a.total));
+      });
+      addRow('SINTÉTICA', '2.03', '(-) CUSTOS DE FROTA E EQUIPAMENTOS', -dreData.groups['2.03'].total, -dreData.calcAV(dreData.groups['2.03'].total));
+      Object.values(dreData.groups['2.03'].accounts).forEach(a => {
+         addRow('ANALÍTICA', a.code, `  ${a.name}`, -a.total, -dreData.calcAV(a.total));
+      });
+
+      addRow('SUBTOTAL', '=', '(=) LUCRO BRUTO (MARGEM BRUTA)', dreData.grossProfit, dreData.grossMarginPct);
+
+      addRow('SINTÉTICA', '2.04', '(-) DESPESAS COM PESSOAL ADMINISTRATIVO', -dreData.groups['2.04'].total, -dreData.calcAV(dreData.groups['2.04'].total));
+      addRow('SINTÉTICA', '2.05', '(-) DESPESAS ADMINISTRATIVAS E GERAIS', -dreData.groups['2.05'].total, -dreData.calcAV(dreData.groups['2.05'].total));
+      addRow('SINTÉTICA', '2.06', '(-) DESPESAS COMERCIAIS', -dreData.groups['2.06'].total, -dreData.calcAV(dreData.groups['2.06'].total));
+
+      addRow('SUBTOTAL', '=', '(=) EBITDA / LAJIDA', dreData.ebitda, dreData.ebitdaMarginPct);
+
+      addRow('SINTÉTICA', '1.02', '(+) RECEITAS FINANCEIRAS', dreData.financialRevenues, dreData.calcAV(dreData.financialRevenues));
+      addRow('SINTÉTICA', '2.07', '(-) DESPESAS FINANCEIRAS', -dreData.financialExpenses, -dreData.calcAV(dreData.financialExpenses));
+
+      addRow('RESULTADO', '=', '(=) LUCRO LÍQUIDO DO EXERCÍCIO', dreData.netIncome, dreData.netMarginPct);
+
+      exportToCSV(rows, `DRE_Gerencial_${dreRegime}_${dreData.periodLabel.replace(/[\/\s]/g, '_')}`);
+      addToast('DRE Gerencial exportado em CSV com sucesso!', 'success');
+   };
+
+   const handlePrintDreReport = () => {
+      const regimeName = dreRegime === 'competencia' ? 'Regime de Competência' : 'Regime de Caixa';
+      const ccName = dreCostCenter === 'all' ? 'Consolidado Geral (Todas as Obras e Unidades)' : `Centro de Custo: ${dreCostCenter}`;
+      const printDate = new Date().toLocaleString('pt-BR');
+      const company = companyInfo.name;
+
+      const formatPrintMoney = (val: number) => {
+         const formatted = formatMoney(Math.abs(val));
+         return val < 0 ? `(${formatted})` : formatted;
+      };
+
+      let rowsHtml = '';
+      const renderPrintRow = (code: string, desc: string, val: number, av: number, isHeader = false, isBold = false, bg = '') => {
+         const styleBg = bg ? `background-color: ${bg};` : '';
+         const styleWeight = isBold || isHeader ? 'font-weight: bold;' : 'font-weight: normal;';
+         const valColor = val < 0 ? 'color: #dc2626;' : val > 0 && isHeader ? 'color: #0f172a;' : 'color: #334155;';
+         return `
+            <tr style="border-bottom: 1px solid #e2e8f0; ${styleBg}">
+               <td style="padding: 8px 12px; font-family: monospace; font-size: 11px; ${styleWeight}">${code}</td>
+               <td style="padding: 8px 12px; font-size: 12px; ${styleWeight}">${desc}</td>
+               <td style="padding: 8px 12px; font-size: 12px; text-align: right; font-family: monospace; ${styleWeight} ${valColor}">${formatPrintMoney(val)}</td>
+               <td style="padding: 8px 12px; font-size: 12px; text-align: right; font-family: monospace; ${styleWeight}">${av.toFixed(1)}%</td>
+            </tr>
+         `;
+      };
+
+      rowsHtml += renderPrintRow('1.01', 'RECEITA OPERACIONAL BRUTA', dreData.grossRevenue, dreData.calcAV(dreData.grossRevenue), true, true, '#f8fafc');
+      Object.values(dreData.groups['1.01'].accounts).forEach(a => {
+         rowsHtml += renderPrintRow(a.code, `&nbsp;&nbsp;&nbsp;&nbsp;${a.name}`, a.total, dreData.calcAV(a.total));
+      });
+
+      rowsHtml += renderPrintRow('2.01', '(-) Impostos e Deduções s/ Vendas', -dreData.deductions, -dreData.calcAV(dreData.deductions), true, true, '#f8fafc');
+      Object.values(dreData.groups['2.01'].accounts).forEach(a => {
+         rowsHtml += renderPrintRow(a.code, `&nbsp;&nbsp;&nbsp;&nbsp;${a.name}`, -a.total, -dreData.calcAV(a.total));
+      });
+
+      rowsHtml += renderPrintRow('(=)', 'RECEITA OPERACIONAL LÍQUIDA', dreData.netRevenue, 100, true, true, '#e0f2fe');
+
+      rowsHtml += renderPrintRow('2.02', '(-) Custos Diretos de Produção (CPV/CSP)', -dreData.groups['2.02'].total, -dreData.calcAV(dreData.groups['2.02'].total), true, true, '#f8fafc');
+      Object.values(dreData.groups['2.02'].accounts).forEach(a => {
+         rowsHtml += renderPrintRow(a.code, `&nbsp;&nbsp;&nbsp;&nbsp;${a.name}`, -a.total, -dreData.calcAV(a.total));
+      });
+      rowsHtml += renderPrintRow('2.03', '(-) Custos de Frota & Equipamentos', -dreData.groups['2.03'].total, -dreData.calcAV(dreData.groups['2.03'].total), true, true, '#f8fafc');
+      Object.values(dreData.groups['2.03'].accounts).forEach(a => {
+         rowsHtml += renderPrintRow(a.code, `&nbsp;&nbsp;&nbsp;&nbsp;${a.name}`, -a.total, -dreData.calcAV(a.total));
+      });
+
+      rowsHtml += renderPrintRow('(=)', `LUCRO BRUTO (Margem Bruta: ${dreData.grossMarginPct.toFixed(1)}%)`, dreData.grossProfit, dreData.grossMarginPct, true, true, '#f1f5f9');
+
+      rowsHtml += renderPrintRow('2.04', '(-) Pessoal Administrativo', -dreData.groups['2.04'].total, -dreData.calcAV(dreData.groups['2.04'].total), true, false);
+      rowsHtml += renderPrintRow('2.05', '(-) Despesas Gerais e Administrativas', -dreData.groups['2.05'].total, -dreData.calcAV(dreData.groups['2.05'].total), true, false);
+      rowsHtml += renderPrintRow('2.06', '(-) Despesas Comerciais e Vendas', -dreData.groups['2.06'].total, -dreData.calcAV(dreData.groups['2.06'].total), true, false);
+
+      rowsHtml += renderPrintRow('(=)', `EBITDA / LAJIDA (Margem EBITDA: ${dreData.ebitdaMarginPct.toFixed(1)}%)`, dreData.ebitda, dreData.ebitdaMarginPct, true, true, '#dbeafe');
+
+      rowsHtml += renderPrintRow('1.02', '(+) Receitas Financeiras', dreData.financialRevenues, dreData.calcAV(dreData.financialRevenues));
+      rowsHtml += renderPrintRow('2.07', '(-) Despesas Financeiras e Juros', -dreData.financialExpenses, -dreData.calcAV(dreData.financialExpenses));
+
+      rowsHtml += renderPrintRow('(=)', `LUCRO LÍQUIDO DO EXERCÍCIO (Margem Líquida: ${dreData.netMarginPct.toFixed(1)}%)`, dreData.netIncome, dreData.netMarginPct, true, true, dreData.netIncome >= 0 ? '#dcfce7' : '#fee2e2');
+
+      const fullHtml = `
+         <!DOCTYPE html>
+         <html>
+         <head>
+            <meta charset="utf-8" />
+            <title>DRE Gerencial - ${company}</title>
+            <style>
+               body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #0f172a; margin: 25px; }
+               .header { border-bottom: 2px solid #0891b2; padding-bottom: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
+               .header h1 { font-size: 20px; margin: 0; color: #0891b2; }
+               .header p { margin: 3px 0 0; font-size: 12px; color: #64748b; }
+               .kpis { display: flex; gap: 12px; margin-bottom: 20px; }
+               .kpi { flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; background: #fafafa; }
+               .kpi-title { font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold; }
+               .kpi-value { font-size: 18px; font-weight: bold; margin-top: 4px; }
+               table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+               th { background-color: #0f172a; color: #ffffff; text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+               .signature { margin-top: 50px; display: flex; justify-content: space-between; }
+               .sign-box { width: 45%; border-top: 1px solid #94a3b8; text-align: center; padding-top: 8px; font-size: 12px; color: #475569; }
+               @media print {
+                  body { margin: 10mm; }
+                  button { display: none; }
+               }
+            </style>
+         </head>
+         <body>
+            <div class="header">
+               <div>
+                  <h1>${company}</h1>
+                  <p>Sistema Integrado de Gestão InfraCore BETA • Controladoria & Tesouraria</p>
+                  <p><strong>Demonstração do Resultado do Exercício (DRE Gerencial)</strong></p>
+               </div>
+               <div style="text-align: right; font-size: 11px; color: #64748b;">
+                  <div><strong>Período:</strong> ${dreData.periodLabel}</div>
+                  <div><strong>Regime:</strong> ${regimeName}</div>
+                  <div><strong>Escopo:</strong> ${ccName}</div>
+                  <div><strong>Emissão:</strong> ${printDate}</div>
+               </div>
+            </div>
+
+            <div class="kpis">
+               <div class="kpi">
+                  <div class="kpi-title">Receita Operacional Líquida</div>
+                  <div class="kpi-value" style="color: #0284c7;">${formatMoney(dreData.netRevenue)}</div>
+               </div>
+               <div class="kpi">
+                  <div class="kpi-title">Lucro Bruto (Margem ${dreData.grossMarginPct.toFixed(1)}%)</div>
+                  <div class="kpi-value" style="color: #0f172a;">${formatMoney(dreData.grossProfit)}</div>
+               </div>
+               <div class="kpi">
+                  <div class="kpi-title">EBITDA (Margem ${dreData.ebitdaMarginPct.toFixed(1)}%)</div>
+                  <div class="kpi-value" style="color: #2563eb;">${formatMoney(dreData.ebitda)}</div>
+               </div>
+               <div class="kpi">
+                  <div class="kpi-title">Lucro Líquido (Margem ${dreData.netMarginPct.toFixed(1)}%)</div>
+                  <div class="kpi-value" style="color: ${dreData.netIncome >= 0 ? '#16a34a' : '#dc2626'};">${formatMoney(dreData.netIncome)}</div>
+               </div>
+            </div>
+
+            <table>
+               <thead>
+                  <tr>
+                     <th style="width: 80px;">Código</th>
+                     <th>Estrutura da Demonstração</th>
+                     <th style="text-align: right; width: 140px;">Saldo Período</th>
+                     <th style="text-align: right; width: 80px;">% AV</th>
+                  </tr>
+               </thead>
+               <tbody>
+                  ${rowsHtml}
+               </tbody>
+            </table>
+
+            <div class="signature">
+               <div class="sign-box">
+                  <strong>Controladoria & Tesouraria</strong><br/>
+                  Responsável Técnico Contábil
+               </div>
+               <div class="sign-box">
+                  <strong>Diretoria Financeira / Executiva</strong><br/>
+                  Aprovação Gerencial
+               </div>
+            </div>
+         </body>
+         </html>
+      `;
+
+      printDocument('DRE Gerencial InfraCore', fullHtml);
    };
 
    // Filtering Logic for Transactions
@@ -2663,6 +3197,963 @@ const Finance = () => {
                      </table>
                   </div>
                </div>
+            </div>
+         )}
+
+         {/* ========================================================================= */}
+         {/* TAB: DRE GERENCIAL & CENTROS DE CUSTO (CONTROLADORIA & RESULTADOS) */}
+         {/* ========================================================================= */}
+         {activeTab === 'dre' && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+               {/* Controls & Filter Bar */}
+               <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 space-y-5">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                     <div>
+                        <div className="flex items-center gap-2.5">
+                           <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
+                              <Layers size={22} />
+                           </div>
+                           <div>
+                              <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                                 Demonstração do Resultado do Exercício (DRE Gerencial)
+                                 <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">
+                                    Controladoria & Obras
+                                 </span>
+                              </h2>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                 Apuração contábil por competência ou caixa, margens operacionais, EBITDA e resultado por centro de custo de obras e usinas.
+                              </p>
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* Action Buttons: CSV & Print */}
+                     <div className="flex flex-wrap items-center gap-2.5">
+                        {/* View Mode Toggle */}
+                        <div className="flex bg-slate-100 dark:bg-gray-700 p-1 rounded-xl">
+                           <button
+                              onClick={() => setDreViewMode('statement')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                 dreViewMode === 'statement'
+                                    ? 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
+                              }`}
+                           >
+                              <List size={14} /> Demonstração
+                           </button>
+                           <button
+                              onClick={() => setDreViewMode('matrix')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                 dreViewMode === 'matrix'
+                                    ? 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
+                              }`}
+                           >
+                              <Building2 size={14} /> Matriz de Obras
+                           </button>
+                        </div>
+
+                        <button
+                           onClick={handleExportDreCsv}
+                           className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl flex items-center gap-2 transition-all cursor-pointer"
+                           title="Exportar DRE Gerencial completo com fórmulas e percentuais para Excel / CSV"
+                        >
+                           <Download size={15} /> CSV Analítico
+                        </button>
+                        <button
+                           onClick={handlePrintDreReport}
+                           className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+                           title="Emitir Relatório Executivo Formal para Reuniões de Conselho e Diretoria"
+                        >
+                           <Printer size={15} /> Relatório Diretoria (PDF)
+                        </button>
+                     </div>
+                  </div>
+
+                  {/* Filter Toolbar: Regime, Centro de Custo, Período */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-100 dark:border-gray-700">
+                     {/* 1. Regime Contábil Toggle */}
+                     <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">
+                           Regime de Apuração
+                        </label>
+                        <div className="flex bg-slate-100 dark:bg-gray-700/60 p-1 rounded-xl">
+                           <button
+                              onClick={() => setDreRegime('competencia')}
+                              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                                 dreRegime === 'competencia'
+                                    ? 'bg-indigo-600 text-white shadow-sm'
+                                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                              }`}
+                           >
+                              Competência (Fato Gerador)
+                           </button>
+                           <button
+                              onClick={() => setDreRegime('caixa')}
+                              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                                 dreRegime === 'caixa'
+                                    ? 'bg-emerald-600 text-white shadow-sm'
+                                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                              }`}
+                           >
+                              Caixa (Liquidado)
+                           </button>
+                        </div>
+                     </div>
+
+                     {/* 2. Centro de Custo / Obra */}
+                     <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">
+                           Centro de Custo / Obra
+                        </label>
+                        <select
+                           value={dreCostCenter}
+                           onChange={e => setDreCostCenter(e.target.value)}
+                           className="w-full bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                           <option value="all">🌐 Todos os Centros (Consolidado)</option>
+                           {availableCostCenters.map(cc => (
+                              <option key={cc} value={cc}>
+                                 🏗️ {cc}
+                              </option>
+                           ))}
+                        </select>
+                     </div>
+
+                     {/* 3. Tipo de Período */}
+                     <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">
+                           Frequência do Período
+                        </label>
+                        <div className="grid grid-cols-4 bg-slate-100 dark:bg-gray-700/60 p-1 rounded-xl text-center">
+                           {[
+                              { id: 'month', label: 'Mês' },
+                              { id: 'quarter', label: 'Trim' },
+                              { id: 'year', label: 'Ano' },
+                              { id: 'custom', label: 'Livre' }
+                           ].map(p => (
+                              <button
+                                 key={p.id}
+                                 onClick={() => setDrePeriodType(p.id as any)}
+                                 className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
+                                    drePeriodType === p.id
+                                       ? 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                       : 'text-slate-500 dark:text-slate-400 hover:text-slate-900'
+                                 }`}
+                              >
+                                 {p.label}
+                              </button>
+                           ))}
+                        </div>
+                     </div>
+
+                     {/* 4. Seleção Temporal Específica */}
+                     <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">
+                           Data / Exercício ({dreData.periodLabel})
+                        </label>
+                        {drePeriodType === 'month' && (
+                           <div className="flex gap-2">
+                              <select
+                                 value={dreMonth}
+                                 onChange={e => setDreMonth(Number(e.target.value))}
+                                 className="flex-1 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                              >
+                                 {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map((m, idx) => (
+                                    <option key={idx + 1} value={idx + 1}>{m}</option>
+                                 ))}
+                              </select>
+                              <select
+                                 value={dreYear}
+                                 onChange={e => setDreYear(Number(e.target.value))}
+                                 className="w-24 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                              >
+                                 {[2024, 2025, 2026, 2027].map(y => (
+                                    <option key={y} value={y}>{y}</option>
+                                 ))}
+                              </select>
+                           </div>
+                        )}
+                        {drePeriodType === 'quarter' && (
+                           <div className="flex gap-2">
+                              <select
+                                 value={Math.floor((dreMonth - 1) / 3) + 1}
+                                 onChange={e => setDreMonth((Number(e.target.value) - 1) * 3 + 1)}
+                                 className="flex-1 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                              >
+                                 <option value={1}>1º Trimestre (Jan-Mar)</option>
+                                 <option value={2}>2º Trimestre (Abr-Jun)</option>
+                                 <option value={3}>3º Trimestre (Jul-Set)</option>
+                                 <option value={4}>4º Trimestre (Out-Dez)</option>
+                              </select>
+                              <select
+                                 value={dreYear}
+                                 onChange={e => setDreYear(Number(e.target.value))}
+                                 className="w-24 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                              >
+                                 {[2024, 2025, 2026, 2027].map(y => (
+                                    <option key={y} value={y}>{y}</option>
+                                 ))}
+                              </select>
+                           </div>
+                        )}
+                        {drePeriodType === 'year' && (
+                           <select
+                              value={dreYear}
+                              onChange={e => setDreYear(Number(e.target.value))}
+                              className="w-full bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                           >
+                              {[2024, 2025, 2026, 2027].map(y => (
+                                 <option key={y} value={y}>Exercício Completo {y}</option>
+                              ))}
+                           </select>
+                        )}
+                        {drePeriodType === 'custom' && (
+                           <div className="flex gap-2">
+                              <input
+                                 type="date"
+                                 value={dreStartDate}
+                                 onChange={e => setDreStartDate(e.target.value)}
+                                 className="w-1/2 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl px-2 py-1.5 text-[11px] font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
+                              <input
+                                 type="date"
+                                 value={dreEndDate}
+                                 onChange={e => setDreEndDate(e.target.value)}
+                                 className="w-1/2 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-xl px-2 py-1.5 text-[11px] font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
+                           </div>
+                        )}
+                     </div>
+                  </div>
+               </div>
+
+               {/* Executive KPI Cards */}
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {/* KPI 1: Receita Operacional Líquida */}
+                  <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-slate-100 dark:border-gray-700 shadow-sm relative overflow-hidden">
+                     <div className="absolute top-0 right-0 p-4 opacity-10 text-cyan-500">
+                        <TrendingUp size={64} />
+                     </div>
+                     <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">
+                        Receita Operacional Líquida
+                     </p>
+                     <h3 className="text-2xl lg:text-3xl font-black text-cyan-600 dark:text-cyan-400 mb-2">
+                        {formatMoney(dreData.netRevenue)}
+                     </h3>
+                     <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                        <span>Bruta: {formatMoney(dreData.grossRevenue)}</span>
+                        <span className="text-rose-500 font-bold">Deduc.: -{formatMoney(dreData.deductions)}</span>
+                     </div>
+                  </div>
+
+                  {/* KPI 2: Lucro Bruto */}
+                  <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-slate-100 dark:border-gray-700 shadow-sm relative overflow-hidden">
+                     <div className="absolute top-0 right-0 p-4 opacity-10 text-blue-500">
+                        <BarChart3 size={64} />
+                     </div>
+                     <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">
+                        Lucro Bruto (Margem Bruta)
+                     </p>
+                     <h3 className="text-2xl lg:text-3xl font-black text-slate-900 dark:text-white mb-2">
+                        {formatMoney(dreData.grossProfit)}
+                     </h3>
+                     <div className="flex items-center gap-2">
+                        <span className={`text-xs font-black px-2 py-0.5 rounded-md ${
+                           dreData.grossMarginPct >= 30 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                        }`}>
+                           {dreData.grossMarginPct.toFixed(1)}% Margem
+                        </span>
+                        <span className="text-[11px] text-slate-400">Custos: -{formatMoney(dreData.directCosts)}</span>
+                     </div>
+                  </div>
+
+                  {/* KPI 3: EBITDA / LAJIDA */}
+                  <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-slate-100 dark:border-gray-700 shadow-sm relative overflow-hidden">
+                     <div className="absolute top-0 right-0 p-4 opacity-10 text-indigo-500">
+                        <Layers size={64} />
+                     </div>
+                     <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">
+                        EBITDA / LAJIDA
+                     </p>
+                     <h3 className="text-2xl lg:text-3xl font-black text-indigo-600 dark:text-indigo-400 mb-2">
+                        {formatMoney(dreData.ebitda)}
+                     </h3>
+                     <div className="flex items-center gap-2">
+                        <span className={`text-xs font-black px-2 py-0.5 rounded-md ${
+                           dreData.ebitdaMarginPct >= 15 ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                        }`}>
+                           {dreData.ebitdaMarginPct.toFixed(1)}% EBITDA
+                        </span>
+                        <span className="text-[11px] text-slate-400">Desp: -{formatMoney(dreData.operatingExpenses)}</span>
+                     </div>
+                  </div>
+
+                  {/* KPI 4: Lucro Líquido do Exercício */}
+                  <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-slate-100 dark:border-gray-700 shadow-sm relative overflow-hidden">
+                     <div className={`absolute top-0 right-0 p-4 opacity-10 ${dreData.netIncome >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        <DollarSign size={64} />
+                     </div>
+                     <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">
+                        Lucro Líquido do Exercício
+                     </p>
+                     <h3 className={`text-2xl lg:text-3xl font-black mb-2 ${
+                        dreData.netIncome >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                     }`}>
+                        {formatMoney(dreData.netIncome)}
+                     </h3>
+                     <div className="flex items-center gap-2">
+                        <span className={`text-xs font-black px-2 py-0.5 rounded-md ${
+                           dreData.netIncome >= 0
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                        }`}>
+                           {dreData.netMarginPct.toFixed(1)}% Líquida
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                           Res. Fin: {dreData.netFinancialResult >= 0 ? '+' : ''}{formatMoney(dreData.netFinancialResult)}
+                        </span>
+                     </div>
+                  </div>
+               </div>
+
+               {/* TAB CONTENT 1: DEMONSTRAÇÃO ESTRUTURADA COM DRILL-DOWN */}
+               {dreViewMode === 'statement' && (
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 overflow-hidden">
+                     <div className="p-6 border-b border-slate-100 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                           <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                              <List className="text-indigo-600" /> Estrutura Contábil do DRE ({dreData.periodLabel})
+                           </h3>
+                           <p className="text-xs text-slate-500 mt-1">
+                              Clique sobre os grupos ou contas para expandir o detalhamento analítico e auditar os lançamentos que compõem cada linha.
+                           </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                           <button
+                              onClick={() => {
+                                 setExpandedDreGroups({
+                                    '1.01': true, '2.01': true, '2.02': true, '2.03': true,
+                                    '2.04': true, '2.05': true, '2.06': true, '2.07': true, '1.02': true
+                                 });
+                              }}
+                              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-lg transition-all"
+                           >
+                              Expandir Tudo
+                           </button>
+                           <button
+                              onClick={() => {
+                                 setExpandedDreGroups({});
+                                 setExpandedDreAccounts({});
+                              }}
+                              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-lg transition-all"
+                           >
+                              Recolher Tudo
+                           </button>
+                        </div>
+                     </div>
+
+                     <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                           <thead className="bg-slate-50 dark:bg-gray-700/50 text-[10px] uppercase font-black text-slate-400">
+                              <tr>
+                                 <th className="px-6 py-4">Estrutura da Demonstração</th>
+                                 <th className="px-4 py-4 w-28 text-center">Código</th>
+                                 <th className="px-4 py-4 w-32 text-center">Natureza</th>
+                                 <th className="px-4 py-4 w-28 text-center">Títulos</th>
+                                 <th className="px-6 py-4 w-44 text-right">Saldo Período</th>
+                                 <th className="px-6 py-4 w-28 text-right">% AV</th>
+                              </tr>
+                           </thead>
+                           <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
+                              {/* ------------------------------------------------------------- */}
+                              {/* 1. RECEITA OPERACIONAL BRUTA (1.01) */}
+                              {/* ------------------------------------------------------------- */}
+                              <tr
+                                 onClick={() => toggleDreGroup('1.01')}
+                                 className="hover:bg-slate-50 dark:hover:bg-gray-700/50 cursor-pointer font-bold transition-colors bg-slate-50/50 dark:bg-gray-800"
+                              >
+                                 <td className="px-6 py-3.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                                    {expandedDreGroups['1.01'] ? <ChevronDown size={16} className="text-indigo-600" /> : <ChevronRight size={16} className="text-slate-400" />}
+                                    <span>(+) RECEITA OPERACIONAL BRUTA</span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-mono text-xs text-slate-500">1.01</td>
+                                 <td className="px-4 py-3.5 text-center">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300">
+                                       RECEITA
+                                    </span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-bold text-xs text-slate-600 dark:text-slate-300">
+                                    {Object.values(dreData.groups['1.01'].accounts).reduce((acc, a) => acc + a.txs.length, 0)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-black text-cyan-600 dark:text-cyan-400">
+                                    {formatMoney(dreData.grossRevenue)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-mono text-xs text-slate-600 dark:text-slate-300">
+                                    {dreData.calcAV(dreData.grossRevenue).toFixed(1)}%
+                                 </td>
+                              </tr>
+                              {expandedDreGroups['1.01'] && Object.values(dreData.groups['1.01'].accounts).map(account => (
+                                 <React.Fragment key={account.code}>
+                                    <tr
+                                       onClick={() => toggleDreAccount(`1.01_${account.code}`)}
+                                       className="hover:bg-slate-100/60 dark:hover:bg-gray-700/40 cursor-pointer text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-gray-800 border-l-4 border-cyan-500"
+                                    >
+                                       <td className="px-6 py-2.5 pl-12 flex items-center gap-2">
+                                          {expandedDreAccounts[`1.01_${account.code}`] ? <ChevronDown size={14} className="text-cyan-600" /> : <ChevronRight size={14} className="text-slate-400" />}
+                                          <span>{account.name}</span>
+                                       </td>
+                                       <td className="px-4 py-2.5 text-center font-mono text-[11px] text-slate-400">{account.code}</td>
+                                       <td className="px-4 py-2.5 text-center text-[10px] text-slate-400">Analítica</td>
+                                       <td className="px-4 py-2.5 text-center text-slate-500">{account.txs.length}</td>
+                                       <td className="px-6 py-2.5 text-right font-bold text-slate-900 dark:text-white">
+                                          {formatMoney(account.total)}
+                                       </td>
+                                       <td className="px-6 py-2.5 text-right font-mono text-slate-500">
+                                          {dreData.calcAV(account.total).toFixed(1)}%
+                                       </td>
+                                    </tr>
+                                    {/* Drill-down de lançamentos */}
+                                    {expandedDreAccounts[`1.01_${account.code}`] && (
+                                       <tr>
+                                          <td colSpan={6} className="bg-slate-50 dark:bg-gray-900/40 p-4 border-l-4 border-cyan-600">
+                                             <div className="rounded-xl border border-slate-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800">
+                                                <div className="px-4 py-2 bg-slate-100 dark:bg-gray-700 text-[11px] font-bold text-slate-700 dark:text-slate-200 flex justify-between">
+                                                   <span>Auditoria de Lançamentos: {account.name}</span>
+                                                   <span>{account.txs.length} título(s) no período</span>
+                                                </div>
+                                                <table className="w-full text-xs text-left">
+                                                   <thead className="bg-slate-50 dark:bg-gray-800/80 text-[10px] text-slate-400 uppercase">
+                                                      <tr>
+                                                         <th className="px-3 py-2">Data / Venc.</th>
+                                                         <th className="px-3 py-2">Doc / NF</th>
+                                                         <th className="px-3 py-2">Descrição</th>
+                                                         <th className="px-3 py-2">Cliente / Pagador</th>
+                                                         <th className="px-3 py-2">Centro de Custo</th>
+                                                         <th className="px-3 py-2 text-right">Valor</th>
+                                                      </tr>
+                                                   </thead>
+                                                   <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
+                                                      {account.txs.map(t => (
+                                                         <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-gray-700/30">
+                                                            <td className="px-3 py-1.5">{t.dueDate || t.date}</td>
+                                                            <td className="px-3 py-1.5 font-mono text-[11px]">{t.documentNumber || '-'}</td>
+                                                            <td className="px-3 py-1.5 font-medium">{t.description}</td>
+                                                            <td className="px-3 py-1.5">{t.partnerName || '-'}</td>
+                                                            <td className="px-3 py-1.5 text-slate-500">{t.costCenter || 'Geral'}</td>
+                                                            <td className="px-3 py-1.5 text-right font-bold text-cyan-600">{formatMoney(t.amount)}</td>
+                                                         </tr>
+                                                      ))}
+                                                   </tbody>
+                                                </table>
+                                             </div>
+                                          </td>
+                                       </tr>
+                                    )}
+                                 </React.Fragment>
+                              ))}
+
+                              {/* ------------------------------------------------------------- */}
+                              {/* 2. DEDUÇÕES E IMPOSTOS S/ VENDAS (2.01) */}
+                              {/* ------------------------------------------------------------- */}
+                              <tr
+                                 onClick={() => toggleDreGroup('2.01')}
+                                 className="hover:bg-slate-50 dark:hover:bg-gray-700/50 cursor-pointer font-bold transition-colors bg-slate-50/50 dark:bg-gray-800"
+                              >
+                                 <td className="px-6 py-3.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                                    {expandedDreGroups['2.01'] ? <ChevronDown size={16} className="text-indigo-600" /> : <ChevronRight size={16} className="text-slate-400" />}
+                                    <span>(-) DEDUÇÕES E TRIBUTOS S/ VENDAS</span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-mono text-xs text-slate-500">2.01</td>
+                                 <td className="px-4 py-3.5 text-center">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                                       DEDUÇÃO
+                                    </span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-bold text-xs text-slate-600 dark:text-slate-300">
+                                    {Object.values(dreData.groups['2.01'].accounts).reduce((acc, a) => acc + a.txs.length, 0)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-black text-rose-600 dark:text-rose-400">
+                                    -{formatMoney(dreData.deductions)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-mono text-xs text-rose-500">
+                                    -{dreData.calcAV(dreData.deductions).toFixed(1)}%
+                                 </td>
+                              </tr>
+                              {expandedDreGroups['2.01'] && Object.values(dreData.groups['2.01'].accounts).map(account => (
+                                 <tr key={account.code} className="text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-gray-800 border-l-4 border-rose-500">
+                                    <td className="px-6 py-2.5 pl-12">{account.name}</td>
+                                    <td className="px-4 py-2.5 text-center font-mono text-[11px] text-slate-400">{account.code}</td>
+                                    <td className="px-4 py-2.5 text-center text-[10px] text-slate-400">Analítica</td>
+                                    <td className="px-4 py-2.5 text-center text-slate-500">{account.txs.length}</td>
+                                    <td className="px-6 py-2.5 text-right font-bold text-rose-600 dark:text-rose-400">
+                                       -{formatMoney(account.total)}
+                                    </td>
+                                    <td className="px-6 py-2.5 text-right font-mono text-slate-500">
+                                       -{dreData.calcAV(account.total).toFixed(1)}%
+                                    </td>
+                                 </tr>
+                              ))}
+
+                              {/* ------------------------------------------------------------- */}
+                              {/* (=) RECEITA OPERACIONAL LÍQUIDA (SUBTOTAL 1) */}
+                              {/* ------------------------------------------------------------- */}
+                              <tr className="bg-cyan-50/70 dark:bg-cyan-950/40 font-black border-y-2 border-cyan-300 dark:border-cyan-800 text-cyan-900 dark:text-cyan-200">
+                                 <td className="px-6 py-3.5 pl-8 flex items-center gap-2">
+                                    <ArrowRight size={16} className="text-cyan-600" />
+                                    <span>(=) RECEITA OPERACIONAL LÍQUIDA</span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-mono text-xs text-cyan-700 dark:text-cyan-400">-</td>
+                                 <td className="px-4 py-3.5 text-center">
+                                    <span className="px-2.5 py-0.5 rounded text-[10px] font-black bg-cyan-200 text-cyan-900 dark:bg-cyan-900 dark:text-cyan-100">
+                                       BASE 100%
+                                    </span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center text-xs">-</td>
+                                 <td className="px-6 py-3.5 text-right text-base font-black text-cyan-700 dark:text-cyan-300">
+                                    {formatMoney(dreData.netRevenue)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-mono text-xs font-black text-cyan-700 dark:text-cyan-300">
+                                    100.0%
+                                 </td>
+                              </tr>
+
+                              {/* ------------------------------------------------------------- */}
+                              {/* 3. CUSTOS DIRETOS DE PRODUÇÃO / OBRAS (2.02) */}
+                              {/* ------------------------------------------------------------- */}
+                              <tr
+                                 onClick={() => toggleDreGroup('2.02')}
+                                 className="hover:bg-slate-50 dark:hover:bg-gray-700/50 cursor-pointer font-bold transition-colors bg-slate-50/50 dark:bg-gray-800"
+                              >
+                                 <td className="px-6 py-3.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                                    {expandedDreGroups['2.02'] ? <ChevronDown size={16} className="text-indigo-600" /> : <ChevronRight size={16} className="text-slate-400" />}
+                                    <span>(-) CUSTOS DIRETOS DE PRODUÇÃO & OBRAS (CPV/CSP)</span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-mono text-xs text-slate-500">2.02</td>
+                                 <td className="px-4 py-3.5 text-center">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300">
+                                       CUSTO DIRETO
+                                    </span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-bold text-xs text-slate-600 dark:text-slate-300">
+                                    {Object.values(dreData.groups['2.02'].accounts).reduce((acc, a) => acc + a.txs.length, 0)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-black text-orange-600 dark:text-orange-400">
+                                    -{formatMoney(dreData.groups['2.02'].total)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-mono text-xs text-orange-500">
+                                    -{dreData.calcAV(dreData.groups['2.02'].total).toFixed(1)}%
+                                 </td>
+                              </tr>
+                              {expandedDreGroups['2.02'] && Object.values(dreData.groups['2.02'].accounts).map(account => (
+                                 <tr key={account.code} className="text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-gray-800 border-l-4 border-orange-500">
+                                    <td className="px-6 py-2.5 pl-12">{account.name}</td>
+                                    <td className="px-4 py-2.5 text-center font-mono text-[11px] text-slate-400">{account.code}</td>
+                                    <td className="px-4 py-2.5 text-center text-[10px] text-slate-400">Analítica</td>
+                                    <td className="px-4 py-2.5 text-center text-slate-500">{account.txs.length}</td>
+                                    <td className="px-6 py-2.5 text-right font-bold text-orange-600 dark:text-orange-400">
+                                       -{formatMoney(account.total)}
+                                    </td>
+                                    <td className="px-6 py-2.5 text-right font-mono text-slate-500">
+                                       -{dreData.calcAV(account.total).toFixed(1)}%
+                                    </td>
+                                 </tr>
+                              ))}
+
+                              {/* ------------------------------------------------------------- */}
+                              {/* 4. CUSTOS OPERACIONAIS DE FROTA & EQUIPAMENTOS (2.03) */}
+                              {/* ------------------------------------------------------------- */}
+                              <tr
+                                 onClick={() => toggleDreGroup('2.03')}
+                                 className="hover:bg-slate-50 dark:hover:bg-gray-700/50 cursor-pointer font-bold transition-colors bg-slate-50/50 dark:bg-gray-800"
+                              >
+                                 <td className="px-6 py-3.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                                    {expandedDreGroups['2.03'] ? <ChevronDown size={16} className="text-indigo-600" /> : <ChevronRight size={16} className="text-slate-400" />}
+                                    <span>(-) CUSTOS OPERACIONAIS DE FROTA & EQUIPAMENTOS</span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-mono text-xs text-slate-500">2.03</td>
+                                 <td className="px-4 py-3.5 text-center">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                                       FROTA/DIESEL
+                                    </span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-bold text-xs text-slate-600 dark:text-slate-300">
+                                    {Object.values(dreData.groups['2.03'].accounts).reduce((acc, a) => acc + a.txs.length, 0)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-black text-amber-600 dark:text-amber-400">
+                                    -{formatMoney(dreData.groups['2.03'].total)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-mono text-xs text-amber-500">
+                                    -{dreData.calcAV(dreData.groups['2.03'].total).toFixed(1)}%
+                                 </td>
+                              </tr>
+                              {expandedDreGroups['2.03'] && Object.values(dreData.groups['2.03'].accounts).map(account => (
+                                 <tr key={account.code} className="text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-gray-800 border-l-4 border-amber-500">
+                                    <td className="px-6 py-2.5 pl-12">{account.name}</td>
+                                    <td className="px-4 py-2.5 text-center font-mono text-[11px] text-slate-400">{account.code}</td>
+                                    <td className="px-4 py-2.5 text-center text-[10px] text-slate-400">Analítica</td>
+                                    <td className="px-4 py-2.5 text-center text-slate-500">{account.txs.length}</td>
+                                    <td className="px-6 py-2.5 text-right font-bold text-amber-600 dark:text-amber-400">
+                                       -{formatMoney(account.total)}
+                                    </td>
+                                    <td className="px-6 py-2.5 text-right font-mono text-slate-500">
+                                       -{dreData.calcAV(account.total).toFixed(1)}%
+                                    </td>
+                                 </tr>
+                              ))}
+
+                              {/* ------------------------------------------------------------- */}
+                              {/* (=) LUCRO BRUTO (MARGEM BRUTA) (SUBTOTAL 2) */}
+                              {/* ------------------------------------------------------------- */}
+                              <tr className="bg-slate-100 dark:bg-gray-700/70 font-black border-y-2 border-slate-300 dark:border-gray-600 text-slate-900 dark:text-white">
+                                 <td className="px-6 py-3.5 pl-8 flex items-center gap-2">
+                                    <ArrowRight size={16} className="text-slate-600 dark:text-slate-300" />
+                                    <span>(=) LUCRO BRUTO (MARGEM BRUTA)</span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-mono text-xs text-slate-500">-</td>
+                                 <td className="px-4 py-3.5 text-center">
+                                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-black ${
+                                       dreData.grossMarginPct >= 30 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                    }`}>
+                                       {dreData.grossMarginPct.toFixed(1)}% MARGEM
+                                    </span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center text-xs">-</td>
+                                 <td className="px-6 py-3.5 text-right text-base font-black text-slate-900 dark:text-white">
+                                    {formatMoney(dreData.grossProfit)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-mono text-xs font-black text-slate-700 dark:text-slate-200">
+                                    {dreData.grossMarginPct.toFixed(1)}%
+                                 </td>
+                              </tr>
+
+                              {/* ------------------------------------------------------------- */}
+                              {/* 5. DESPESAS OPERACIONAIS (SG&A: 2.04 + 2.05 + 2.06) */}
+                              {/* ------------------------------------------------------------- */}
+                              <tr
+                                 onClick={() => toggleDreGroup('2.04')}
+                                 className="hover:bg-slate-50 dark:hover:bg-gray-700/50 cursor-pointer font-bold transition-colors bg-slate-50/50 dark:bg-gray-800"
+                              >
+                                 <td className="px-6 py-3.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                                    {expandedDreGroups['2.04'] ? <ChevronDown size={16} className="text-indigo-600" /> : <ChevronRight size={16} className="text-slate-400" />}
+                                    <span>(-) DESPESAS COM PESSOAL ADMINISTRATIVO</span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-mono text-xs text-slate-500">2.04</td>
+                                 <td className="px-4 py-3.5 text-center">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
+                                       PESSOAL ADM
+                                    </span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-bold text-xs text-slate-600 dark:text-slate-300">
+                                    {Object.values(dreData.groups['2.04'].accounts).reduce((acc, a) => acc + a.txs.length, 0)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-black text-purple-600 dark:text-purple-400">
+                                    -{formatMoney(dreData.groups['2.04'].total)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-mono text-xs text-purple-500">
+                                    -{dreData.calcAV(dreData.groups['2.04'].total).toFixed(1)}%
+                                 </td>
+                              </tr>
+                              {expandedDreGroups['2.04'] && Object.values(dreData.groups['2.04'].accounts).map(account => (
+                                 <tr key={account.code} className="text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-gray-800 border-l-4 border-purple-500">
+                                    <td className="px-6 py-2.5 pl-12">{account.name}</td>
+                                    <td className="px-4 py-2.5 text-center font-mono text-[11px] text-slate-400">{account.code}</td>
+                                    <td className="px-4 py-2.5 text-center text-[10px] text-slate-400">Analítica</td>
+                                    <td className="px-4 py-2.5 text-center text-slate-500">{account.txs.length}</td>
+                                    <td className="px-6 py-2.5 text-right font-bold text-purple-600 dark:text-purple-400">
+                                       -{formatMoney(account.total)}
+                                    </td>
+                                    <td className="px-6 py-2.5 text-right font-mono text-slate-500">
+                                       -{dreData.calcAV(account.total).toFixed(1)}%
+                                    </td>
+                                 </tr>
+                              ))}
+
+                              {/* 2.05 DESPESAS ADMINISTRATIVAS GERAIS */}
+                              <tr
+                                 onClick={() => toggleDreGroup('2.05')}
+                                 className="hover:bg-slate-50 dark:hover:bg-gray-700/50 cursor-pointer font-bold transition-colors bg-slate-50/50 dark:bg-gray-800"
+                              >
+                                 <td className="px-6 py-3.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                                    {expandedDreGroups['2.05'] ? <ChevronDown size={16} className="text-indigo-600" /> : <ChevronRight size={16} className="text-slate-400" />}
+                                    <span>(-) DESPESAS ADMINISTRATIVAS E GERAIS</span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-mono text-xs text-slate-500">2.05</td>
+                                 <td className="px-4 py-3.5 text-center">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                                       GERAIS / ADM
+                                    </span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-bold text-xs text-slate-600 dark:text-slate-300">
+                                    {Object.values(dreData.groups['2.05'].accounts).reduce((acc, a) => acc + a.txs.length, 0)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-black text-blue-600 dark:text-blue-400">
+                                    -{formatMoney(dreData.groups['2.05'].total)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-mono text-xs text-blue-500">
+                                    -{dreData.calcAV(dreData.groups['2.05'].total).toFixed(1)}%
+                                 </td>
+                              </tr>
+                              {expandedDreGroups['2.05'] && Object.values(dreData.groups['2.05'].accounts).map(account => (
+                                 <tr key={account.code} className="text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-gray-800 border-l-4 border-blue-500">
+                                    <td className="px-6 py-2.5 pl-12">{account.name}</td>
+                                    <td className="px-4 py-2.5 text-center font-mono text-[11px] text-slate-400">{account.code}</td>
+                                    <td className="px-4 py-2.5 text-center text-[10px] text-slate-400">Analítica</td>
+                                    <td className="px-4 py-2.5 text-center text-slate-500">{account.txs.length}</td>
+                                    <td className="px-6 py-2.5 text-right font-bold text-blue-600 dark:text-blue-400">
+                                       -{formatMoney(account.total)}
+                                    </td>
+                                    <td className="px-6 py-2.5 text-right font-mono text-slate-500">
+                                       -{dreData.calcAV(account.total).toFixed(1)}%
+                                    </td>
+                                 </tr>
+                              ))}
+
+                              {/* 2.06 DESPESAS COMERCIAIS */}
+                              <tr
+                                 onClick={() => toggleDreGroup('2.06')}
+                                 className="hover:bg-slate-50 dark:hover:bg-gray-700/50 cursor-pointer font-bold transition-colors bg-slate-50/50 dark:bg-gray-800"
+                              >
+                                 <td className="px-6 py-3.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                                    {expandedDreGroups['2.06'] ? <ChevronDown size={16} className="text-indigo-600" /> : <ChevronRight size={16} className="text-slate-400" />}
+                                    <span>(-) DESPESAS COMERCIAIS E VENDAS</span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-mono text-xs text-slate-500">2.06</td>
+                                 <td className="px-4 py-3.5 text-center">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-pink-100 text-pink-800 dark:bg-pink-950/60 dark:text-pink-300">
+                                       COMERCIAL
+                                    </span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-bold text-xs text-slate-600 dark:text-slate-300">
+                                    {Object.values(dreData.groups['2.06'].accounts).reduce((acc, a) => acc + a.txs.length, 0)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-black text-pink-600 dark:text-pink-400">
+                                    -{formatMoney(dreData.groups['2.06'].total)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-mono text-xs text-pink-500">
+                                    -{dreData.calcAV(dreData.groups['2.06'].total).toFixed(1)}%
+                                 </td>
+                              </tr>
+                              {expandedDreGroups['2.06'] && Object.values(dreData.groups['2.06'].accounts).map(account => (
+                                 <tr key={account.code} className="text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-gray-800 border-l-4 border-pink-500">
+                                    <td className="px-6 py-2.5 pl-12">{account.name}</td>
+                                    <td className="px-4 py-2.5 text-center font-mono text-[11px] text-slate-400">{account.code}</td>
+                                    <td className="px-4 py-2.5 text-center text-[10px] text-slate-400">Analítica</td>
+                                    <td className="px-4 py-2.5 text-center text-slate-500">{account.txs.length}</td>
+                                    <td className="px-6 py-2.5 text-right font-bold text-pink-600 dark:text-pink-400">
+                                       -{formatMoney(account.total)}
+                                    </td>
+                                    <td className="px-6 py-2.5 text-right font-mono text-slate-500">
+                                       -{dreData.calcAV(account.total).toFixed(1)}%
+                                    </td>
+                                 </tr>
+                              ))}
+
+                              {/* ------------------------------------------------------------- */}
+                              {/* (=) EBITDA / LAJIDA (SUBTOTAL 3) */}
+                              {/* ------------------------------------------------------------- */}
+                              <tr className="bg-indigo-50/70 dark:bg-indigo-950/40 font-black border-y-2 border-indigo-300 dark:border-indigo-800 text-indigo-900 dark:text-indigo-200">
+                                 <td className="px-6 py-3.5 pl-8 flex items-center gap-2">
+                                    <ArrowRight size={16} className="text-indigo-600" />
+                                    <span>(=) EBITDA / LAJIDA (RESULTADO OPERACIONAL)</span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-mono text-xs text-indigo-700 dark:text-indigo-400">-</td>
+                                 <td className="px-4 py-3.5 text-center">
+                                    <span className="px-2.5 py-0.5 rounded text-[10px] font-black bg-indigo-200 text-indigo-900 dark:bg-indigo-900 dark:text-indigo-100">
+                                       {dreData.ebitdaMarginPct.toFixed(1)}% EBITDA
+                                    </span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center text-xs">-</td>
+                                 <td className="px-6 py-3.5 text-right text-base font-black text-indigo-700 dark:text-indigo-300">
+                                    {formatMoney(dreData.ebitda)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-mono text-xs font-black text-indigo-700 dark:text-indigo-300">
+                                    {dreData.ebitdaMarginPct.toFixed(1)}%
+                                 </td>
+                              </tr>
+
+                              {/* ------------------------------------------------------------- */}
+                              {/* 6. RESULTADO FINANCEIRO (1.02 e 2.07) */}
+                              {/* ------------------------------------------------------------- */}
+                              <tr
+                                 onClick={() => toggleDreGroup('1.02')}
+                                 className="hover:bg-slate-50 dark:hover:bg-gray-700/50 cursor-pointer font-bold transition-colors bg-slate-50/50 dark:bg-gray-800"
+                              >
+                                 <td className="px-6 py-3.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                                    {expandedDreGroups['1.02'] ? <ChevronDown size={16} className="text-indigo-600" /> : <ChevronRight size={16} className="text-slate-400" />}
+                                    <span>(+) RECEITAS FINANCEIRAS (RENDIMENTOS / JUROS)</span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-mono text-xs text-slate-500">1.02</td>
+                                 <td className="px-4 py-3.5 text-center">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300">
+                                       REC. FIN.
+                                    </span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-bold text-xs text-slate-600 dark:text-slate-300">
+                                    {Object.values(dreData.groups['1.02'].accounts).reduce((acc, a) => acc + a.txs.length, 0)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-black text-teal-600 dark:text-teal-400">
+                                    +{formatMoney(dreData.financialRevenues)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-mono text-xs text-teal-500">
+                                    +{dreData.calcAV(dreData.financialRevenues).toFixed(1)}%
+                                 </td>
+                              </tr>
+
+                              <tr
+                                 onClick={() => toggleDreGroup('2.07')}
+                                 className="hover:bg-slate-50 dark:hover:bg-gray-700/50 cursor-pointer font-bold transition-colors bg-slate-50/50 dark:bg-gray-800"
+                              >
+                                 <td className="px-6 py-3.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                                    {expandedDreGroups['2.07'] ? <ChevronDown size={16} className="text-indigo-600" /> : <ChevronRight size={16} className="text-slate-400" />}
+                                    <span>(-) DESPESAS FINANCEIRAS E JUROS BANCÁRIOS</span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-mono text-xs text-slate-500">2.07</td>
+                                 <td className="px-4 py-3.5 text-center">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300">
+                                       DESP. FIN.
+                                    </span>
+                                 </td>
+                                 <td className="px-4 py-3.5 text-center font-bold text-xs text-slate-600 dark:text-slate-300">
+                                    {Object.values(dreData.groups['2.07'].accounts).reduce((acc, a) => acc + a.txs.length, 0)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-black text-red-600 dark:text-red-400">
+                                    -{formatMoney(dreData.financialExpenses)}
+                                 </td>
+                                 <td className="px-6 py-3.5 text-right font-mono text-xs text-red-500">
+                                    -{dreData.calcAV(dreData.financialExpenses).toFixed(1)}%
+                                 </td>
+                              </tr>
+
+                              {/* ------------------------------------------------------------- */}
+                              {/* (=) LUCRO LÍQUIDO DO EXERCÍCIO (RESULTADO FINAL) */}
+                              {/* ------------------------------------------------------------- */}
+                              <tr className={`font-black border-y-4 ${
+                                 dreData.netIncome >= 0
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700 text-emerald-950 dark:text-emerald-100'
+                                    : 'bg-rose-50 dark:bg-rose-950/40 border-rose-400 dark:border-rose-700 text-rose-950 dark:text-rose-100'
+                              }`}>
+                                 <td className="px-6 py-4 pl-8 flex items-center gap-2">
+                                    <CheckCircle size={18} className={dreData.netIncome >= 0 ? 'text-emerald-600' : 'text-rose-600'} />
+                                    <span className="text-base tracking-wide">(=) LUCRO LÍQUIDO DO EXERCÍCIO</span>
+                                 </td>
+                                 <td className="px-4 py-4 text-center font-mono text-xs">-</td>
+                                 <td className="px-4 py-4 text-center">
+                                    <span className={`px-3 py-1 rounded-md text-[10px] font-black ${
+                                       dreData.netIncome >= 0
+                                          ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100'
+                                          : 'bg-rose-200 text-rose-900 dark:bg-rose-900 dark:text-rose-100'
+                                    }`}>
+                                       {dreData.netMarginPct.toFixed(1)}% MARGEM LÍQUIDA
+                                    </span>
+                                 </td>
+                                 <td className="px-4 py-4 text-center font-bold text-xs">
+                                    {dreData.periodTxs.length} totais
+                                 </td>
+                                 <td className={`px-6 py-4 text-right text-lg font-black ${
+                                    dreData.netIncome >= 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'
+                                 }`}>
+                                    {formatMoney(dreData.netIncome)}
+                                 </td>
+                                 <td className={`px-6 py-4 text-right font-mono text-sm font-black ${
+                                    dreData.netIncome >= 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'
+                                 }`}>
+                                    {dreData.netMarginPct.toFixed(1)}%
+                                 </td>
+                              </tr>
+                           </tbody>
+                        </table>
+                     </div>
+                  </div>
+               )}
+
+               {/* TAB CONTENT 2: MATRIZ COMPARATIVA POR CENTRO DE CUSTO / OBRAS */}
+               {dreViewMode === 'matrix' && (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                     <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                           <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                              <Building2 className="text-indigo-600" /> Rentabilidade Segregada por Centro de Custo / Obras
+                           </h3>
+                           <p className="text-xs text-slate-500 mt-1">
+                              Comparativo analítico de margem EBITDA e faturamento alocado por projeto de pavimentação, terraplenagem e unidades industriais.
+                           </p>
+                        </div>
+                        <div className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-gray-700 px-3.5 py-2 rounded-xl">
+                           Período: {dreData.periodLabel} ({dreRegime === 'competencia' ? 'Competência' : 'Caixa'})
+                        </div>
+                     </div>
+
+                     {/* Cards Grid de Obras */}
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {Object.keys(costCenterBreakdown).map(cc => {
+                           const data = costCenterBreakdown[cc];
+                           const isProfitable = data.ebitda >= 0;
+                           return (
+                              <div
+                                 key={cc}
+                                 className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-100 dark:border-gray-700 shadow-sm p-6 space-y-4 hover:shadow-md transition-shadow relative overflow-hidden"
+                              >
+                                 <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                       <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-0.5 rounded-full">
+                                          Centro de Custo
+                                       </span>
+                                       <h4 className="text-base font-bold text-slate-900 dark:text-white mt-1">
+                                          {cc}
+                                       </h4>
+                                    </div>
+                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                                       data.margin >= 25
+                                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                          : data.margin >= 10
+                                          ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300'
+                                          : data.margin >= 0
+                                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                          : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                                    }`}>
+                                       {data.margin.toFixed(1)}% Margem
+                                    </span>
+                                 </div>
+
+                                 <div className="space-y-2 text-xs pt-2 border-t border-slate-100 dark:border-gray-700">
+                                    <div className="flex justify-between">
+                                       <span className="text-slate-500">Receita Alocada:</span>
+                                       <span className="font-bold text-cyan-600">{formatMoney(data.revenue)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                       <span className="text-slate-500">Custos Diretos:</span>
+                                       <span className="font-bold text-orange-600">-{formatMoney(data.costs)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                       <span className="text-slate-500">Despesas SG&A:</span>
+                                       <span className="font-bold text-purple-600">-{formatMoney(data.expenses)}</span>
+                                    </div>
+                                    <div className="flex justify-between pt-2 border-t border-slate-100 dark:border-gray-700 font-bold">
+                                       <span className="text-slate-900 dark:text-white">EBITDA Gerado:</span>
+                                       <span className={isProfitable ? 'text-emerald-600 dark:text-emerald-400 font-black' : 'text-rose-600 dark:text-rose-400 font-black'}>
+                                          {formatMoney(data.ebitda)}
+                                       </span>
+                                    </div>
+                                 </div>
+
+                                 <button
+                                    onClick={() => {
+                                       setDreCostCenter(cc);
+                                       setDreViewMode('statement');
+                                       addToast(`DRE filtrado para ${cc}`, 'info');
+                                    }}
+                                    className="w-full mt-2 py-2 bg-slate-50 hover:bg-indigo-50 dark:bg-gray-700 dark:hover:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 font-bold text-xs rounded-xl transition-all border border-slate-200 dark:border-gray-600 flex items-center justify-center gap-1.5 cursor-pointer"
+                                 >
+                                    <Eye size={14} /> Auditar DRE Desta Obra
+                                 </button>
+                              </div>
+                           );
+                        })}
+                     </div>
+                  </div>
+               )}
             </div>
          )}
 

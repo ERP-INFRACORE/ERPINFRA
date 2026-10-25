@@ -84,81 +84,150 @@ const Fleet = () => {
         notes: ''
     });
 
-    // Helper para cálculo preciso de consumo de combustível e custos por veículo
+    // Helper para cálculo preciso de consumo de combustível e custos por veículo (dualidade KM/L e L/h)
     const getVehicleFuelMetrics = (vehicle: FleetVehicle) => {
         const logs = vehicle.fuelLogs || [];
+        const isMachine = vehicle.type === 'Máquina';
         const totalLiters = logs.reduce((acc, l) => acc + (l.liters || 0), 0);
         const totalFuelCost = logs.reduce((acc, l) => acc + (l.cost || 0), 0);
         const maintTotal = (vehicle.maintenanceHistory || []).reduce((acc, m) => acc + (m.cost || 0), 0);
 
-        // Ordenar abastecimentos cronologicamente por data e depois por hodômetro
-        const sorted = [...logs].sort((a, b) => {
+        // Segregar Diesel vs Arla 32 para balanço de emissões Euro 5/6
+        const dieselLogs = logs.filter(l => l.fuelType !== 'Arla 32');
+        const arlaLogs = logs.filter(l => l.fuelType === 'Arla 32');
+        const totalDieselLiters = dieselLogs.reduce((acc, l) => acc + (l.liters || 0), 0);
+        const totalArlaLiters = arlaLogs.reduce((acc, l) => acc + (l.liters || 0), 0);
+        const arlaRatioPercent = totalDieselLiters > 0 ? Number(((totalArlaLiters / totalDieselLiters) * 100).toFixed(1)) : 0;
+
+        // Ordenar abastecimentos cronologicamente por data e hodômetro/horímetro
+        const sortedDiesel = [...dieselLogs].sort((a, b) => {
             const dateA = new Date(a.date).getTime() || 0;
             const dateB = new Date(b.date).getTime() || 0;
             if (dateA !== dateB) return dateA - dateB;
             return (a.km || 0) - (b.km || 0);
         });
 
-        // Cálculo de consumo por trecho (entre abastecimentos consecutivos)
-        let validDeltaKm = 0;
-        let validLiters = 0;
-        const logMetrics = new Map<string, { deltaKm: number; kmPerLiter: number; pricePerLiter: number }>();
+        // Cálculo de consumo por trecho (entre abastecimentos consecutivos de combustível)
+        let validDeltaDistance = 0;
+        let validDieselLiters = 0;
+        const logMetrics = new Map<string, {
+            deltaKm: number;
+            deltaDistance: number;
+            efficiency: number;
+            kmPerLiter: number;
+            pricePerLiter: number;
+            unit: string;
+            isArla: boolean;
+            isMachine: boolean;
+        }>();
 
-        for (let i = 0; i < sorted.length; i++) {
-            const current = sorted[i];
+        for (let i = 0; i < sortedDiesel.length; i++) {
+            const current = sortedDiesel[i];
             const pricePerLiter = current.liters > 0 ? current.cost / current.liters : 0;
 
             if (i === 0) {
                 logMetrics.set(current.id, {
                     deltaKm: 0,
+                    deltaDistance: 0,
+                    efficiency: 0,
                     kmPerLiter: 0,
-                    pricePerLiter
+                    pricePerLiter,
+                    unit: isMachine ? 'L/h' : 'KM/L',
+                    isArla: false,
+                    isMachine
                 });
             } else {
-                const prev = sorted[i - 1];
-                const dKm = (current.km || 0) - (prev.km || 0);
+                const prev = sortedDiesel[i - 1];
+                const dDist = (current.km || 0) - (prev.km || 0);
                 const cLiters = current.liters || 0;
-                const kml = (dKm > 0 && cLiters > 0) ? Number((dKm / cLiters).toFixed(2)) : 0;
 
-                if (dKm > 0 && cLiters > 0) {
-                    validDeltaKm += dKm;
-                    validLiters += cLiters;
+                let efficiency = 0;
+                let kml = 0;
+                if (dDist > 0 && cLiters > 0) {
+                    if (isMachine) {
+                        efficiency = Number((cLiters / dDist).toFixed(2)); // L/h
+                        kml = Number((dDist / cLiters).toFixed(2));
+                    } else {
+                        efficiency = Number((dDist / cLiters).toFixed(2)); // KM/L
+                        kml = efficiency;
+                    }
+                    validDeltaDistance += dDist;
+                    validDieselLiters += cLiters;
                 }
 
                 logMetrics.set(current.id, {
-                    deltaKm: Math.max(0, dKm),
+                    deltaKm: Math.max(0, dDist),
+                    deltaDistance: Math.max(0, dDist),
+                    efficiency,
                     kmPerLiter: kml,
-                    pricePerLiter
+                    pricePerLiter,
+                    unit: isMachine ? 'L/h' : 'KM/L',
+                    isArla: false,
+                    isMachine
                 });
             }
         }
 
-        // Consumo médio ponderado (km/L)
-        let avgKmPerLiter = 0;
-        if (validDeltaKm > 0 && validLiters > 0) {
-            avgKmPerLiter = Number((validDeltaKm / validLiters).toFixed(2));
-        } else if (sorted.length === 1 && vehicle.km > sorted[0].km && sorted[0].liters > 0) {
-            const dKm = vehicle.km - sorted[0].km;
-            avgKmPerLiter = Number((dKm / sorted[0].liters).toFixed(2));
-            validDeltaKm = dKm;
+        // Mapear logs de Arla 32
+        for (const arla of arlaLogs) {
+            const pricePerLiter = arla.liters > 0 ? arla.cost / arla.liters : 0;
+            logMetrics.set(arla.id, {
+                deltaKm: 0,
+                deltaDistance: 0,
+                efficiency: 0,
+                kmPerLiter: 0,
+                pricePerLiter,
+                unit: 'Arla 32',
+                isArla: true,
+                isMachine
+            });
         }
 
-        // Custo por km (R$/KM)
+        // Consumo médio ponderado (km/L ou L/h)
+        let avgKmPerLiter = 0;
+        let avgLitersPerHour = 0;
+        if (validDeltaDistance > 0 && validDieselLiters > 0) {
+            if (isMachine) {
+                avgLitersPerHour = Number((validDieselLiters / validDeltaDistance).toFixed(2));
+                avgKmPerLiter = Number((validDeltaDistance / validDieselLiters).toFixed(2));
+            } else {
+                avgKmPerLiter = Number((validDeltaDistance / validDieselLiters).toFixed(2));
+            }
+        } else if (sortedDiesel.length === 1 && vehicle.km > sortedDiesel[0].km && sortedDiesel[0].liters > 0) {
+            const dDist = vehicle.km - sortedDiesel[0].km;
+            if (isMachine) {
+                avgLitersPerHour = Number((sortedDiesel[0].liters / dDist).toFixed(2));
+                avgKmPerLiter = Number((dDist / sortedDiesel[0].liters).toFixed(2));
+            } else {
+                avgKmPerLiter = Number((dDist / sortedDiesel[0].liters).toFixed(2));
+            }
+            validDeltaDistance = dDist;
+        }
+
+        // Custo operacional por km / hora
         const avgPricePerLiter = totalLiters > 0 ? totalFuelCost / totalLiters : 0;
-        const fuelCostPerKm = avgKmPerLiter > 0 ? (avgPricePerLiter / avgKmPerLiter) : (validDeltaKm > 0 ? totalFuelCost / validDeltaKm : 0);
+        const fuelCostPerKm = avgKmPerLiter > 0 ? (avgPricePerLiter / avgKmPerLiter) : (validDeltaDistance > 0 ? totalFuelCost / validDeltaDistance : 0);
+        const fuelCostPerHour = avgLitersPerHour > 0 ? (avgLitersPerHour * avgPricePerLiter) : 0;
         const maintCostPerKm = vehicle.km > 0 ? (maintTotal / vehicle.km) : 0;
         const totalCostPerKm = fuelCostPerKm + maintCostPerKm;
 
         return {
             totalLiters,
+            totalDieselLiters,
+            totalArlaLiters,
+            arlaRatioPercent,
             totalFuelCost,
             maintTotal,
             totalCost: totalFuelCost + maintTotal,
-            validDeltaKm,
+            validDeltaKm: validDeltaDistance,
+            validDeltaDistance,
             avgKmPerLiter,
+            avgLitersPerHour,
             avgPricePerLiter,
             fuelCostPerKm: Number(fuelCostPerKm.toFixed(2)),
+            fuelCostPerHour: Number(fuelCostPerHour.toFixed(2)),
             totalCostPerKm: Number(totalCostPerKm.toFixed(2)),
+            isMachine,
             logMetrics
         };
     };
@@ -357,6 +426,7 @@ const Fleet = () => {
     const vehicleCosts = useMemo(() => {
         return fleet.map(v => {
             const metrics = getVehicleFuelMetrics(v);
+            const isMachine = v.type === 'Máquina';
             return {
                 id: v.id,
                 modelo: v.name,
@@ -366,7 +436,9 @@ const Fleet = () => {
                 totalAbastecimento: metrics.totalFuelCost,
                 totalManutencao: metrics.maintTotal,
                 custoTotal: metrics.totalCost,
-                kmPorLitro: metrics.avgKmPerLiter > 0 ? metrics.avgKmPerLiter.toFixed(2) : 'N/D',
+                kmPorLitro: isMachine
+                    ? (metrics.avgLitersPerHour > 0 ? `${metrics.avgLitersPerHour.toFixed(2)} L/h` : 'N/D')
+                    : (metrics.avgKmPerLiter > 0 ? `${metrics.avgKmPerLiter.toFixed(2)} km/l` : 'N/D'),
                 custoPorKm: metrics.totalCostPerKm > 0 ? metrics.totalCostPerKm.toFixed(2) : (metrics.totalCost > 0 && v.km > 0 ? (metrics.totalCost / v.km).toFixed(2) : '0.00')
             };
         });
@@ -404,6 +476,55 @@ const Fleet = () => {
         });
 
         return { fuel, maint, tires, total: fuel + maint + tires };
+    }, [fleet]);
+
+    const fuelGlobalMetrics = useMemo(() => {
+        let totalDiesel = 0;
+        let totalArla = 0;
+        let totalFuelSpend = 0;
+        let machineHours = 0;
+        let machineDieselLiters = 0;
+        let roadKm = 0;
+        let roadDieselLiters = 0;
+
+        fleet.forEach(v => {
+            const m = getVehicleFuelMetrics(v);
+            totalDiesel += m.totalDieselLiters;
+            totalArla += m.totalArlaLiters;
+            totalFuelSpend += m.totalFuelCost;
+            if (v.type === 'Máquina') {
+                if (m.validDeltaDistance > 0 && m.totalDieselLiters > 0) {
+                    machineHours += m.validDeltaDistance;
+                    machineDieselLiters += m.totalDieselLiters;
+                }
+            } else {
+                if (m.validDeltaDistance > 0 && m.totalDieselLiters > 0) {
+                    roadKm += m.validDeltaDistance;
+                    roadDieselLiters += m.totalDieselLiters;
+                }
+            }
+        });
+
+        const avgMachineLitersPerHour = machineHours > 0 && machineDieselLiters > 0
+            ? Number((machineDieselLiters / machineHours).toFixed(1))
+            : 0;
+
+        const avgRoadKmPerLiter = roadDieselLiters > 0 && roadKm > 0
+            ? Number((roadKm / roadDieselLiters).toFixed(1))
+            : 0;
+
+        const globalArlaRatio = totalDiesel > 0
+            ? Number(((totalArla / totalDiesel) * 100).toFixed(1))
+            : 0;
+
+        return {
+            totalDiesel,
+            totalArla,
+            totalFuelSpend,
+            avgMachineLitersPerHour,
+            avgRoadKmPerLiter,
+            globalArlaRatio
+        };
     }, [fleet]);
 
     const formatBRL = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -501,17 +622,19 @@ const Fleet = () => {
             return;
         }
 
+        const isMachine = vehicle.type === 'Máquina';
+
         // Validação 1: Veículo em Manutenção não pode abastecer
         if (vehicle.status === 'Manutenção') {
-            addToast(`Não é possível registrar abastecimento: o veículo ${vehicle.plate} está com status 'Manutenção'!`, 'error');
+            addToast(`Não é possível registrar abastecimento: o ativo ${vehicle.plate} está com status 'Manutenção'!`, 'error');
             return;
         }
 
         const fuelKm = Number(newFuel.km);
 
-        // Validação 2: KM não pode ser menor que o KM atual do veículo
+        // Validação 2: KM ou Horímetro não pode ser menor que o atual do ativo
         if (newFuel.km !== undefined && fuelKm < vehicle.km) {
-            addToast(`O KM informado (${fuelKm.toLocaleString()} km) não pode ser menor que o KM atual do veículo (${vehicle.km.toLocaleString()} km)!`, 'error');
+            addToast(`O ${isMachine ? 'Horímetro' : 'KM'} informado (${fuelKm.toLocaleString()} ${isMachine ? 'h' : 'km'}) não pode ser menor que o atual (${vehicle.km.toLocaleString()} ${isMachine ? 'h' : 'km'})!`, 'error');
             return;
         }
 
@@ -534,9 +657,13 @@ const Fleet = () => {
             isPaid: true
         };
 
+        if (isMachine) {
+            (log as any).hourmeter = fuelKm || vehicle.km;
+        }
+
         addFuelLog(selectedVehicleId, log);
 
-        // Se o hodômetro lançado no abastecimento for maior que o atual do veículo, atualiza o veículo
+        // Se o hodômetro/horímetro lançado no abastecimento for maior que o atual do veículo, atualiza o veículo
         if (vehicle && fuelKm > vehicle.km) {
             updateVehicle({ ...vehicle, km: fuelKm });
         }
@@ -550,7 +677,7 @@ const Fleet = () => {
             fuelType: 'Diesel',
             attachments: []
         });
-        addToast("Abastecimento registrado com sucesso e odômetro atualizado!", 'success');
+        addToast(isMachine ? "Abastecimento registrado com sucesso e horímetro atualizado!" : "Abastecimento registrado com sucesso e odômetro atualizado!", 'success');
     };
 
     const handleSaveRoute = (e: React.FormEvent) => {
@@ -944,7 +1071,10 @@ const Fleet = () => {
                             const maintHistory = v.maintenanceHistory || [];
                             const fuelMetrics = getVehicleFuelMetrics(v);
                             const totalLiters = fuelMetrics.totalLiters;
-                            const avgConsumption = fuelMetrics.avgKmPerLiter > 0 ? `${fuelMetrics.avgKmPerLiter.toFixed(1)} km/l` : 'N/D';
+                            const isMachine = v.type === 'Máquina';
+                            const avgConsumption = isMachine
+                                ? (fuelMetrics.avgLitersPerHour > 0 ? `${fuelMetrics.avgLitersPerHour.toFixed(1)} L/h` : 'N/D')
+                                : (fuelMetrics.avgKmPerLiter > 0 ? `${fuelMetrics.avgKmPerLiter.toFixed(1)} km/l` : 'N/D');
                             const sortedFuelLogs = [...fuelLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                             const lastRefuel = sortedFuelLogs[0];
                             const oilChanges = maintHistory.filter(m =>
@@ -1026,21 +1156,27 @@ const Fleet = () => {
                                         {/* Chassis Line */}
                                         <div className="absolute top-2 bottom-2 left-1/2 w-10 -translate-x-1/2 border-x border-slate-300 dark:border-slate-600"></div>
 
-                                        {/* Odometer - Top Center */}
-                                        <div className="absolute top-1 left-1/2 -translate-x-1/2 bg-teal-600 text-white px-2 py-0.5 rounded z-20 shadow-lg">
-                                            <span className="text-[8px] font-black">{v.km.toLocaleString()} KM</span>
+                                        {/* Odometer / Horímetro - Top Center */}
+                                        <div className={`absolute top-1 left-1/2 -translate-x-1/2 text-white px-2 py-0.5 rounded z-20 shadow-lg ${isMachine ? 'bg-amber-600' : 'bg-teal-600'}`}>
+                                            <span className="text-[8px] font-black">{v.km.toLocaleString()} {isMachine ? 'HORAS' : 'KM'}</span>
                                         </div>
 
                                         {/* Left Side Metrics */}
                                         <div className="absolute left-1 top-6 w-[45px] flex flex-col gap-1 z-10">
-                                            <div className="bg-emerald-500 text-white p-1 rounded-lg text-center shadow-md mb-1">
-                                                <p className="text-[5px] font-bold uppercase leading-none opacity-90">Consumo</p>
+                                            <div className={`${isMachine ? 'bg-amber-500' : 'bg-emerald-500'} text-white p-1 rounded-lg text-center shadow-md mb-1`}>
+                                                <p className="text-[5px] font-bold uppercase leading-none opacity-90">{isMachine ? 'L/Hora' : 'Consumo'}</p>
                                                 <p className="text-[8px] font-black leading-tight">{avgConsumption}</p>
                                             </div>
                                             <div className="bg-cyan-500 text-white p-1 rounded-lg text-center shadow-md">
                                                 <p className="text-[5px] font-bold uppercase leading-none opacity-90">Abastec.</p>
                                                 <p className="text-[7px] font-black leading-tight truncate">{lastRefuel ? lastRefuel.date.split('/').slice(0, 2).join('/') : 'N/A'}</p>
                                             </div>
+                                            {fuelMetrics.totalArlaLiters > 0 && (
+                                                <div className="bg-sky-600 text-white p-0.5 rounded text-center shadow-sm">
+                                                    <p className="text-[5px] font-bold uppercase leading-none">Arla</p>
+                                                    <p className="text-[7px] font-black leading-tight">{fuelMetrics.arlaRatioPercent}%</p>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Right Side Metrics */}
@@ -1345,83 +1481,187 @@ const Fleet = () => {
 
             {
                 activeTab === 'fuel' && (
-                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-                        <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
-                            <div className="flex items-center gap-3">
-                                <History className="text-teal-600" />
-                                <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">Registro de Abastecimentos</h3>
+                    <div className="space-y-6">
+                        {/* KPI Cards de Telemetria de Combustível e Emissões */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-900/20 text-amber-600">
+                                        <Gauge size={20} />
+                                    </div>
+                                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 uppercase">Linha Amarela</span>
+                                </div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">CONSUMO MÉDIO MÁQUINAS</p>
+                                <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">
+                                    {fuelGlobalMetrics.avgMachineLitersPerHour > 0 ? `${fuelGlobalMetrics.avgMachineLitersPerHour} L/h` : 'N/D'}
+                                </h3>
+                                <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase">Litros por Hora Trabalhada</p>
                             </div>
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => exportToCSV(fleet.flatMap(v => v.fuelLogs || []), 'Historico_Abastecimento')}
-                                    className="p-2 bg-white dark:bg-slate-700 text-slate-400 hover:text-emerald-500 rounded-xl shadow-sm border dark:border-slate-600 transition-colors"
-                                >
-                                    <Download size={16} />
-                                </button>
-                                <button onClick={() => setIsFuelModalOpen(true)} className="px-4 py-2 bg-teal-600 text-white font-black rounded-xl text-xs uppercase shadow-lg shadow-teal-600/20">Registrar Ticket</button>
+
+                            <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600">
+                                        <Truck size={20} />
+                                    </div>
+                                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 uppercase">Rodoviário</span>
+                                </div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">CONSUMO MÉDIO FROTAS</p>
+                                <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">
+                                    {fuelGlobalMetrics.avgRoadKmPerLiter > 0 ? `${fuelGlobalMetrics.avgRoadKmPerLiter} km/l` : 'N/D'}
+                                </h3>
+                                <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase">Quilômetros por Litro</p>
+                            </div>
+
+                            <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300">
+                                        <Fuel size={20} />
+                                    </div>
+                                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300 uppercase">Volume Total</span>
+                                </div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">DIESEL ABASTECIDO</p>
+                                <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">
+                                    {fuelGlobalMetrics.totalDiesel.toLocaleString()} <span className="text-sm font-bold text-slate-400">L</span>
+                                </h3>
+                                <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase">Total: {formatBRL(fuelGlobalMetrics.totalFuelSpend)}</p>
+                            </div>
+
+                            <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="p-3 rounded-2xl bg-sky-50 dark:bg-sky-900/20 text-sky-600">
+                                        <Droplets size={20} />
+                                    </div>
+                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
+                                        fuelGlobalMetrics.globalArlaRatio >= 3 && fuelGlobalMetrics.globalArlaRatio <= 6
+                                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                            : fuelGlobalMetrics.globalArlaRatio > 0
+                                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                                                : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
+                                    }`}>
+                                        {fuelGlobalMetrics.globalArlaRatio >= 3 && fuelGlobalMetrics.globalArlaRatio <= 6 ? 'Euro 5/6 Ideal' : 'Monitorar'}
+                                    </span>
+                                </div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">PROPORÇÃO ARLA 32 / DIESEL</p>
+                                <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">
+                                    {fuelGlobalMetrics.globalArlaRatio}%
+                                </h3>
+                                <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase">
+                                    {fuelGlobalMetrics.totalArla.toLocaleString()} L Arla (Meta: 3% a 5%)
+                                </p>
                             </div>
                         </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-slate-50 dark:bg-gray-800 text-[10px] font-black text-slate-400 uppercase border-b dark:border-gray-700">
-                                    <tr>
-                                        <th className="px-6 py-4">Data</th>
-                                        <th className="px-6 py-4">Veículo / Classificação</th>
-                                        <th className="px-6 py-4 text-center">Litragem</th>
-                                        <th className="px-6 py-4 text-right">Preço Un.</th>
-                                        <th className="px-6 py-4 text-right">Total Pago</th>
-                                        <th className="px-6 py-4 text-center">Consumo Trecho</th>
-                                        <th className="px-6 py-4 text-right">KM</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y dark:divide-gray-700">
-                                    {fleet.flatMap(v => v.fuelLogs || []).sort((a, b) => b.date.localeCompare(a.date)).map(l => {
-                                        const veh = fleet.find(v => v.id === l.vehicleId);
-                                        const metrics = veh ? getVehicleFuelMetrics(veh) : null;
-                                        const logMetric = metrics?.logMetrics.get(l.id);
-                                        return (
-                                            <tr key={l.id} className="hover:bg-slate-50 dark:hover:bg-teal-900/10 transition-all group">
-                                                <td className="px-6 py-5 font-bold text-slate-500">{l.date}</td>
-                                                <td className="px-6 py-5">
-                                                    <p className="font-black text-slate-900 dark:text-white uppercase text-xs">{veh?.name}</p>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-[10px] text-teal-600 font-bold">{veh?.plate}</span>
-                                                        <span className="text-[9px] text-slate-400 font-mono">[{l.ledgerCode || '2.03.01'}]</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-5 text-center font-black text-slate-700 dark:text-slate-300">{l.liters} L</td>
-                                                <td className="px-6 py-4 text-right text-xs text-slate-400">{formatBRL(l.liters > 0 ? l.cost / l.liters : 0)}</td>
-                                                <td className="px-6 py-5 text-right font-black text-emerald-600">
-                                                    <div className="flex flex-col items-end">
-                                                        <span>{formatBRL(l.cost)}</span>
-                                                        {l.attachments && l.attachments.length > 0 && (
-                                                            <span className="flex items-center gap-1 text-[9px] text-slate-400 uppercase font-bold">
-                                                                <Paperclip size={10} /> {l.attachments.length} {l.attachments.length === 1 ? 'anexo' : 'anexos'}
+
+                        {/* Tabela de Abastecimentos */}
+                        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+                            <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+                                <div className="flex items-center gap-3">
+                                    <History className="text-teal-600" />
+                                    <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">Registro de Abastecimentos</h3>
+                                </div>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => exportToCSV(fleet.flatMap(v => v.fuelLogs || []), 'Historico_Abastecimento')}
+                                        className="p-2 bg-white dark:bg-slate-700 text-slate-400 hover:text-emerald-500 rounded-xl shadow-sm border dark:border-slate-600 transition-colors"
+                                    >
+                                        <Download size={16} />
+                                    </button>
+                                    <button onClick={() => setIsFuelModalOpen(true)} className="px-4 py-2 bg-teal-600 text-white font-black rounded-xl text-xs uppercase shadow-lg shadow-teal-600/20">Registrar Ticket</button>
+                                </div>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 dark:bg-gray-800 text-[10px] font-black text-slate-400 uppercase border-b dark:border-gray-700">
+                                        <tr>
+                                            <th className="px-6 py-4">Data</th>
+                                            <th className="px-6 py-4">Veículo / Classificação</th>
+                                            <th className="px-6 py-4 text-center">Combustível / Litragem</th>
+                                            <th className="px-6 py-4 text-right">Preço Un.</th>
+                                            <th className="px-6 py-4 text-right">Total Pago</th>
+                                            <th className="px-6 py-4 text-center">Consumo Trecho</th>
+                                            <th className="px-6 py-4 text-right">Odômetro / Horímetro</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y dark:divide-gray-700">
+                                        {fleet.flatMap(v => v.fuelLogs || []).sort((a, b) => b.date.localeCompare(a.date)).map(l => {
+                                            const veh = fleet.find(v => v.id === l.vehicleId);
+                                            const metrics = veh ? getVehicleFuelMetrics(veh) : null;
+                                            const logMetric = metrics?.logMetrics.get(l.id);
+                                            const isMachine = veh?.type === 'Máquina';
+                                            return (
+                                                <tr key={l.id} className="hover:bg-slate-50 dark:hover:bg-teal-900/10 transition-all group">
+                                                    <td className="px-6 py-5 font-bold text-slate-500">{l.date}</td>
+                                                    <td className="px-6 py-5">
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="font-black text-slate-900 dark:text-white uppercase text-xs">{veh?.name}</p>
+                                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
+                                                                isMachine
+                                                                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                                                                    : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                                                            }`}>
+                                                                {veh?.type || 'Veículo'}
                                                             </span>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-5 text-center">
-                                                    {logMetric && logMetric.kmPerLiter > 0 ? (
-                                                        <div>
-                                                            <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-mono font-black rounded-lg text-xs">
-                                                                {logMetric.kmPerLiter} KM/L
-                                                            </span>
-                                                            <p className="text-[9px] text-slate-400 font-bold mt-0.5">+{logMetric.deltaKm.toLocaleString()} km no trecho</p>
                                                         </div>
-                                                    ) : (
-                                                        <span className="text-slate-400 text-xs italic">-</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-5 text-right font-mono text-xs">
-                                                    <div className="flex items-center justify-end gap-3">
-                                                        {l.km.toLocaleString()}
-                                                        <button onClick={() => deleteFuelLog(l.vehicleId, l.id)} className="text-slate-300 hover:text-rose-500"><Trash2 size={14} /></button>
-                                                        <button
-                                                            onClick={() => {
-                                                                const printWindow = window.open('', '_blank');
-                                                                if (printWindow) {
-                                                                    printWindow.document.write(`
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            <span className="text-[10px] text-teal-600 font-bold">{veh?.plate}</span>
+                                                            <span className="text-[9px] text-slate-400 font-mono">[{l.ledgerCode || '2.03.01'}]</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-5 text-center">
+                                                        <div className="flex flex-col items-center">
+                                                            <span className="font-black text-slate-700 dark:text-slate-300">{l.liters} L</span>
+                                                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase mt-0.5 ${
+                                                                l.fuelType === 'Arla 32'
+                                                                    ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300'
+                                                                    : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
+                                                            }`}>
+                                                                {l.fuelType || 'Diesel'}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right text-xs text-slate-400">{formatBRL(l.liters > 0 ? l.cost / l.liters : 0)}</td>
+                                                    <td className="px-6 py-5 text-right font-black text-emerald-600">
+                                                        <div className="flex flex-col items-end">
+                                                            <span>{formatBRL(l.cost)}</span>
+                                                            {l.attachments && l.attachments.length > 0 && (
+                                                                <span className="flex items-center gap-1 text-[9px] text-slate-400 uppercase font-bold">
+                                                                    <Paperclip size={10} /> {l.attachments.length} {l.attachments.length === 1 ? 'anexo' : 'anexos'}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-5 text-center">
+                                                        {l.fuelType === 'Arla 32' ? (
+                                                            <span className="px-2.5 py-1 bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400 font-bold text-xs rounded-lg inline-flex items-center gap-1">
+                                                                <Droplets size={12} /> Aditivo Catalítico
+                                                            </span>
+                                                        ) : logMetric && logMetric.efficiency > 0 ? (
+                                                            <div>
+                                                                <span className={`px-2.5 py-1 font-mono font-black rounded-lg text-xs ${
+                                                                    isMachine
+                                                                        ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                                                                        : 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+                                                                }`}>
+                                                                    {logMetric.efficiency} {isMachine ? 'L/h' : 'KM/L'}
+                                                                </span>
+                                                                <p className="text-[9px] text-slate-400 font-bold mt-0.5">
+                                                                    +{logMetric.deltaDistance.toLocaleString()} {isMachine ? 'h operadas' : 'km no trecho'}
+                                                                </p>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-400 text-xs italic">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-5 text-right font-mono text-xs">
+                                                        <div className="flex items-center justify-end gap-3">
+                                                            <span className="font-bold text-slate-700 dark:text-slate-300">
+                                                                {l.km.toLocaleString()} {isMachine ? 'h' : 'km'}
+                                                            </span>
+                                                            <button onClick={() => deleteFuelLog(l.vehicleId, l.id)} className="text-slate-300 hover:text-rose-500"><Trash2 size={14} /></button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const printWindow = window.open('', '_blank');
+                                                                    if (printWindow) {
+                                                                        printWindow.document.write(`
                                                                      <html>
                                                                         <head>
                                                                            <title>Registro de Abastecimento</title>
@@ -1477,7 +1717,8 @@ const Fleet = () => {
                             </table>
                         </div>
                     </div>
-                )
+                </div>
+            )
             }
 
             {
@@ -2017,7 +2258,11 @@ const Fleet = () => {
                                         required
                                     >
                                         <option value="">Selecione o veículo...</option>
-                                        {fleet.map(v => <option key={v.id} value={v.id}>{v.plate} - {v.name} (Atual: {v.km.toLocaleString()} KM) [{v.status}]</option>)}
+                                        {fleet.map(v => (
+                                            <option key={v.id} value={v.id}>
+                                                {v.plate} - {v.name} ({v.type === 'Máquina' ? `${v.km.toLocaleString()} Horas` : `${v.km.toLocaleString()} KM`}) [{v.status}]
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
 
@@ -2029,16 +2274,34 @@ const Fleet = () => {
                                             {fuelSelectedVeh.status === 'Manutenção' && (
                                                 <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200 font-bold">
                                                     <AlertTriangle size={16} className="text-amber-600 flex-shrink-0" />
-                                                    <span>Atenção: O veículo <strong>{fuelSelectedVeh.plate}</strong> está em <strong>Manutenção</strong>. O registro de abastecimento está bloqueado.</span>
+                                                    <span>Atenção: O ativo <strong>{fuelSelectedVeh.plate}</strong> está em <strong>Manutenção</strong>. O registro de abastecimento está bloqueado.</span>
                                                 </div>
                                             )}
                                         </>
                                     );
                                 })()}
+
+                                {newFuel.fuelType === 'Arla 32' && (
+                                    <div className="p-3 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-xl flex items-center gap-2 text-xs text-sky-800 dark:text-sky-200">
+                                        <Droplets size={16} className="text-sky-600 shrink-0" />
+                                        <span>Registro de Arla 32 (Aditivo Redutor Catalítico de NOx). Parâmetro técnico recomendado: 3% a 5% do volume de Diesel consumido.</span>
+                                    </div>
+                                )}
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Combustível</label>
-                                        <select className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm" value={newFuel.fuelType} onChange={e => setNewFuel({ ...newFuel, fuelType: e.target.value as any })} required>
+                                        <select
+                                            className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm"
+                                            value={newFuel.fuelType}
+                                            onChange={e => {
+                                                const fType = e.target.value as any;
+                                                const ledgerCode = fType === 'Arla 32' ? '2.03.04' : '2.03.01';
+                                                const ledgerName = fType === 'Arla 32' ? 'Arla 32 / Aditivos' : 'Combustível (Diesel)';
+                                                setNewFuel({ ...newFuel, fuelType: fType, ledgerCode, ledgerName });
+                                            }}
+                                            required
+                                        >
                                             <option value="Diesel">Diesel</option>
                                             <option value="Gasolina">Gasolina</option>
                                             <option value="Etanol">Etanol</option>
@@ -2060,14 +2323,20 @@ const Fleet = () => {
                                         <input type="number" step="0.01" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm" placeholder="R$" value={newFuel.cost || ''} onChange={e => setNewFuel({ ...newFuel, cost: Number(e.target.value) })} required />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">KM no Abastecimento</label>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">
+                                            {(() => {
+                                                const v = fleet.find(veh => veh.id === selectedVehicleId);
+                                                return v?.type === 'Máquina' ? 'Horímetro no Ticket (h)' : 'KM no Abastecimento';
+                                            })()}
+                                        </label>
                                         <input type="number" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-3 font-bold text-sm" placeholder="0" value={newFuel.km || ''} onChange={e => setNewFuel({ ...newFuel, km: Number(e.target.value) })} required />
                                         {(() => {
                                             const v = fleet.find(veh => veh.id === selectedVehicleId);
+                                            const isMach = v?.type === 'Máquina';
                                             if (v && Number(newFuel.km) > 0 && Number(newFuel.km) < v.km) {
                                                 return (
                                                     <p className="text-[10px] font-bold text-rose-600 mt-1">
-                                                        ⚠️ KM informado ({Number(newFuel.km).toLocaleString()} km) menor que o atual ({v.km.toLocaleString()} km).
+                                                        ⚠️ {isMach ? 'Horímetro informado' : 'KM informado'} ({Number(newFuel.km).toLocaleString()} {isMach ? 'h' : 'km'}) menor que o atual ({v.km.toLocaleString()} {isMach ? 'h' : 'km'}).
                                                     </p>
                                                 );
                                             }

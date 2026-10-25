@@ -210,7 +210,7 @@ const HR = () => {
         return Number(Math.max(0, irrf).toFixed(2));
     };
 
-    // Helper para cálculo detalhado da folha de pagamento de um colaborador com consistência telemétrica de ponto
+    // Helper para cálculo detalhado da folha de pagamento de um colaborador com consistência telemétrica de ponto e CLT
     const calculateEmployeePayroll = (emp: Employee, month: string) => {
         // Normalização de mês de competência (suporta 'MM/YYYY' ou 'YYYY-MM')
         let targetMonth = '';
@@ -223,32 +223,86 @@ const HR = () => {
             const parts = month.split('-');
             targetYear = parts[0];
             targetMonth = parts[1].padStart(2, '0');
+        } else {
+            const now = new Date();
+            targetMonth = String(now.getMonth() + 1).padStart(2, '0');
+            targetYear = String(now.getFullYear());
         }
 
-        // 1. Horas Extras e Atrasos a partir dos registros de ponto (timeLogs)
+        const yearNum = parseInt(targetYear, 10) || new Date().getFullYear();
+        const monthNum = parseInt(targetMonth, 10) || (new Date().getMonth() + 1);
+        const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
+
+        // 1. Apuração diária completa: Horas Extras, Atrasos e Faltas Integrais Injustificadas com DSR (CLT Art. 6º Lei 605/49)
         let extraMinutes = 0;
         let delayMinutes = 0;
         let daysWorked = 0;
+        let unjustifiedAbsenceDays = 0;
+        const weeksWithAbsence = new Set<number>();
 
-        const employeeLogs = timeLogs.filter(log => {
-            if (log.employeeId !== emp.id) return false;
-            const logDate = log.date || '';
-            let logM = '';
-            let logY = '';
-            if (logDate.includes('/')) {
-                const parts = logDate.split('/');
-                logM = parts[1]?.padStart(2, '0');
-                logY = parts[2];
-            } else if (logDate.includes('-')) {
-                const parts = logDate.split('-');
-                logY = parts[0];
-                logM = parts[1]?.padStart(2, '0');
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateObj = new Date(yearNum, monthNum - 1, day);
+            const dayOfWeek = dateObj.getDay();
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            const weekNumber = Math.floor((day - 1) / 7);
+
+            const dayPadded = String(day).padStart(2, '0');
+            const monthPadded = String(monthNum).padStart(2, '0');
+            const dateIso = `${yearNum}-${monthPadded}-${dayPadded}`;
+            const dateBr = `${dayPadded}/${monthPadded}/${yearNum}`;
+
+            // Checar se o colaborador estava em gozo de férias aprovadas/concluídas neste dia
+            const onVacation = vacations.some(v => {
+                if (v.employeeId !== emp.id || (v.status !== 'Aprovado' && v.status !== 'Concluído')) return false;
+                const parseD = (dStr: string) => {
+                    if (dStr.includes('/')) {
+                        const parts = dStr.split('/');
+                        return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
+                    }
+                    return new Date(dStr).getTime();
+                };
+                const cur = dateObj.getTime();
+                return cur >= parseD(v.startDate) && cur <= parseD(v.endDate);
+            });
+
+            // Checar se há justificativa ou abono legal (Atestado Médico / Art. 473 CLT)
+            const justKey = `${emp.id}-${dateIso}`;
+            const isJustified = !!justifications[justKey];
+
+            // Localizar marcação de ponto
+            const log = timeLogs.find(l => {
+                if (l.employeeId !== emp.id) return false;
+                const ld = l.date || '';
+                return ld === dateIso || ld === dateBr;
+            });
+
+            const isLogAbonado = log?.status === ('Abonado' as any) || log?.status === ('Justificado' as any);
+
+            if (onVacation) {
+                // Período de férias regulamentares
+                continue;
             }
-            return logM === targetMonth && logY === targetYear;
-        });
 
-        employeeLogs.forEach(log => {
-            if (log.checkIn) {
+            if (isWeekend) {
+                // Trabalho excepcional em DSR ou sábado
+                if (log?.checkIn && log?.checkOut) {
+                    const inMin = parseTimeToMinutes(log.checkIn);
+                    const outMin = parseTimeToMinutes(log.checkOut);
+                    if (inMin !== null && outMin !== null && outMin > inMin) {
+                        extraMinutes += (outMin - inMin);
+                    }
+                }
+                continue;
+            }
+
+            // Dia Útil Normal
+            if (isJustified || isLogAbonado) {
+                daysWorked++;
+                // Dia integralmente abonado por lei (sem acréscimo nem desconto)
+                continue;
+            }
+
+            if (log && log.checkIn) {
                 daysWorked++;
                 const inMin = parseTimeToMinutes(log.checkIn);
                 const outMin = parseTimeToMinutes(log.checkOut);
@@ -261,15 +315,10 @@ const HR = () => {
                         if (ls !== null && le !== null && le > ls) lunchMin = le - ls;
                     }
                     const totalWorked = Math.max(0, (outMin - inMin) - lunchMin);
-                    const standardDay = 480; // 8h diárias
-
+                    const standardDay = 480; // 8h normais
                     const rawDelta = totalWorked - standardDay;
-                    const dateKey = `${emp.id}-${log.date}`;
-                    const isJustified = !!justifications[dateKey];
 
-                    if (isJustified) {
-                        // Abonado legalmente
-                    } else if (Math.abs(rawDelta) <= 10) {
+                    if (Math.abs(rawDelta) <= 10) {
                         // Tolerância legal Art. 58 § 1º CLT
                     } else if (rawDelta > 10) {
                         extraMinutes += rawDelta;
@@ -277,25 +326,36 @@ const HR = () => {
                         delayMinutes += Math.abs(rawDelta);
                     }
                 } else if (log.status === 'Extra') {
-                    extraMinutes += 120; // 2 horas extras avulsas
+                    extraMinutes += 120;
                 } else if (log.status === 'Atraso') {
-                    const dateKey = `${emp.id}-${log.date}`;
-                    if (!justifications[dateKey]) {
-                        delayMinutes += 60;
-                    }
+                    delayMinutes += 60;
+                }
+            } else {
+                // Dia útil sem marcação e sem justificativa legal = Falta Integral Injustificada
+                // Apenas computa se a data for anterior ou igual à data de hoje
+                const today = new Date();
+                today.setHours(23, 59, 59, 999);
+                if (dateObj <= today) {
+                    unjustifiedAbsenceDays++;
+                    weeksWithAbsence.add(weekNumber);
                 }
             }
-        });
+        }
 
         const overtimeHours = Number((extraMinutes / 60).toFixed(2));
         const delayHours = Number((delayMinutes / 60).toFixed(2));
+        const lostDsrDays = weeksWithAbsence.size; // 1 DSR perdido por semana com falta injustificada (Art. 6º Lei 605/49)
 
-        // Salário hora (divisor CLT 220 horas para jornada de 44h semanais)
+        // Salário dia (divisor 30) e salário hora (divisor CLT 220 para jornada 44h)
+        const dailyRate = emp.salary > 0 ? emp.salary / 30 : 0;
         const hourlyRate = emp.salary > 0 ? emp.salary / 220 : 0;
-        const overtimeEarnings = Number((overtimeHours * hourlyRate * 1.5).toFixed(2)); // Adicional 50%
+
+        const overtimeEarnings = Number((overtimeHours * hourlyRate * 1.5).toFixed(2)); // Horas Extras 50%
         const dsrEarnings = Number((overtimeEarnings * (1 / 6)).toFixed(2)); // DSR s/ Horas Extras (Súmula 172 TST)
         const totalOvertime = Number((overtimeEarnings + dsrEarnings).toFixed(2));
+
         const delayDiscounts = Number((delayHours * hourlyRate).toFixed(2));
+        const absenceDiscounts = Number(((unjustifiedAbsenceDays + lostDsrDays) * dailyRate).toFixed(2));
 
         // 2. Benefícios (VR / VA)
         const benefits = 550.00;
@@ -323,8 +383,8 @@ const HR = () => {
         });
         const totalAdvances = advancesToDeduct.reduce((sum, adv) => sum + adv.amount, 0);
 
-        // 5. Tributos (INSS e IRRF)
-        const baseINSS = Number((emp.salary + totalOvertime).toFixed(2));
+        // 5. Tributos (INSS e IRRF) - Base tributável considera salário deduzido de faltas/atrasos e acrescido de HE
+        const baseINSS = Number(Math.max(0, emp.salary - absenceDiscounts - delayDiscounts + totalOvertime).toFixed(2));
         const inss = calculateProgressiveINSS(baseINSS);
 
         const baseIRRF = Math.max(0, Number((baseINSS - inss).toFixed(2)));
@@ -342,7 +402,7 @@ const HR = () => {
 
         // 7. Totais de Vencimentos, Descontos e Líquido
         const totalEarnings = Number((emp.salary + totalOvertime + benefits).toFixed(2));
-        const totalDiscounts = Number((inss + irrf + totalAdvances + delayDiscounts + transportDiscount).toFixed(2));
+        const totalDiscounts = Number((inss + irrf + totalAdvances + delayDiscounts + absenceDiscounts + transportDiscount).toFixed(2));
         const totalNet = Number(Math.max(0, totalEarnings - totalDiscounts).toFixed(2));
         const totalCompanyCost = Number((totalEarnings + totalFederalTaxes).toFixed(2));
 
@@ -355,6 +415,9 @@ const HR = () => {
             totalOvertime,
             delayHours,
             delayDiscounts,
+            unjustifiedAbsenceDays,
+            lostDsrDays,
+            absenceDiscounts,
             benefits,
             transportDiscount,
             totalAdvances,
@@ -900,6 +963,8 @@ const HR = () => {
         const irrfVal = calc?.irrf || 0;
         const advancesVal = calc?.totalAdvances || 0;
         const delaysVal = calc?.delayDiscounts || 0;
+        const absenceVal = calc?.absenceDiscounts || 0;
+        const absenceDays = (calc?.unjustifiedAbsenceDays || 0) + (calc?.lostDsrDays || 0);
         const transportVal = calc?.transportDiscount || 0;
 
         const totalEarnings = baseSalary + overtimeVal + benefitsVal;
@@ -907,7 +972,7 @@ const HR = () => {
         const netSalary = record.totalNet;
 
         const html = `
-            <div style="font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; border: 2px solid #334155; max-width: 820px; margin: 0 auto; color: #1e293b; background: #fff;">
+            <div style="font-family: 'Segoe UI', Arial, sans-serif; padding: 25px; border: 2px solid #334155; max-width: 820px; margin: 0 auto; color: #1e293b; background: #fff;">
                 <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #0d9488; padding-bottom: 15px; margin-bottom: 20px;">
                     <div>
                         <h2 style="margin: 0; font-size: 20px; text-transform: uppercase; color: #0d9488; font-weight: 900;">${companyName}</h2>
@@ -985,10 +1050,18 @@ const HR = () => {
                             <td style="padding: 8px; text-align: right;">-</td>
                             <td style="padding: 8px; text-align: right; color: #dc2626; font-weight: bold;">R$ ${advancesVal.toFixed(2)}</td>
                         </tr>` : ''}
+                        ${absenceVal > 0 ? `
+                        <tr style="border-bottom: 1px solid #e2e8f0; background: #fef2f2;">
+                            <td style="padding: 8px; text-align: center; font-mono;">910</td>
+                            <td style="padding: 8px;">Faltas e DSR Não Justificados (Art. 6º Lei 605/49)</td>
+                            <td style="padding: 8px; text-align: center;">${absenceDays} dia(s)</td>
+                            <td style="padding: 8px; text-align: right;">-</td>
+                            <td style="padding: 8px; text-align: right; color: #dc2626; font-weight: bold;">R$ ${absenceVal.toFixed(2)}</td>
+                        </tr>` : ''}
                         ${delaysVal > 0 ? `
                         <tr style="border-bottom: 1px solid #e2e8f0;">
                             <td style="padding: 8px; text-align: center; font-mono;">915</td>
-                            <td style="padding: 8px;">Desconto Atrasos / Faltas Não Justificadas</td>
+                            <td style="padding: 8px;">Desconto Atrasos / Saídas Não Justificadas</td>
                             <td style="padding: 8px; text-align: center;">${calc?.delayHours || 0}h</td>
                             <td style="padding: 8px; text-align: right;">-</td>
                             <td style="padding: 8px; text-align: right; color: #dc2626; font-weight: bold;">R$ ${delaysVal.toFixed(2)}</td>
@@ -1020,11 +1093,11 @@ const HR = () => {
                     </div>
                 </div>
 
-                <div style="font-size: 10px; line-height: 1.5; color: #64748b; border: 1px dashed #cbd5e1; padding: 10px; border-radius: 6px; margin-bottom: 40px;">
+                <div style="font-size: 10px; line-height: 1.5; color: #64748b; border: 1px dashed #cbd5e1; padding: 10px; border-radius: 6px; margin-bottom: 35px;">
                     Declaro ter recebido a importância líquida discriminada neste recibo, referente aos serviços prestados na competência indicada, dando plena e irrevogável quitação.
                 </div>
 
-                <div style="display: flex; justify-content: space-between; gap: 60px; margin-top: 30px;">
+                <div style="display: flex; justify-content: space-between; gap: 60px; margin-top: 25px;">
                     <div style="flex: 1; text-align: center;">
                         <div style="border-bottom: 1px solid #475569; margin-bottom: 6px;"></div>
                         <p style="font-size: 10px; margin: 0; font-weight: bold;">${companyName}</p>
@@ -1041,9 +1114,22 @@ const HR = () => {
 
         const printWindow = window.open('', '', 'height=750,width=900');
         if (printWindow) {
-            printWindow.document.write('<html><head><title>Holerite - ' + record.employeeName + '</title></head><body>');
-            printWindow.document.write(html);
-            printWindow.document.write('</body></html>');
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <title>Holerite - ${record.employeeName}</title>
+                    <style>
+                        @media print {
+                            @page { size: A4 portrait; margin: 10mm; }
+                            body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${html}
+                </body>
+                </html>
+            `);
             printWindow.document.close();
             printWindow.print();
         }
@@ -1139,9 +1225,22 @@ const HR = () => {
 
         const printWin = window.open('', '', 'height=800,width=1000');
         if (printWin) {
-            printWin.document.write('<html><head><title>Espelho de Ponto - ' + emp.name + '</title></head><body>');
-            printWin.document.write(html);
-            printWin.document.write('</body></html>');
+            printWin.document.write(`
+                <html>
+                <head>
+                    <title>Espelho de Ponto - ${emp.name}</title>
+                    <style>
+                        @media print {
+                            @page { size: A4 portrait; margin: 8mm; }
+                            body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${html}
+                </body>
+                </html>
+            `);
             printWin.document.close();
             printWin.print();
         }
@@ -1214,11 +1313,11 @@ const HR = () => {
         addTransaction({
             id: txId,
             date: vacationPaymentForm.date,
-            description: `Recibo de Férias - ${selectedVacationToPay.employeeName} (${selectedVacationToPay.days} dias)`,
+            description: `Provisão Férias - ${selectedVacationToPay.employeeName} (${selectedVacationToPay.days} dias)`,
             amount: amountToPay,
             type: 'Despesa',
             category: 'Folha de Pagamento',
-            status: 'Conciliado',
+            status: 'Pendente',
             accountId: targetAccount?.id || 'acc-1',
             account: targetAccount?.name || 'Conta Bancária',
             partnerName: selectedVacationToPay.employeeName,
@@ -1229,8 +1328,8 @@ const HR = () => {
             ledgerName: 'Salários e Ordenados'
         });
 
-        updateVacationStatus(selectedVacationToPay.id, 'Concluído', currentUser?.name || 'Admin');
-        addToast(`Férias de ${selectedVacationToPay.employeeName} quitadas com sucesso! Débito de ${formatCurrency(amountToPay)} lançado em ${targetAccount?.name}.`, 'success');
+        updateVacationStatus(selectedVacationToPay.id, 'Aprovado', currentUser?.name || 'Admin');
+        addToast(`Férias de ${selectedVacationToPay.employeeName} provisionadas e enviadas ao Contas a Pagar (${formatCurrency(amountToPay)}) para liquidação pela Tesouraria!`, 'success');
         setIsPayVacationModalOpen(false);
         setSelectedVacationToPay(null);
     };
@@ -1389,9 +1488,22 @@ const HR = () => {
 
         const printWin = window.open('', '', 'height=800,width=1000');
         if (printWin) {
-            printWin.document.write('<html><head><title>Recibo de Férias - ' + emp.name + '</title></head><body>');
-            printWin.document.write(html);
-            printWin.document.write('</body></html>');
+            printWin.document.write(`
+                <html>
+                <head>
+                    <title>Recibo de Férias - ${emp.name}</title>
+                    <style>
+                        @media print {
+                            @page { size: A4 portrait; margin: 10mm; }
+                            body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${html}
+                </body>
+                </html>
+            `);
             printWin.document.close();
             printWin.print();
         }
@@ -1427,19 +1539,19 @@ const HR = () => {
             localStorage.setItem('infracore_hr_justifications', JSON.stringify(updated));
         } catch {}
 
-        // Registrar no TimeLog do dia para consistência telemétrica
+        // Registrar no TimeLog do dia para consistência telemétrica e auditoria MTE (sem marcações físicas forjadas)
         const existingLog = timeLogs.find(l => l.employeeId === currentEspelhoEmp.id && (l.date === selectedJustifyDay.dateIso || l.date === selectedJustifyDay.dateStr));
         if (!existingLog) {
             addTimeLog({
                 id: `log-just-${Date.now()}`,
                 employeeId: currentEspelhoEmp.id,
                 date: selectedJustifyDay.dateIso,
-                checkIn: '08:00',
-                lunchStart: '12:00',
-                lunchEnd: '13:00',
-                checkOut: '17:00',
-                totalHours: '8.00',
-                status: 'Presente'
+                checkIn: '',
+                lunchStart: '',
+                lunchEnd: '',
+                checkOut: '',
+                totalHours: '0.00',
+                status: 'Presente' as any
             });
         }
 
@@ -1556,21 +1668,21 @@ const HR = () => {
         addTransaction({
             id: txId,
             date: formattedDate,
-            description: `Adiantamento Salarial (${advancePaymentForm.paymentMethod}) - ${selectedAdvanceToPay.employeeName}`,
+            description: `Provisão Adiantamento Salarial (${advancePaymentForm.paymentMethod}) - ${selectedAdvanceToPay.employeeName}`,
             category: 'Adiantamentos',
             type: 'Despesa',
             amount: selectedAdvanceToPay.amount,
-            status: 'Conciliado',
+            status: 'Pendente',
             account: targetAccount.name,
             accountId: targetAccount.id,
             ledgerCode: '2.03.01',
             ledgerName: 'Salários e Ordenados'
         });
 
-        // 2. Atualizar status da antecipação para 'Pago'
-        paySalaryAdvance(selectedAdvanceToPay.id);
+        // Atualizar status da antecipação para 'Aprovado' (aguardando liquidação pela Tesouraria)
+        updateAdvanceStatus(selectedAdvanceToPay.id, 'Aprovado', currentUser?.name || 'Gestor RH');
 
-        addToast(`Adiantamento de ${selectedAdvanceToPay.employeeName} (${formatCurrency(selectedAdvanceToPay.amount)}) liquidado com sucesso pela conta ${targetAccount.name}!`, 'success');
+        addToast(`Adiantamento de ${selectedAdvanceToPay.employeeName} (${formatCurrency(selectedAdvanceToPay.amount)}) provisionado e enviado ao Contas a Pagar para liquidação pela Tesouraria!`, 'success');
         setIsPayAdvanceModalOpen(false);
         setSelectedAdvanceToPay(null);
     };
@@ -2229,15 +2341,21 @@ const HR = () => {
                                                                                     </>
                                                                                 )}
 
-                                                                                {/* Aprovado: Pagar no Caixa/Banco */}
+                                                                                {/* Aprovado: Provisionar no Financeiro ou Aguardando Tesouraria */}
                                                                                 {vac.status === 'Aprovado' && hasPermission('employees.manage') && (
-                                                                                    <button
-                                                                                        onClick={() => openPayVacationModal(vac)}
-                                                                                        className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black text-xs rounded-xl uppercase transition-all shadow-sm flex items-center gap-1.5"
-                                                                                        title="Liquidar Recibo de Férias com Débito em Conta"
-                                                                                    >
-                                                                                        <Wallet size={14} /> Quitar no Banco
-                                                                                    </button>
+                                                                                    linkedTx ? (
+                                                                                        <span className="px-2.5 py-1.5 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold text-[10px] rounded-xl flex items-center gap-1 uppercase" title="Provisão enviada ao Contas a Pagar. Aguardando liquidação pela Tesouraria.">
+                                                                                            <Clock size={12} /> Aberto no Fin.
+                                                                                        </span>
+                                                                                    ) : (
+                                                                                        <button
+                                                                                            onClick={() => openPayVacationModal(vac)}
+                                                                                            className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black text-xs rounded-xl uppercase transition-all shadow-sm flex items-center gap-1.5"
+                                                                                            title="Enviar provisão de férias para o Contas a Pagar"
+                                                                                        >
+                                                                                            <Wallet size={14} /> Provisionar (Fin.)
+                                                                                        </button>
+                                                                                    )
                                                                                 )}
 
                                                                                 {/* Concluído: Estornar Pagamento */}
@@ -2525,13 +2643,19 @@ const HR = () => {
                                                                     </>
                                                                 )}
                                                                 {adv.status === 'Aprovado' && hasPermission('finance.transact') && (
-                                                                    <button
-                                                                        onClick={() => openPayAdvanceModal(adv)}
-                                                                        className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black text-[10px] rounded-lg shadow-sm hover:scale-105 transition-all uppercase flex items-center gap-1"
-                                                                        title="Liquidar antecipação escolhendo conta bancária e forma de pagamento"
-                                                                    >
-                                                                        <DollarSign size={12} /> Pagar
-                                                                    </button>
+                                                                    transactions.some(t => t.id === `tx-adv-${adv.id}`) ? (
+                                                                        <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold text-[10px] rounded-lg flex items-center gap-1 uppercase" title="Provisão enviada ao Contas a Pagar. Aguardando baixa da Tesouraria.">
+                                                                            <Clock size={11} /> Aberto no Fin.
+                                                                        </span>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={() => openPayAdvanceModal(adv)}
+                                                                            className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white font-black text-[10px] rounded-lg shadow-sm hover:scale-105 transition-all uppercase flex items-center gap-1"
+                                                                            title="Enviar provisão para o Contas a Pagar"
+                                                                        >
+                                                                            <DollarSign size={11} /> Provisionar (Fin.)
+                                                                        </button>
+                                                                    )
                                                                 )}
                                                                 {adv.status === 'Pago' && (
                                                                     <button
@@ -2794,31 +2918,40 @@ const HR = () => {
                                                                         <td className="px-5 py-4 text-right font-black text-sm text-emerald-600">{formatCurrency(companyCost)}</td>
                                                                     </>
                                                                 )}
-                                                                <td className="px-4 py-4 text-center">
-                                                                    <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase ${p.status === 'Pago' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                                                                        {p.status}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="px-4 py-4 text-right">
-                                                                    <div className="flex items-center justify-end gap-1.5">
-                                                                        <button
-                                                                            onClick={() => handlePrintReceipt(p)}
-                                                                            className="px-2.5 py-1.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-200 font-bold text-[10px] rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-1 uppercase"
-                                                                            title="Visualizar ou imprimir comprovante"
-                                                                        >
-                                                                            <FileText size={12} /> {p.status === 'Pago' ? 'Holerite' : 'Prévia'}
-                                                                        </button>
-                                                                        {p.status === 'Pendente' && (
-                                                                            <button
-                                                                                onClick={() => handleDirectPayPayroll(p)}
-                                                                                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] rounded-lg shadow-sm transition-all flex items-center gap-1 uppercase"
-                                                                                title="Confirmar pagamento e liquidar despesa no financeiro"
-                                                                            >
-                                                                                <Check size={12} /> Pagar
-                                                                            </button>
-                                                                        )}
-                                                                    </div>
-                                                                </td>
+                                                                {(() => {
+                                                                    const tx = transactions.find(t => t.id === `tx-pay-${p.id}`);
+                                                                    const isPaidInFinance = p.status === 'Pago' || tx?.status === 'Conciliado';
+
+                                                                    return (
+                                                                        <>
+                                                                            <td className="px-4 py-4 text-center">
+                                                                                <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase ${isPaidInFinance ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'}`}>
+                                                                                    {isPaidInFinance ? 'Pago (Tesouraria)' : 'Aguardando Financeiro'}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="px-4 py-4 text-right">
+                                                                                <div className="flex items-center justify-end gap-1.5">
+                                                                                    <button
+                                                                                        onClick={() => handlePrintReceipt(p)}
+                                                                                        className="px-2.5 py-1.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-200 font-bold text-[10px] rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-1 uppercase"
+                                                                                        title="Visualizar ou imprimir comprovante"
+                                                                                    >
+                                                                                        <FileText size={12} /> {isPaidInFinance ? 'Holerite' : 'Prévia'}
+                                                                                    </button>
+                                                                                    {isPaidInFinance ? (
+                                                                                        <span className="px-2 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold text-[10px] rounded-lg flex items-center gap-1 uppercase" title="Liquidação efetuada pelo módulo Financeiro">
+                                                                                            <CheckCircle size={12} /> Liquidado
+                                                                                        </span>
+                                                                                    ) : (
+                                                                                        <span className="px-2 py-1.5 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold text-[10px] rounded-lg flex items-center gap-1 uppercase" title="Provisão gerada e encaminhada ao Contas a Pagar. Liquidação exclusiva da Tesouraria.">
+                                                                                            <Clock size={12} /> Aberto (Fin.)
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </td>
+                                                                        </>
+                                                                    );
+                                                                })()}
                                                             </tr>
                                                         );
                                                     })}
