@@ -30,6 +30,7 @@ import {
   Eye,
   AlertTriangle,
   Calendar,
+  ArrowLeft,
   ArrowLeftRight,
   Download,
   ChevronRight,
@@ -2419,7 +2420,7 @@ const Sales = () => {
   const danfeClient = showNFE ? (clients || []).find(c => c.id === showNFE.data.clientId) : null;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] gap-4">
+    <div className="flex flex-col min-h-[calc(100vh-8rem)] lg:h-[calc(100vh-8rem)] gap-4">
       {/* Quick Client Modal */}
       {isQuickClientOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm overflow-y-auto">
@@ -3909,7 +3910,7 @@ const Sales = () => {
                 </div>
 
                 {/* Lista Rolável de Itens do Carrinho com Barra de Rolagem à Direita */}
-                <div className={`overflow-y-auto p-0 bg-slate-50/50 dark:bg-slate-900/20 custom-scrollbar pr-2 transition-all ${showCheckout ? 'max-h-36 shrink-0 border-b dark:border-slate-700' : 'flex-1'}`}>
+                <div className={`overflow-y-auto p-0 bg-slate-50/50 dark:bg-slate-900/20 custom-scrollbar pr-1 sm:pr-2 transition-all ${showCheckout ? 'hidden lg:block lg:max-h-36 lg:shrink-0 border-b dark:border-slate-700' : 'flex-1'}`}>
                   {cart.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-6 grayscale opacity-50 p-6">
                       <ShoppingCart size={80} strokeWidth={1} />
@@ -3919,32 +3920,97 @@ const Sales = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4">
-                      <table className="w-full text-left border-separate border-spacing-y-2">
-                        <thead className="text-[10px] uppercase font-black text-slate-400 hidden sm:table-header-group">
-                          <tr>
-                            <th className="pb-2 pl-4">Produto</th>
-                            <th className="pb-2 text-center">Quantidade</th>
-                            <th className="pb-2 text-right">Unitário</th>
-                            <th className="pb-2 text-right">Total</th>
-                            <th className="pb-2 w-10"></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {cart.map(item => (
-                            <tr key={item.id} className="group bg-white dark:bg-gray-800 shadow-sm rounded-xl border border-slate-100 dark:border-gray-700 hover:border-cyan-200 transition-all relative">
-                              <td className="p-4 rounded-l-xl block sm:table-cell">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-gray-700 flex items-center justify-center text-slate-400 shrink-0"><Package size={18} /></div>
-                                  <div>
-                                    <p className="font-bold text-sm text-slate-900 dark:text-white leading-tight">{item.name}</p>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase">{item.detail}</p>
-                                  </div>
+                    <>
+                      {/* Visualização Mobile: Cards compactos sem sobreposição de botões */}
+                      <div className="p-3 space-y-2.5 sm:hidden">
+                        {cart.map(item => (
+                          <div key={item.id} className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-slate-200 dark:border-gray-700 shadow-sm flex flex-col gap-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-gray-700 flex items-center justify-center text-slate-400 shrink-0">
+                                  <Package size={16} />
                                 </div>
-                              </td>
-                              <td className="p-4 block sm:table-cell text-center">
-                                <div className="flex items-center justify-between sm:justify-center gap-4 sm:gap-0">
-                                  <span className="sm:hidden text-xs font-bold text-slate-500">Quantidade:</span>
+                                <div className="min-w-0">
+                                  <p className="font-bold text-xs text-slate-900 dark:text-white leading-tight truncate">{item.name}</p>
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase">{item.detail}</p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => removeFromCart(item.id)}
+                                className="text-slate-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors shrink-0"
+                                title="Remover item"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 dark:border-gray-700/60">
+                              <div className="inline-flex items-center bg-slate-50 dark:bg-gray-900 rounded-lg p-0.5 border border-slate-200 dark:border-gray-700">
+                                <button
+                                  onClick={() => updateQuantity(item.id, -1)}
+                                  className="w-7 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-gray-700 rounded text-slate-500 hover:text-cyan-600 transition-colors"
+                                >
+                                  <Minus size={13} />
+                                </button>
+                                <div className="flex items-center gap-1 px-2 min-w-[42px] justify-center">
+                                  <span className="text-xs font-black text-slate-800 dark:text-white">{item.quantity}</span>
+                                  <span className="text-[9px] text-slate-400 uppercase font-bold">{item.unit}</span>
+                                </div>
+                                <button
+                                  onClick={() => updateQuantity(item.id, 1)}
+                                  className="w-7 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-gray-700 rounded text-slate-500 hover:text-cyan-600 transition-colors"
+                                >
+                                  <Plus size={13} />
+                                </button>
+                              </div>
+
+                              <div className="text-right">
+                                <span className="text-[10px] text-slate-400 block font-medium">{formatMoney(item.price)} / {item.unit}</span>
+                                <span className="text-sm font-black text-cyan-600 dark:text-cyan-400">{formatMoney(item.price * item.quantity)}</span>
+                              </div>
+                            </div>
+
+                            {isScaleConnected && (['ton', 'm³', 'm3', 'kg'].includes(item.unit.toLowerCase())) && (
+                              <div className="flex justify-end gap-2 pt-1 border-t border-slate-100 dark:border-gray-700/40">
+                                <button onClick={() => handleReadScale(item.id)} className="text-[9px] bg-slate-900 text-white px-2 py-1 rounded hover:bg-cyan-600 flex items-center gap-1 font-bold">
+                                  <Scale size={10} /> Ler Peso
+                                </button>
+                                {item.weight && (
+                                  <button onClick={() => toggleUnit(item.id)} className="text-[9px] bg-cyan-100 text-cyan-700 px-2 py-1 rounded hover:bg-cyan-200 flex items-center gap-1 font-bold">
+                                    <ArrowLeftRight size={10} /> Converter
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Visualização Desktop: Tabela completa */}
+                      <div className="p-4 hidden sm:block">
+                        <table className="w-full text-left border-separate border-spacing-y-2">
+                          <thead className="text-[10px] uppercase font-black text-slate-400">
+                            <tr>
+                              <th className="pb-2 pl-4">Produto</th>
+                              <th className="pb-2 text-center">Quantidade</th>
+                              <th className="pb-2 text-right">Unitário</th>
+                              <th className="pb-2 text-right">Total</th>
+                              <th className="pb-2 w-10"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {cart.map(item => (
+                              <tr key={item.id} className="group bg-white dark:bg-gray-800 shadow-sm rounded-xl border border-slate-100 dark:border-gray-700 hover:border-cyan-200 transition-all">
+                                <td className="p-4 rounded-l-xl">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-gray-700 flex items-center justify-center text-slate-400 shrink-0"><Package size={18} /></div>
+                                    <div>
+                                      <p className="font-bold text-sm text-slate-900 dark:text-white leading-tight">{item.name}</p>
+                                      <p className="text-[10px] text-slate-400 font-bold uppercase">{item.detail}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="p-4 text-center">
                                   <div className="inline-flex items-center bg-slate-50 dark:bg-gray-900 rounded-lg p-1 border dark:border-gray-600">
                                     <button onClick={() => updateQuantity(item.id, -1)} className="p-1.5 hover:bg-white dark:hover:bg-gray-700 rounded text-slate-400 hover:text-cyan-600 transition-colors"><Minus size={14} /></button>
                                     <div className="flex flex-col items-center px-2 min-w-[30px]">
@@ -3953,62 +4019,67 @@ const Sales = () => {
                                     </div>
                                     <button onClick={() => updateQuantity(item.id, 1)} className="p-1.5 hover:bg-white dark:hover:bg-gray-700 rounded text-slate-400 hover:text-cyan-600 transition-colors"><Plus size={14} /></button>
                                   </div>
-                                </div>
-                                {isScaleConnected && (['ton', 'm³', 'm3', 'kg'].includes(item.unit.toLowerCase())) && (
-                                  <div className="flex justify-center gap-2 mt-2">
-                                    <button onClick={() => handleReadScale(item.id)} className="text-[9px] bg-slate-900 text-white px-2 py-1 rounded hover:bg-cyan-600 flex items-center gap-1 font-bold"><Scale size={10} /> Ler Peso</button>
-                                    {item.weight && (
-                                      <button onClick={() => toggleUnit(item.id)} className="text-[9px] bg-cyan-100 text-cyan-700 px-2 py-1 rounded hover:bg-cyan-200 flex items-center gap-1 font-bold"><ArrowLeftRight size={10} /> Converter</button>
-                                    )}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="p-4 text-right hidden sm:table-cell">
-                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{formatMoney(item.price)}</p>
-                              </td>
-                              <td className="p-4 block sm:table-cell text-right">
-                                <div className="flex justify-between sm:block items-center">
-                                  <span className="sm:hidden text-xs font-bold text-slate-500">Total:</span>
+                                  {isScaleConnected && (['ton', 'm³', 'm3', 'kg'].includes(item.unit.toLowerCase())) && (
+                                    <div className="flex justify-center gap-2 mt-2">
+                                      <button onClick={() => handleReadScale(item.id)} className="text-[9px] bg-slate-900 text-white px-2 py-1 rounded hover:bg-cyan-600 flex items-center gap-1 font-bold"><Scale size={10} /> Ler Peso</button>
+                                      {item.weight && (
+                                        <button onClick={() => toggleUnit(item.id)} className="text-[9px] bg-cyan-100 text-cyan-700 px-2 py-1 rounded hover:bg-cyan-200 flex items-center gap-1 font-bold"><ArrowLeftRight size={10} /> Converter</button>
+                                      )}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="p-4 text-right">
+                                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{formatMoney(item.price)}</p>
+                                </td>
+                                <td className="p-4 text-right">
                                   <p className="font-black text-base text-slate-900 dark:text-white">{formatMoney(item.price * item.quantity)}</p>
-                                </div>
-                              </td>
-                              <td className="p-4 rounded-r-xl text-center absolute top-2 right-2 sm:static">
-                                <button onClick={() => removeFromCart(item.id)} className="text-slate-300 hover:text-red-500 transition-colors bg-white sm:bg-transparent rounded-full p-1 sm:p-0 shadow-sm sm:shadow-none"><X size={18} /></button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                                </td>
+                                <td className="p-4 rounded-r-xl text-center">
+                                  <button onClick={() => removeFromCart(item.id)} className="text-slate-300 hover:text-red-500 transition-colors"><X size={18} /></button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
                   )}
                 </div>
 
-                <div className={`bg-white dark:bg-gray-800 border-t dark:border-slate-700 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-20 transition-all ${showCheckout ? 'flex-1 flex flex-col min-h-0 overflow-hidden p-6' : 'shrink-0 p-6'}`}>
+                <div className={`bg-white dark:bg-gray-800 border-t dark:border-slate-700 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-20 transition-all ${showCheckout ? 'flex-1 flex flex-col min-h-0 overflow-hidden p-4 sm:p-6' : 'shrink-0 p-4 sm:p-6'}`}>
                   {!showCheckout ? (
-                    <div className="space-y-6">
+                    <div className="space-y-4 sm:space-y-6">
                       <div className="flex justify-between items-end">
-                        <span className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-2">Subtotal da Venda</span>
+                        <span className="text-slate-400 text-xs sm:text-sm font-bold uppercase tracking-wider mb-1 sm:mb-2">Subtotal da Venda</span>
                         <div className="text-right">
-                          <span className="text-4xl font-black text-slate-900 dark:text-white tracking-tight block">{formatMoney(subtotal)}</span>
-                          <span className="text-xs text-slate-400 font-bold uppercase">{cart.length} itens inclusos</span>
+                          <span className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight block">{formatMoney(subtotal)}</span>
+                          <span className="text-xs text-slate-400 font-bold uppercase">{cart.length} {cart.length === 1 ? 'item' : 'itens'}</span>
                         </div>
                       </div>
                       <button
                         disabled={cart.length === 0}
                         onClick={() => setShowCheckout(true)}
-                        className="w-full py-5 bg-cyan-600 hover:bg-cyan-700 text-white font-black rounded-2xl shadow-xl shadow-cyan-600/30 text-lg transition-all flex items-center justify-center gap-3 disabled:grayscale disabled:opacity-50"
+                        className="w-full py-4 sm:py-5 bg-cyan-600 hover:bg-cyan-700 text-white font-black rounded-2xl shadow-xl shadow-cyan-600/30 text-base sm:text-lg transition-all flex items-center justify-center gap-3 disabled:grayscale disabled:opacity-50 active:scale-98 cursor-pointer"
                       >
-                        <CreditCard size={24} /> IR PARA O PAGAMENTO
+                        <CreditCard size={22} /> IR PARA O PAGAMENTO
                       </button>
                     </div>
                   ) : (
-                    <div className="space-y-5 animate-in slide-in-from-bottom duration-300 h-full overflow-hidden flex flex-col">
-                      <div className="flex items-center justify-between shrink-0 mb-2">
-                        <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2"><CreditCard size={20} className="text-cyan-600" /> Finalização Comercial</h3>
-                        <button onClick={() => setShowCheckout(false)} className="text-xs font-bold text-cyan-600 hover:underline uppercase tracking-wide">Voltar ao Carrinho</button>
+                    <div className="space-y-4 sm:space-y-5 animate-in slide-in-from-bottom duration-300 h-full overflow-hidden flex flex-col">
+                      <div className="flex items-center justify-between shrink-0 pb-2 border-b border-slate-100 dark:border-slate-700">
+                        <div className="flex items-center gap-2">
+                          <CreditCard size={18} className="text-cyan-600" />
+                          <h3 className="font-bold text-sm sm:text-base text-slate-800 dark:text-white">Pagamento & Conclusão</h3>
+                        </div>
+                        <button
+                          onClick={() => setShowCheckout(false)}
+                          className="text-xs font-bold text-cyan-600 hover:text-cyan-700 bg-cyan-50 dark:bg-cyan-900/30 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 uppercase tracking-wide cursor-pointer"
+                        >
+                          <ArrowLeft size={13} /> Voltar ao Carrinho
+                        </button>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4">
+                      <div className="flex-1 overflow-y-auto pr-1 sm:pr-2 custom-scrollbar space-y-4 pb-6 sm:pb-2">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                           {/* BLOCO 1: IDENTIFICAÇÃO DO CLIENTE & CONTA FINANCEIRA */}
                           <div className="p-4 bg-slate-50/90 dark:bg-gray-700/40 rounded-2xl border border-slate-200/80 dark:border-gray-600/70 space-y-3.5 flex flex-col justify-between">
@@ -4319,35 +4390,38 @@ const Sales = () => {
                         </div>
 
                         {/* Total Box */}
-                        <div className="flex justify-between items-end p-4 sm:p-5 bg-slate-900 dark:bg-black rounded-2xl text-white mt-3 shadow-xl border border-white/10">
+                        <div className="flex justify-between items-end p-3.5 sm:p-5 bg-slate-900 dark:bg-black rounded-2xl text-white mt-3 shadow-xl border border-white/10">
                           <div className="flex flex-col">
                             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total do Pedido</span>
                             <div className="flex items-baseline gap-1.5">
-                              <span className="text-3xl sm:text-4xl font-black text-cyan-400">{formatMoney(total).split(',')[0]}</span>
-                              <span className="text-lg sm:text-xl font-bold opacity-50">,{formatMoney(total).split(',')[1]}</span>
+                              <span className="text-2xl sm:text-4xl font-black text-cyan-400">{formatMoney(total).split(',')[0]}</span>
+                              <span className="text-base sm:text-xl font-bold opacity-50">,{formatMoney(total).split(',')[1]}</span>
                             </div>
                           </div>
                           <div className="text-right">
-                            <span className="text-[10px] font-bold text-slate-500 block">Itens: {cart.length}</span>
-                            <span className="text-xs font-black text-emerald-400 uppercase">Pronto para Finalizar</span>
+                            <span className="text-[10px] font-bold text-slate-400 block">{cart.length} {cart.length === 1 ? 'item' : 'itens'}</span>
+                            <span className="text-[11px] sm:text-xs font-black text-emerald-400 uppercase">Pronto para Finalizar</span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 shrink-0 pt-4 border-t border-slate-100 dark:border-slate-700">
-                        <button onClick={handleSaveBudget} className="py-4 bg-white dark:bg-gray-700 text-slate-800 dark:text-white font-black rounded-2xl border border-slate-200 dark:border-gray-600 text-xs shadow-sm hover:bg-slate-50 transition-all flex flex-col items-center justify-center gap-1 cursor-pointer">
-                          <Save size={16} /> SALVAR ORÇAMENTO
+                      <div className="grid grid-cols-2 gap-2 sm:gap-3 shrink-0 pt-3 pb-2 sm:pb-0 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-gray-800">
+                        <button
+                          onClick={handleSaveBudget}
+                          className="py-3.5 sm:py-4 px-2 bg-slate-50 hover:bg-slate-100 dark:bg-gray-700 dark:hover:bg-gray-600 text-slate-800 dark:text-white font-black rounded-xl sm:rounded-2xl border border-slate-200 dark:border-gray-600 text-[11px] sm:text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                        >
+                          <Save size={15} /> <span>SALVAR ORÇAMENTO</span>
                         </button>
                         <button
                           onClick={handleFinalizeOrder}
                           disabled={isSubmitting}
-                          className={`py-4 ${isSubmitting ? 'bg-cyan-800 cursor-not-allowed' : 'bg-cyan-600 hover:bg-cyan-700'} text-white font-black rounded-2xl shadow-lg shadow-cyan-600/30 text-xs transition-all flex flex-col items-center justify-center gap-1 cursor-pointer`}
+                          className={`py-3.5 sm:py-4 px-2 ${isSubmitting ? 'bg-cyan-800 cursor-not-allowed' : 'bg-cyan-600 hover:bg-cyan-700'} text-white font-black rounded-xl sm:rounded-2xl shadow-lg shadow-cyan-600/30 text-[11px] sm:text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98`}
                         >
                           {isSubmitting ? (
                             <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white"></div>
                           ) : (
                             <>
-                              <CheckCircle size={16} /> FINALIZAR VENDA
+                              <CheckCircle size={15} /> <span>FINALIZAR VENDA</span>
                             </>
                           )}
                         </button>

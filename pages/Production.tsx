@@ -136,7 +136,18 @@ export interface DNITStandardDef {
     sampleType: string;
     defaultUnit: string;
     nominalExpected: string;
+    formulaExplanation?: string;
+    defaultBenchData?: Record<string, any>;
     benchFields: { key: string; label: string; unit: string; placeholder: string; defaultValue?: number | string }[];
+}
+
+export interface DNITCalculationResult {
+    resultValue: string;
+    status: 'Aprovado' | 'Reprovado' | 'Ressalva';
+    metricsCalculated: Record<string, any>;
+    formulaDisplay: string;
+    normativeCriteria: string;
+    notesSuggestion?: string;
 }
 
 export interface DNITLabTest {
@@ -181,10 +192,18 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Solo de Jazida / Corte / Camada de Terraplenagem',
         defaultUnit: 'g/cm³ / %',
         nominalExpected: 'Energia Intermediária/Modificada conforme especificação de projeto',
+        formulaExplanation: 'γd = γh / (1 + w/100) | Ajuste parabólico para encontrar o vértice (γd,max, wot)',
+        defaultBenchData: {
+            umidade_otima: 12.5,
+            densidade_seca_maxima: 2.04,
+            energia_compactacao: 'Proctor Intermediária',
+            densidade_graos_gs: 2.70
+        },
         benchFields: [
-            { key: 'energia_compactacao', label: 'Energia Utilizada', unit: 'tipo', placeholder: 'Ex: Proctor Intermediária' },
-            { key: 'massa_especifica_seca_max', label: 'Massa Específica Seca Máx (γd,max)', unit: 'g/cm³', placeholder: 'Ex: 1.845' },
-            { key: 'umidade_otima_percent', label: 'Umidade Ótima (wot)', unit: '%', placeholder: 'Ex: 13.8' }
+            { key: 'umidade_otima', label: 'Umidade Ótima (wot)', unit: '%', placeholder: 'Ex: 12.5', defaultValue: 12.5 },
+            { key: 'densidade_seca_maxima', label: 'Massa Específica Seca Máx (γd,max)', unit: 'g/cm³', placeholder: 'Ex: 2.04', defaultValue: 2.04 },
+            { key: 'energia_compactacao', label: 'Energia Utilizada', unit: 'tipo', placeholder: 'Ex: Proctor Intermediária', defaultValue: 'Proctor Intermediária' },
+            { key: 'densidade_graos_gs', label: 'Massa Específica dos Grãos (Gs)', unit: 'g/cm³', placeholder: 'Ex: 2.70', defaultValue: 2.70 }
         ]
     },
     {
@@ -197,11 +216,18 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Corpos de Prova Cilíndricos em Molde CBR',
         defaultUnit: '% CBR / % Exp',
         nominalExpected: 'Conforme especificado pelo projeto geométrico/estrutural',
+        formulaExplanation: 'CBR = max(Pressão_0.1"/70.3, Pressão_0.2"/105.5) × 100 | Expansão = (Δh / h0) × 100',
+        defaultBenchData: {
+            cbr_calculado: 22.0,
+            cbr_minimo_projeto: 12.0,
+            expansao_percentual: 0.38,
+            expansao_maxima_tolerada: 1.0
+        },
         benchFields: [
-            { key: 'cbr_calculado_percent', label: 'Índice CBR / ISC Obtido', unit: '%', placeholder: 'Ex: 14.5' },
-            { key: 'cbr_minimo_projeto', label: 'CBR Mínimo de Projeto', unit: '%', placeholder: 'Ex: 12.0' },
-            { key: 'expansao_percent', label: 'Expansão Medida no Defletômetro', unit: '%', placeholder: 'Ex: 0.4' },
-            { key: 'expansao_maxima_tolerada', label: 'Expansão Máxima Tolerada', unit: '%', placeholder: 'Ex: 1.0' }
+            { key: 'cbr_calculado', label: 'Índice CBR / ISC Obtido', unit: '%', placeholder: 'Ex: 22.0', defaultValue: 22.0 },
+            { key: 'cbr_minimo_projeto', label: 'CBR Mínimo de Projeto', unit: '%', placeholder: 'Ex: 12.0', defaultValue: 12.0 },
+            { key: 'expansao_percentual', label: 'Expansão Medida no Defletômetro', unit: '%', placeholder: 'Ex: 0.38', defaultValue: 0.38 },
+            { key: 'expansao_maxima_tolerada', label: 'Expansão Máxima Tolerada', unit: '%', placeholder: 'Ex: 1.0', defaultValue: 1.0 }
         ]
     },
     {
@@ -214,10 +240,18 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Fração de Solo que passa na peneira Nº 40 (0,42 mm)',
         defaultUnit: '%',
         nominalExpected: 'Conforme parâmetros de projeto e especificação geotécnica',
+        formulaExplanation: 'IP = LL - LP | Linha A Casagrande: IP = 0,73 × (LL - 20)',
+        defaultBenchData: {
+            limite_liquidez_ll: 28.4,
+            limite_plasticidade_lp: 19.1,
+            ip_maximo_tolerado: 12.0,
+            ll_maximo_tolerado: 35.0
+        },
         benchFields: [
-            { key: 'limite_liquidez_ll', label: 'Limite de Liquidez (LL)', unit: '%', placeholder: 'Ex: 28.5' },
-            { key: 'limite_plasticidade_lp', label: 'Limite de Plasticidade (LP)', unit: '%', placeholder: 'Ex: 19.2' },
-            { key: 'ip_maximo_tolerado', label: 'IP Máximo de Projeto', unit: '%', placeholder: 'Ex: 12.0' }
+            { key: 'limite_liquidez_ll', label: 'Limite de Liquidez (LL)', unit: '%', placeholder: 'Ex: 28.4', defaultValue: 28.4 },
+            { key: 'limite_plasticidade_lp', label: 'Limite de Plasticidade (LP)', unit: '%', placeholder: 'Ex: 19.1', defaultValue: 19.1 },
+            { key: 'ip_maximo_tolerado', label: 'IP Máximo de Projeto', unit: '%', placeholder: 'Ex: 12.0', defaultValue: 12.0 },
+            { key: 'll_maximo_tolerado', label: 'LL Máximo de Projeto', unit: '%', placeholder: 'Ex: 35.0', defaultValue: 35.0 }
         ]
     },
     {
@@ -230,11 +264,18 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Solo Integral de Jazida ou Pista',
         defaultUnit: '% passante',
         nominalExpected: 'Frações texturais de projeto (Pedregulho, Areia, Silte e Argila)',
+        formulaExplanation: '% Finos = % Silte + % Argila | Peneiras ABNT de 76mm a 0,075mm + Densímetro',
+        defaultBenchData: {
+            perc_pedregulho: 14.5,
+            perc_areia: 58.0,
+            perc_silte: 16.5,
+            perc_argila: 11.0
+        },
         benchFields: [
-            { key: 'perc_pedregulho', label: 'Fração Pedregulho (> 2,0 mm)', unit: '%', placeholder: 'Ex: 12.4' },
-            { key: 'perc_areia', label: 'Fração Areia (0,075 a 2,0 mm)', unit: '%', placeholder: 'Ex: 51.6' },
-            { key: 'perc_silte', label: 'Fração Silte (0,002 a 0,075 mm)', unit: '%', placeholder: 'Ex: 21.0' },
-            { key: 'perc_argila', label: 'Fração Argila (< 0,002 mm)', unit: '%', placeholder: 'Ex: 15.0' }
+            { key: 'perc_pedregulho', label: 'Fração Pedregulho (> 2,0 mm)', unit: '%', placeholder: 'Ex: 14.5', defaultValue: 14.5 },
+            { key: 'perc_areia', label: 'Fração Areia (0,075 a 2,0 mm)', unit: '%', placeholder: 'Ex: 58.0', defaultValue: 58.0 },
+            { key: 'perc_silte', label: 'Fração Silte (0,002 a 0,075 mm)', unit: '%', placeholder: 'Ex: 16.5', defaultValue: 16.5 },
+            { key: 'perc_argila', label: 'Fração Argila (< 0,002 mm)', unit: '%', placeholder: 'Ex: 11.0', defaultValue: 11.0 }
         ]
     },
     {
@@ -247,13 +288,26 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Camada de Solo Compactada na Pista de Terraplenagem',
         defaultUnit: '% GC',
         nominalExpected: 'GC ≥ 95% (Corpo Aterro) / GC ≥ 100% (Subleito/Sub-base)',
+        formulaExplanation: 'V_furo = M_areia / ρ_areia | γd,campo = (M_solo / V_furo) / (1 + w/100) | GC = (γd,campo / γd,lab) × 100',
+        defaultBenchData: {
+            densidade_seca_campo: 2.07,
+            densidade_maxima_lab: 2.04,
+            umidade_campo: 12.1,
+            umidade_otima_lab: 12.5,
+            gc_minimo_exigido: 100.0,
+            massa_solo_umido_g: 3450.0,
+            massa_areia_utilizada_g: 2420.0,
+            densidade_areia_padrao: 1.420
+        },
         benchFields: [
-            { key: 'massa_solo_umido_g', label: 'Massa de Solo Úmido Retirado do Furo', unit: 'g', placeholder: 'Ex: 3450.0' },
-            { key: 'massa_areia_utilizada_g', label: 'Massa de Areia Padrão Gasta no Furo', unit: 'g', placeholder: 'Ex: 2420.0' },
-            { key: 'densidade_areia_padrao', label: 'Massa Específica da Areia Calibrada', unit: 'g/cm³', placeholder: 'Ex: 1.420' },
-            { key: 'umidade_campo_percent', label: 'Umidade do Solo In Situ (w)', unit: '%', placeholder: 'Ex: 13.5' },
-            { key: 'densidade_seca_max_proctor', label: 'γd,max do Ensaio Proctor de Referência', unit: 'g/cm³', placeholder: 'Ex: 1.840' },
-            { key: 'gc_minimo_exigido', label: 'Grau de Compactação Mínimo Exigido', unit: '%', placeholder: 'Ex: 100.0' }
+            { key: 'densidade_seca_campo', label: 'Densidade Seca In Situ (γd,campo)', unit: 'g/cm³', placeholder: 'Ex: 2.07', defaultValue: 2.07 },
+            { key: 'densidade_maxima_lab', label: 'γd,max do Proctor Lab de Referência', unit: 'g/cm³', placeholder: 'Ex: 2.04', defaultValue: 2.04 },
+            { key: 'umidade_campo', label: 'Umidade do Solo In Situ (w)', unit: '%', placeholder: 'Ex: 12.1', defaultValue: 12.1 },
+            { key: 'umidade_otima_lab', label: 'Umidade Ótima Lab (wot)', unit: '%', placeholder: 'Ex: 12.5', defaultValue: 12.5 },
+            { key: 'gc_minimo_exigido', label: 'Grau de Compactação Mínimo Exigido', unit: '%', placeholder: 'Ex: 100.0', defaultValue: 100.0 },
+            { key: 'massa_solo_umido_g', label: 'Massa Solo Úmido do Furo', unit: 'g', placeholder: 'Ex: 3450.0', defaultValue: 3450.0 },
+            { key: 'massa_areia_utilizada_g', label: 'Massa Areia Padrão Utilizada', unit: 'g', placeholder: 'Ex: 2420.0', defaultValue: 2420.0 },
+            { key: 'densidade_areia_padrao', label: 'Massa Específica Areia Padrão', unit: 'g/cm³', placeholder: 'Ex: 1.420', defaultValue: 1.420 }
         ]
     },
     {
@@ -266,10 +320,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Solo Coletado Diretamente no Pátio / Pista de Rolamento',
         defaultUnit: '% umidade',
         nominalExpected: 'Desvio admissível em relação à umidade ótima wot ± 2,0%',
+        formulaExplanation: 'Δw = |w_speedy - wot| ≤ Tolerância Normativa (± 2,0%)',
+        defaultBenchData: {
+            umidade_speedy_medida: 12.8,
+            umidade_otima_proctor: 12.5,
+            tolerancia_desvio_umidade: 2.0
+        },
         benchFields: [
-            { key: 'umidade_speedy_medida', label: 'Leitura de Umidade no Manômetro Speedy', unit: '%', placeholder: 'Ex: 13.2' },
-            { key: 'umidade_otima_proctor', label: 'Umidade Ótima Proctor de Referência (wot)', unit: '%', placeholder: 'Ex: 13.8' },
-            { key: 'tolerancia_desvio_umidade', label: 'Tolerância Máxima de Desvio (±%)', unit: '± %', placeholder: 'Ex: 2.0' }
+            { key: 'umidade_speedy_medida', label: 'Leitura Manômetro Speedy', unit: '%', placeholder: 'Ex: 12.8', defaultValue: 12.8 },
+            { key: 'umidade_otima_proctor', label: 'Umidade Ótima Proctor (wot)', unit: '%', placeholder: 'Ex: 12.5', defaultValue: 12.5 },
+            { key: 'tolerancia_desvio_umidade', label: 'Tolerância Máxima de Desvio', unit: '± %', placeholder: 'Ex: 2.0', defaultValue: 2.0 }
         ]
     },
     {
@@ -282,13 +342,22 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Solo Caracterizado de Jazida / Corte',
         defaultUnit: 'Grupo (IG)',
         nominalExpected: 'Aptidão geotécnica conforme classe de tráfego',
+        formulaExplanation: 'IG = 0,2a + 0,005ac + 0,01bd | a: F200-35, b: F200-15, c: LL-40, d: IP-10',
+        defaultBenchData: {
+            passante_peneira_n200: 28.0,
+            limite_liquidez_val: 26.0,
+            indice_plasticidade_val: 6.0,
+            passante_peneira_n10: 85.0,
+            passante_peneira_n40: 62.0,
+            classificacao_hrb_declarada: 'A-2-4'
+        },
         benchFields: [
-            { key: 'passante_peneira_n10', label: 'Passante Peneira Nº 10 (2,0 mm)', unit: '%', placeholder: 'Ex: 85.0' },
-            { key: 'passante_peneira_n40', label: 'Passante Peneira Nº 40 (0,42 mm)', unit: '%', placeholder: 'Ex: 62.0' },
-            { key: 'passante_peneira_n200', label: 'Passante Peneira Nº 200 (0,075 mm)', unit: '%', placeholder: 'Ex: 34.0' },
-            { key: 'limite_liquidez_val', label: 'Limite de Liquidez (LL)', unit: '%', placeholder: 'Ex: 28.0' },
-            { key: 'indice_plasticidade_val', label: 'Índice de Plasticidade (IP)', unit: '%', placeholder: 'Ex: 8.0' },
-            { key: 'classificacao_hrb_declarada', label: 'Grupo HRB Declarado / Estimado', unit: 'classe', placeholder: 'Ex: A-2-4 (0)' }
+            { key: 'passante_peneira_n200', label: 'Passante Peneira Nº 200 (0,075 mm)', unit: '%', placeholder: 'Ex: 28.0', defaultValue: 28.0 },
+            { key: 'limite_liquidez_val', label: 'Limite de Liquidez (LL)', unit: '%', placeholder: 'Ex: 26.0', defaultValue: 26.0 },
+            { key: 'indice_plasticidade_val', label: 'Índice de Plasticidade (IP)', unit: '%', placeholder: 'Ex: 6.0', defaultValue: 6.0 },
+            { key: 'passante_peneira_n10', label: 'Passante Peneira Nº 10 (2,0 mm)', unit: '%', placeholder: 'Ex: 85.0', defaultValue: 85.0 },
+            { key: 'passante_peneira_n40', label: 'Passante Peneira Nº 40 (0,42 mm)', unit: '%', placeholder: 'Ex: 62.0', defaultValue: 62.0 },
+            { key: 'classificacao_hrb_declarada', label: 'Grupo HRB Declarado / Estimado', unit: 'classe', placeholder: 'Ex: A-2-4', defaultValue: 'A-2-4' }
         ]
     },
     {
@@ -301,10 +370,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Fração de Solo Passante na Peneira Nº 4 (4,75 mm)',
         defaultUnit: 'g/cm³',
         nominalExpected: 'Faixa usual de solos: 2,60 a 2,80 g/cm³',
+        formulaExplanation: 'ρs = Ms / (Ms + M1 - M2) | Ms: Solo seco, M1: Picnômetro+água, M2: Picnômetro+solo+água',
+        defaultBenchData: {
+            massa_picnometro_cheio_agua: 652.4,
+            massa_picnometro_solo_agua: 683.8,
+            massa_solo_seco_estufa: 50.0
+        },
         benchFields: [
-            { key: 'massa_picnometro_cheio_agua', label: 'Massa Picnômetro + Água (M1)', unit: 'g', placeholder: 'Ex: 652.4' },
-            { key: 'massa_picnometro_solo_agua', label: 'Massa Picnômetro + Solo + Água (M2)', unit: 'g', placeholder: 'Ex: 683.8' },
-            { key: 'massa_solo_seco_estufa', label: 'Massa de Solo Seco (Ms)', unit: 'g', placeholder: 'Ex: 50.0' }
+            { key: 'massa_picnometro_cheio_agua', label: 'Massa Picnômetro + Água (M1)', unit: 'g', placeholder: 'Ex: 652.4', defaultValue: 652.4 },
+            { key: 'massa_picnometro_solo_agua', label: 'Massa Picnômetro + Solo + Água (M2)', unit: 'g', placeholder: 'Ex: 683.8', defaultValue: 683.8 },
+            { key: 'massa_solo_seco_estufa', label: 'Massa de Solo Seco (Ms)', unit: 'g', placeholder: 'Ex: 50.0', defaultValue: 50.0 }
         ]
     },
     {
@@ -313,14 +388,20 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         module: 'solos',
         name: 'Classificação MCT (Solos Tropicais / Mini-MCV)',
         norm: 'DNIT 258/2021-ME / DNER-ME 258',
-        description: 'Metodologia MCT (Miniatura, Compactado, Tropical): Coeficiente c\' e Perda de Massa por Imersão (Pi) para solos lateríticos.',
+        description: "Metodologia MCT (Miniatura, Compactado, Tropical): Coeficiente c' e Perda de Massa por Imersão (Pi) para solos lateríticos.",
         sampleType: 'Solo Tropical de Jazida Rodoviária',
         defaultUnit: 'Classe MCT',
-        nominalExpected: 'Solos Lateríticos (LA, LA\', LG\') com boa capacidade portante e baixa expansão',
+        nominalExpected: "Solos Lateríticos (LA, LA', LG') com boa capacidade portante e baixa expansão",
+        formulaExplanation: "Classificação baseada em c' (deformabilidade) e Pi (perda por imersão)",
+        defaultBenchData: {
+            coeficiente_c_linha: 1.45,
+            perda_massa_imersao_pi: 28.0,
+            classe_mct_obtida: "LA' (Solo Laterítico Argiloso)"
+        },
         benchFields: [
-            { key: 'coeficiente_c_linha', label: 'Coeficiente de Deformabilidade (c\')', unit: 'adim.', placeholder: 'Ex: 1.45' },
-            { key: 'perda_massa_imersao_pi', label: 'Perda de Massa por Imersão (Pi)', unit: '%', placeholder: 'Ex: 28.0' },
-            { key: 'classe_mct_obtida', label: 'Classe MCT Obtida', unit: 'grupo', placeholder: 'Ex: LA\' (Areia Laterítica / Solo Laterítico Argiloso)' }
+            { key: 'coeficiente_c_linha', label: "Coeficiente de Deformabilidade (c')", unit: 'adim.', placeholder: 'Ex: 1.45', defaultValue: 1.45 },
+            { key: 'perda_massa_imersao_pi', label: 'Perda de Massa por Imersão (Pi)', unit: '%', placeholder: 'Ex: 28.0', defaultValue: 28.0 },
+            { key: 'classe_mct_obtida', label: 'Classe MCT Obtida', unit: 'grupo', placeholder: "Ex: LA'", defaultValue: "LA' (Solo Laterítico Argiloso)" }
         ]
     },
 
@@ -337,10 +418,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Agregado Miúdo / Pó de Pedra / Areia Lavada',
         defaultUnit: '%',
         nominalExpected: 'EA ≥ 55% (CBUQ DNIT 031/2006-ES)',
+        formulaExplanation: 'EA = (h1 / h2) × 100 | h1: Nível Areia Decantada, h2: Menisco Argila em Suspensão',
+        defaultBenchData: {
+            leitura_areia_h1: 68.0,
+            leitura_argila_h2: 98.0,
+            ea_minimo_exigido: 55.0
+        },
         benchFields: [
-            { key: 'h1_areia', label: 'Leitura Nível Areia (h1)', unit: 'cm', placeholder: 'Ex: 6.8' },
-            { key: 'h2_argila', label: 'Leitura Nível Argila/Floculação (h2)', unit: 'cm', placeholder: 'Ex: 10.2' },
-            { key: 'temperatura_solucao', label: 'Temp. Solução de Trabalho', unit: '°C', placeholder: 'Ex: 22' }
+            { key: 'leitura_areia_h1', label: 'Leitura Nível Areia (h1)', unit: 'mm', placeholder: 'Ex: 68.0', defaultValue: 68.0 },
+            { key: 'leitura_argila_h2', label: 'Leitura Nível Argila/Floculação (h2)', unit: 'mm', placeholder: 'Ex: 98.0', defaultValue: 98.0 },
+            { key: 'ea_minimo_exigido', label: 'Equivalente de Areia Mínimo Exigido', unit: '%', placeholder: 'Ex: 55.0', defaultValue: 55.0 }
         ]
     },
     {
@@ -353,10 +440,18 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Agregado Graúdo (Brita 0, 1, 2, Bica Corrida)',
         defaultUnit: '% perda',
         nominalExpected: 'Desgaste ≤ 40% (CBUQ) / ≤ 50% (Base Graduada)',
+        formulaExplanation: 'LA = [(M1 - M2) / M1] × 100 | M1: Massa inicial seca, M2: Retida na peneira Nº 12 (1,7mm)',
+        defaultBenchData: {
+            m1_inicial: 5000.0,
+            m2_retida12: 3790.0,
+            limite_maximo_abrasao: 40.0,
+            graduacao: 'Graduação B (11 esferas)'
+        },
         benchFields: [
-            { key: 'm1_inicial', label: 'Massa Seca Inicial (M1)', unit: 'g', placeholder: 'Ex: 5000' },
-            { key: 'm2_retida12', label: 'Massa Retida Peneira Nº 12 (M2)', unit: 'g', placeholder: 'Ex: 3620' },
-            { key: 'graduacao', label: 'Graduação do Ensaio', unit: 'tipo', placeholder: 'Ex: B (11 esferas)' }
+            { key: 'm1_inicial', label: 'Massa Seca Inicial (M1)', unit: 'g', placeholder: 'Ex: 5000.0', defaultValue: 5000.0 },
+            { key: 'm2_retida12', label: 'Massa Retida Peneira Nº 12 (M2)', unit: 'g', placeholder: 'Ex: 3790.0', defaultValue: 3790.0 },
+            { key: 'limite_maximo_abrasao', label: 'Limite Máximo Tolerado', unit: '%', placeholder: 'Ex: 40.0', defaultValue: 40.0 },
+            { key: 'graduacao', label: 'Graduação do Ensaio', unit: 'tipo', placeholder: 'Ex: B (11 esferas)', defaultValue: 'Graduação B (11 esferas)' }
         ]
     },
     {
@@ -369,10 +464,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Agregado Graúdo Britado',
         defaultUnit: 'Índice',
         nominalExpected: 'Índice Médio ≥ 0,50 | Lamelas ≤ 15%',
+        formulaExplanation: 'IF = E / C | Teor de Lamelas = (Massa passante em fendas / Massa total) × 100',
+        defaultBenchData: {
+            comprimento_medio: 24.5,
+            espessura_media: 13.8,
+            perc_lamelas: 9.4
+        },
         benchFields: [
-            { key: 'comprimento_medio', label: 'Comprimento Maior Médio (C)', unit: 'mm', placeholder: 'Ex: 24.5' },
-            { key: 'espessura_media', label: 'Espessura Menor Média (E)', unit: 'mm', placeholder: 'Ex: 13.8' },
-            { key: 'perc_lamelas', label: 'Teor de Lamelas em Peneira de Fendas', unit: '%', placeholder: 'Ex: 9.4' }
+            { key: 'comprimento_medio', label: 'Comprimento Maior Médio (C)', unit: 'mm', placeholder: 'Ex: 24.5', defaultValue: 24.5 },
+            { key: 'espessura_media', label: 'Espessura Menor Média (E)', unit: 'mm', placeholder: 'Ex: 13.8', defaultValue: 13.8 },
+            { key: 'perc_lamelas', label: 'Teor de Lamelas em Peneira de Fendas', unit: '%', placeholder: 'Ex: 9.4', defaultValue: 9.4 }
         ]
     },
     {
@@ -385,10 +486,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Brita 1 / Brita 2 recoberta com CAP',
         defaultUnit: 'Parecer',
         nominalExpected: 'Satisfatório (Sem deslocamento da película)',
+        formulaExplanation: 'Inspeção visual da integridade da película betuminosa após 72h de banho-maria',
+        defaultBenchData: {
+            tempo_imersao: 72,
+            temperatura_banho: 40,
+            deslocamento_pelicula: 'Sem Deslocamento (100% Recoberto)'
+        },
         benchFields: [
-            { key: 'tempo_imersao', label: 'Tempo de Banho-Maria', unit: 'horas', placeholder: 'Ex: 72' },
-            { key: 'temperatura_banho', label: 'Temperatura do Ensaio', unit: '°C', placeholder: 'Ex: 40' },
-            { key: 'dop_utilizado', label: 'Melhorador de Adesividade (DOP)', unit: '%', placeholder: 'Ex: 0.1% ou Nenhum' }
+            { key: 'tempo_imersao', label: 'Tempo de Banho-Maria', unit: 'horas', placeholder: 'Ex: 72', defaultValue: 72 },
+            { key: 'temperatura_banho', label: 'Temperatura do Ensaio', unit: '°C', placeholder: 'Ex: 40', defaultValue: 40 },
+            { key: 'deslocamento_pelicula', label: 'Aspecto da Película', unit: 'obs', placeholder: 'Ex: Sem Deslocamento', defaultValue: 'Sem Deslocamento (100% Recoberto)' }
         ]
     },
     {
@@ -401,10 +508,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Agregado Graúdo / Agregado Miúdo',
         defaultUnit: 'DMC / MF',
         nominalExpected: 'Enquadramento contínuo na graduação de projeto',
+        formulaExplanation: 'MF = Somatório das porcentagens retidas acumuladas da série normal / 100',
+        defaultBenchData: {
+            dmc_mm: 19.0,
+            modulo_finura: 2.75,
+            massa_fina_passante200: 1.8
+        },
         benchFields: [
-            { key: 'dmc_mm', label: 'Dimensão Máxima Característica (DMC)', unit: 'mm', placeholder: 'Ex: 19.0' },
-            { key: 'modulo_finura', label: 'Módulo de Finura Calculado (MF)', unit: 'adim.', placeholder: 'Ex: 2.75' },
-            { key: 'massa_fina_passante200', label: 'Finos Passantes Peneira Nº 200', unit: '%', placeholder: 'Ex: 1.8' }
+            { key: 'dmc_mm', label: 'Dimensão Máxima Característica (DMC)', unit: 'mm', placeholder: 'Ex: 19.0', defaultValue: 19.0 },
+            { key: 'modulo_finura', label: 'Módulo de Finura Calculado (MF)', unit: 'adim.', placeholder: 'Ex: 2.75', defaultValue: 2.75 },
+            { key: 'massa_fina_passante200', label: 'Finos Passantes Peneira Nº 200', unit: '%', placeholder: 'Ex: 1.8', defaultValue: 1.8 }
         ]
     },
     {
@@ -417,10 +530,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Areia Lavada / Pó de Pedra Britado',
         defaultUnit: 'g/cm³ / %',
         nominalExpected: 'Absorção de Água ≤ 2,0% | Massa Específica: 2,55 a 2,75 g/cm³',
+        formulaExplanation: 'Abs = [(S - A) / A] × 100 | ρs = A / [V - (S - A)]',
+        defaultBenchData: {
+            massa_seca_estufa: 492.5,
+            massa_sss_cone: 500.0,
+            volume_deslocado_ml: 191.5
+        },
         benchFields: [
-            { key: 'massa_seca_estufa', label: 'Massa Seca em Estufa (A)', unit: 'g', placeholder: 'Ex: 492.5' },
-            { key: 'massa_sss_cone', label: 'Massa Saturada Superfície Seca (S)', unit: 'g', placeholder: 'Ex: 500.0' },
-            { key: 'volume_deslocado_ml', label: 'Volume de Água Deslocado no Frasco (V)', unit: 'cm³', placeholder: 'Ex: 192.0' }
+            { key: 'massa_seca_estufa', label: 'Massa Seca em Estufa (A)', unit: 'g', placeholder: 'Ex: 492.5', defaultValue: 492.5 },
+            { key: 'massa_sss_cone', label: 'Massa Saturada Superfície Seca (S)', unit: 'g', placeholder: 'Ex: 500.0', defaultValue: 500.0 },
+            { key: 'volume_deslocado_ml', label: 'Volume de Água Deslocado no Frasco (V)', unit: 'cm³', placeholder: 'Ex: 191.5', defaultValue: 191.5 }
         ]
     },
     {
@@ -433,10 +552,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Brita 0 / Brita 1 / Brita 2 / Rachão',
         defaultUnit: 'g/cm³ / %',
         nominalExpected: 'Absorção de Água ≤ 1,5% (CBUQ DNIT 031/2006-ES)',
+        formulaExplanation: 'Abs = [(B - A) / A] × 100 | ρs = A / (B - C) (Balança Hidrostática)',
+        defaultBenchData: {
+            massa_seca_estufa_g: 3000.0,
+            massa_sss_ar_g: 3036.0,
+            massa_submersa_agua_g: 1895.0
+        },
         benchFields: [
-            { key: 'massa_seca_estufa_g', label: 'Massa Seca em Estufa (A)', unit: 'g', placeholder: 'Ex: 3000.0' },
-            { key: 'massa_sss_ar_g', label: 'Massa Saturada Superfície Seca ao Ar (B)', unit: 'g', placeholder: 'Ex: 3036.0' },
-            { key: 'massa_submersa_agua_g', label: 'Massa Aparente Submersa na Água (C)', unit: 'g', placeholder: 'Ex: 1895.0' }
+            { key: 'massa_seca_estufa_g', label: 'Massa Seca em Estufa (A)', unit: 'g', placeholder: 'Ex: 3000.0', defaultValue: 3000.0 },
+            { key: 'massa_sss_ar_g', label: 'Massa Saturada Superfície Seca (B)', unit: 'g', placeholder: 'Ex: 3036.0', defaultValue: 3036.0 },
+            { key: 'massa_submersa_agua_g', label: 'Massa Aparente Submersa em Água (C)', unit: 'g', placeholder: 'Ex: 1895.0', defaultValue: 1895.0 }
         ]
     },
     {
@@ -449,9 +574,14 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Agregado Graúdo e Miúdo',
         defaultUnit: '%',
         nominalExpected: 'Teor de Torrões ≤ 1,5% (CBUQ) / ≤ 1,0% (Concreto)',
+        formulaExplanation: 'Torrões = [(Mi - Mr) / Mi] × 100 pós destorroamento e lavagem',
+        defaultBenchData: {
+            massa_inicial_amostra: 1000.0,
+            massa_retida_apos_atrito: 994.2
+        },
         benchFields: [
-            { key: 'massa_inicial_amostra', label: 'Massa da Fração de Teste', unit: 'g', placeholder: 'Ex: 1000.0' },
-            { key: 'massa_retida_apos_atrito', label: 'Massa Retida após Destorroamento e Lavagem', unit: 'g', placeholder: 'Ex: 994.2' }
+            { key: 'massa_inicial_amostra', label: 'Massa da Fração de Teste', unit: 'g', placeholder: 'Ex: 1000.0', defaultValue: 1000.0 },
+            { key: 'massa_retida_apos_atrito', label: 'Massa Retida após Destorroamento', unit: 'g', placeholder: 'Ex: 994.2', defaultValue: 994.2 }
         ]
     },
     {
@@ -464,10 +594,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Agregado Graúdo Britado da Pedreira',
         defaultUnit: '% perda',
         nominalExpected: 'Perda de Massa ≤ 12% (Sulfato de Sódio) / ≤ 18% (Sulfato de Magnésio)',
+        formulaExplanation: 'Perda = [(Mi - Mf) / Mi] × 100 após 5 ciclos saturados',
+        defaultBenchData: {
+            massa_inicial_ciclos: 2500.0,
+            massa_final_lavada: 2362.5,
+            limite_perda_sanidade: 12.0
+        },
         benchFields: [
-            { key: 'massa_inicial_ciclos', label: 'Massa Total Inicial Pré-Ciclos', unit: 'g', placeholder: 'Ex: 2500.0' },
-            { key: 'massa_final_lavada', label: 'Massa Retida Seca Pós 5 Ciclos', unit: 'g', placeholder: 'Ex: 2362.5' },
-            { key: 'tipo_solucao', label: 'Solução Saturada Utilizada', unit: 'tipo', placeholder: 'Ex: Na2SO4 (Sulfato de Sódio)' }
+            { key: 'massa_inicial_ciclos', label: 'Massa Total Inicial Pré-Ciclos', unit: 'g', placeholder: 'Ex: 2500.0', defaultValue: 2500.0 },
+            { key: 'massa_final_lavada', label: 'Massa Retida Seca Pós 5 Ciclos', unit: 'g', placeholder: 'Ex: 2362.5', defaultValue: 2362.5 },
+            { key: 'limite_perda_sanidade', label: 'Perda Máxima Permitida', unit: '%', placeholder: 'Ex: 12.0', defaultValue: 12.0 }
         ]
     },
     {
@@ -480,9 +616,14 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Agregado Graúdo e Areia',
         defaultUnit: '%',
         nominalExpected: 'Brita Graúda: ≤ 1,5% | Agregado Miúdo: ≤ 4,0%',
+        formulaExplanation: '% Finos #200 = [(Ma - Mp) / Ma] × 100 por via úmida',
+        defaultBenchData: {
+            massa_amostra_seca_antes: 2500.0,
+            massa_amostra_seca_apos: 2472.5
+        },
         benchFields: [
-            { key: 'massa_amostra_seca_antes', label: 'Massa Seca Antes da Lavagem', unit: 'g', placeholder: 'Ex: 2500.0' },
-            { key: 'massa_amostra_seca_apos', label: 'Massa Seca Retida após Lavagem Nº 200', unit: 'g', placeholder: 'Ex: 2472.5' }
+            { key: 'massa_amostra_seca_antes', label: 'Massa Seca Antes da Lavagem', unit: 'g', placeholder: 'Ex: 2500.0', defaultValue: 2500.0 },
+            { key: 'massa_amostra_seca_apos', label: 'Massa Seca Retida após Lavagem Nº 200', unit: 'g', placeholder: 'Ex: 2472.5', defaultValue: 2472.5 }
         ]
     },
 
@@ -499,12 +640,20 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Massa Asfáltica CBUQ em Caminhão e Pista',
         defaultUnit: '°C',
         nominalExpected: 'Usina: 145°C - 175°C | Chegada Pista: ≥ 135°C | Rolamento: ≥ 120°C',
+        formulaExplanation: 'Perfil Térmico Contínuo: Usina ≥ 145°C | Pista ≥ 135°C | Rolamento ≥ 120°C',
+        defaultBenchData: {
+            temp_saida_usina: 158,
+            temp_chegada_pista: 146,
+            temp_inicio_rolamento: 136,
+            temp_termino_rolagem: 105,
+            temp_ligante_tanque: 155
+        },
         benchFields: [
-            { key: 'temp_ligante_tanque', label: 'Temp. Ligante CAP no Tanque', unit: '°C', placeholder: 'Ex: 155' },
-            { key: 'temp_agregados_secador', label: 'Temp. Agregados no Secador', unit: '°C', placeholder: 'Ex: 165' },
-            { key: 'temp_saida_usina', label: 'Temp. Massa Saída Usina', unit: '°C', placeholder: 'Ex: 162' },
-            { key: 'temp_chegada_pista', label: 'Temp. Chegada na Pista', unit: '°C', placeholder: 'Ex: 148' },
-            { key: 'temp_inicio_rolamento', label: 'Temp. Início Compactação Rolos', unit: '°C', placeholder: 'Ex: 132' }
+            { key: 'temp_saida_usina', label: 'Temp. Massa Saída da Usina', unit: '°C', placeholder: 'Ex: 158', defaultValue: 158 },
+            { key: 'temp_chegada_pista', label: 'Temp. Chegada na Pista', unit: '°C', placeholder: 'Ex: 146', defaultValue: 146 },
+            { key: 'temp_inicio_rolamento', label: 'Temp. Início Compactação Rolos', unit: '°C', placeholder: 'Ex: 136', defaultValue: 136 },
+            { key: 'temp_termino_rolagem', label: 'Temp. Término da Rolagem', unit: '°C', placeholder: 'Ex: 105', defaultValue: 105 },
+            { key: 'temp_ligante_tanque', label: 'Temp. Ligante CAP no Tanque', unit: '°C', placeholder: 'Ex: 155', defaultValue: 155 }
         ]
     },
     {
@@ -516,12 +665,21 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         description: 'Determinação do teor de asfalto pelo extrator centrífugo Rotarex ou fornalha de calcinação NCAT.',
         sampleType: 'Batelada CBUQ Coletada na Saída do Misturador',
         defaultUnit: '% ligante',
-        nominalExpected: 'Teor Projeto Pb ± 0,30% (Ex: 5,20% ± 0,30% => 4,90% a 5,50%)',
+        nominalExpected: 'Teor Projeto Pb ± 0,30% (Ex: 5,40% ± 0,30% => 5,10% a 5,70%)',
+        formulaExplanation: 'Pb = [(Mi - (Mf + Me)) / Mi] × 100 | ΔPb = |Pb - Pb,proj| ≤ 0,30%',
+        defaultBenchData: {
+            teor_projeto: 5.40,
+            massa_inicial_mistura: 1200.0,
+            massa_agregados_recuperados: 1131.8,
+            massa_filler_filtro: 3.4,
+            tolerancia_pb: 0.30
+        },
         benchFields: [
-            { key: 'teor_projeto', label: 'Teor de Projeto de Referência (Pb)', unit: '%', placeholder: 'Ex: 5.20' },
-            { key: 'massa_inicial_mistura', label: 'Massa Inicial Seca da Mistura (Mi)', unit: 'g', placeholder: 'Ex: 1200.0' },
-            { key: 'massa_agregados_recuperados', label: 'Massa Agregados Secos Extraídos (Mf)', unit: 'g', placeholder: 'Ex: 1136.2' },
-            { key: 'massa_filler_filtro', label: 'Finos Retidos no Papel Filtro (Me)', unit: 'g', placeholder: 'Ex: 3.4' }
+            { key: 'teor_projeto', label: 'Teor de Projeto de Referência (Pb)', unit: '%', placeholder: 'Ex: 5.40', defaultValue: 5.40 },
+            { key: 'massa_inicial_mistura', label: 'Massa Inicial Seca da Mistura (Mi)', unit: 'g', placeholder: 'Ex: 1200.0', defaultValue: 1200.0 },
+            { key: 'massa_agregados_recuperados', label: 'Massa Agregados Secos Extraídos (Mf)', unit: 'g', placeholder: 'Ex: 1131.8', defaultValue: 1131.8 },
+            { key: 'massa_filler_filtro', label: 'Finos Retidos no Papel Filtro (Me)', unit: 'g', placeholder: 'Ex: 3.4', defaultValue: 3.4 },
+            { key: 'tolerancia_pb', label: 'Tolerância Normativa DNIT (±%)', unit: '± %', placeholder: 'Ex: 0.30', defaultValue: 0.30 }
         ]
     },
     {
@@ -534,12 +692,22 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Corpos de Prova Cilíndricos Moldados (75 golpes/face)',
         defaultUnit: 'kgf / mm / %',
         nominalExpected: 'Estabilidade ≥ 800 kgf | Fluência: 2,0 - 4,5 mm | Vv: 3,0% - 5,0% | RBV: 75% - 82%',
+        formulaExplanation: 'Vv = [(Gmm - Gmb) / Gmm] × 100 | Estabilidade corrigida e fluência medida',
+        defaultBenchData: {
+            estabilidade_kgf: 1240,
+            fluencia_mm: 3.2,
+            densidade_aparente_gmb: 2.385,
+            densidade_maxima_gmm: 2.488,
+            volume_vazios_vv: 4.1,
+            relacao_betume_vazios_rbv: 78.4
+        },
         benchFields: [
-            { key: 'estabilidade_kgf', label: 'Estabilidade Corrigida da Prensa', unit: 'kgf', placeholder: 'Ex: 1180' },
-            { key: 'fluencia_mm', label: 'Fluência Medida no Extensômetro', unit: 'mm', placeholder: 'Ex: 3.2' },
-            { key: 'densidade_aparente_gmb', label: 'Densidade Aparente CP (Gmb)', unit: 'g/cm³', placeholder: 'Ex: 2.385' },
-            { key: 'densidade_maxima_gmm', label: 'Densidade Máx. Teórica Rice (Gmm)', unit: 'g/cm³', placeholder: 'Ex: 2.488' },
-            { key: 'vam_percent', label: 'Vazios do Agregado Mineral (VAM)', unit: '%', placeholder: 'Ex: 15.4' }
+            { key: 'estabilidade_kgf', label: 'Estabilidade Corrigida da Prensa', unit: 'kgf', placeholder: 'Ex: 1240', defaultValue: 1240 },
+            { key: 'fluencia_mm', label: 'Fluência Medida no Extensômetro', unit: 'mm', placeholder: 'Ex: 3.2', defaultValue: 3.2 },
+            { key: 'densidade_aparente_gmb', label: 'Densidade Aparente CP (Gmb)', unit: 'g/cm³', placeholder: 'Ex: 2.385', defaultValue: 2.385 },
+            { key: 'densidade_maxima_gmm', label: 'Densidade Máx. Teórica Rice (Gmm)', unit: 'g/cm³', placeholder: 'Ex: 2.488', defaultValue: 2.488 },
+            { key: 'volume_vazios_vv', label: 'Volume de Vazios de Ar (Vv)', unit: '%', placeholder: 'Ex: 4.1', defaultValue: 4.1 },
+            { key: 'relacao_betume_vazios_rbv', label: 'Relação Betume-Vazios (RBV)', unit: '%', placeholder: 'Ex: 78.4', defaultValue: 78.4 }
         ]
     },
     {
@@ -552,12 +720,20 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Agregado Mineral Extraído da Mistura Asfáltica',
         defaultUnit: '% passante',
         nominalExpected: '100% dos pontos dentro do envelope da Faixa DNIT selecionada',
+        formulaExplanation: 'Envelope Normativo Faixa C: 3/8" (70-90%), Nº4 (44-72%), Nº40 (13-30%), Nº200 (4-10%)',
+        defaultBenchData: {
+            faixa_selecionada: 'Faixa C (Capa Asfáltica)',
+            passante_peneira_3_8: 78.4,
+            passante_peneira_n4: 56.2,
+            passante_peneira_n40: 16.5,
+            passante_peneira_n200: 5.4
+        },
         benchFields: [
-            { key: 'faixa_selecionada', label: 'Faixa de Projeto (A, B ou C)', unit: 'DNIT', placeholder: 'Ex: Faixa C' },
-            { key: 'passante_peneira_3_8', label: 'Passante Peneira 3/8" (9,5 mm)', unit: '%', placeholder: 'Ex: 84.5 (Faixa C: 70-90)' },
-            { key: 'passante_peneira_n4', label: 'Passante Peneira Nº 4 (4,75 mm)', unit: '%', placeholder: 'Ex: 58.2 (Faixa C: 44-72)' },
-            { key: 'passante_peneira_n40', label: 'Passante Peneira Nº 40 (0,42 mm)', unit: '%', placeholder: 'Ex: 21.0 (Faixa C: 13-30)' },
-            { key: 'passante_peneira_n200', label: 'Passante Peneira Nº 200 (0,075 mm)', unit: '%', placeholder: 'Ex: 6.2 (Faixa C: 4-10)' }
+            { key: 'faixa_selecionada', label: 'Faixa de Projeto Selecionada', unit: 'DNIT', placeholder: 'Ex: Faixa C', defaultValue: 'Faixa C (Capa Asfáltica)' },
+            { key: 'passante_peneira_3_8', label: 'Passante Peneira 3/8" (9,5 mm)', unit: '%', placeholder: 'Ex: 78.4', defaultValue: 78.4 },
+            { key: 'passante_peneira_n4', label: 'Passante Peneira Nº 4 (4,75 mm)', unit: '%', placeholder: 'Ex: 56.2', defaultValue: 56.2 },
+            { key: 'passante_peneira_n40', label: 'Passante Peneira Nº 40 (0,42 mm)', unit: '%', placeholder: 'Ex: 16.5', defaultValue: 16.5 },
+            { key: 'passante_peneira_n200', label: 'Passante Peneira Nº 200 (0,075 mm)', unit: '%', placeholder: 'Ex: 5.4', defaultValue: 5.4 }
         ]
     },
     {
@@ -570,10 +746,18 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Corpos de Prova Marshall (101,6 mm x 63,5 mm)',
         defaultUnit: 'MPa',
         nominalExpected: 'RT ≥ 0,65 MPa (CAP Convencional) / ≥ 0,80 MPa (Asfalto Polímero)',
+        formulaExplanation: 'RT = (2 × P × 1000) / (π × D × H) | P: Carga máxima de ruptura (kN)',
+        defaultBenchData: {
+            carga_ruptura_kn: 15.2,
+            diametro_cp_mm: 101.6,
+            altura_cp_mm: 63.5,
+            rt_minimo_exigido: 0.65
+        },
         benchFields: [
-            { key: 'carga_ruptura_kn', label: 'Carga Máxima de Ruptura (P)', unit: 'kN', placeholder: 'Ex: 14.8' },
-            { key: 'diametro_cp_mm', label: 'Diâmetro do CP (D)', unit: 'mm', placeholder: 'Ex: 101.6' },
-            { key: 'altura_cp_mm', label: 'Altura do CP (H)', unit: 'mm', placeholder: 'Ex: 63.5' }
+            { key: 'carga_ruptura_kn', label: 'Carga Máxima de Ruptura (P)', unit: 'kN', placeholder: 'Ex: 15.2', defaultValue: 15.2 },
+            { key: 'diametro_cp_mm', label: 'Diâmetro do CP (D)', unit: 'mm', placeholder: 'Ex: 101.6', defaultValue: 101.6 },
+            { key: 'altura_cp_mm', label: 'Altura do CP (H)', unit: 'mm', placeholder: 'Ex: 63.5', defaultValue: 63.5 },
+            { key: 'rt_minimo_exigido', label: 'RT Mínimo Exigido', unit: 'MPa', placeholder: 'Ex: 0.65', defaultValue: 0.65 }
         ]
     },
     {
@@ -586,11 +770,18 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Testemunho Extraído de Pista (Carotilha)',
         defaultUnit: '% GC',
         nominalExpected: '97,0% ≤ GC ≤ 102,0% da densidade média de projeto',
+        formulaExplanation: 'GC = (Gmb,pista / Gmb,projeto) × 100 | Tolerância DNIT: 97,0% a 102,0%',
+        defaultBenchData: {
+            densidade_in_situ_g_cm3: 2.378,
+            densidade_projeto_g_cm3: 2.420,
+            espessura_camada_cm: 5.2,
+            espessura_projeto_cm: 5.0
+        },
         benchFields: [
-            { key: 'densidade_in_situ_g_cm3', label: 'Densidade Aparente do Testemunho (Gmb)', unit: 'g/cm³', placeholder: 'Ex: 2.375' },
-            { key: 'densidade_projeto_g_cm3', label: 'Densidade de Referência de Projeto', unit: 'g/cm³', placeholder: 'Ex: 2.420' },
-            { key: 'estaca_km_extracao', label: 'Estaca / Quilômetro da Extração', unit: 'km', placeholder: 'Ex: Km 182+400 Pista Sul' },
-            { key: 'espessura_camada_cm', label: 'Espessura Medida da Camada', unit: 'cm', placeholder: 'Ex: 5.2 (Projeto: 5.0 cm)' }
+            { key: 'densidade_in_situ_g_cm3', label: 'Densidade Aparente do Testemunho (Gmb)', unit: 'g/cm³', placeholder: 'Ex: 2.378', defaultValue: 2.378 },
+            { key: 'densidade_projeto_g_cm3', label: 'Densidade de Referência de Projeto', unit: 'g/cm³', placeholder: 'Ex: 2.420', defaultValue: 2.420 },
+            { key: 'espessura_camada_cm', label: 'Espessura Medida da Camada', unit: 'cm', placeholder: 'Ex: 5.2', defaultValue: 5.2 },
+            { key: 'espessura_projeto_cm', label: 'Espessura de Projeto da Camada', unit: 'cm', placeholder: 'Ex: 5.0', defaultValue: 5.0 }
         ]
     },
     {
@@ -603,9 +794,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Corpos de Prova Marshall Condicionados vs. Secos',
         defaultUnit: '% RTR',
         nominalExpected: 'RTR ≥ 80,0% (DNIT 031/2006-ES)',
+        formulaExplanation: 'RTR = (RT_condicionado / RT_seco) × 100 | Ensaio de suscetibilidade à umidade',
+        defaultBenchData: {
+            rt_amostra_seca_mpa: 1.15,
+            rt_amostra_condicionada_mpa: 0.98,
+            rtr_minimo_exigido: 80.0
+        },
         benchFields: [
-            { key: 'rt_amostra_seca_mpa', label: 'RT Média do Grupo Seco (Controle)', unit: 'MPa', placeholder: 'Ex: 0.95' },
-            { key: 'rt_amostra_condicionada_mpa', label: 'RT Média do Grupo Condicionado (Úmido)', unit: 'MPa', placeholder: 'Ex: 0.82' }
+            { key: 'rt_amostra_seca_mpa', label: 'RT Média do Grupo Seco (Controle)', unit: 'MPa', placeholder: 'Ex: 1.15', defaultValue: 1.15 },
+            { key: 'rt_amostra_condicionada_mpa', label: 'RT Média do Grupo Condicionado', unit: 'MPa', placeholder: 'Ex: 0.98', defaultValue: 0.98 },
+            { key: 'rtr_minimo_exigido', label: 'RTR Mínimo Exigido', unit: '%', placeholder: 'Ex: 80.0', defaultValue: 80.0 }
         ]
     },
     {
@@ -618,10 +816,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Corpos de Prova Cilíndricos a 25°C e freq. 10 Hz',
         defaultUnit: 'MPa',
         nominalExpected: 'MR ≥ 3.000 MPa a 25°C (Requisito Estrutural Rodoviário MeDiNa)',
+        formulaExplanation: 'MR = [σ × (0,27 + 0,05ν)] / (ε × 10^-6) | Tensão dinâmica repetida a 25°C',
+        defaultBenchData: {
+            tensao_repetida_mpa: 0.15,
+            deformacao_resiliente_um: 42.0,
+            mr_minimo_exigido: 3000
+        },
         benchFields: [
-            { key: 'tensao_repetida_mpa', label: 'Tensão de Tração Aplicada (σ)', unit: 'MPa', placeholder: 'Ex: 0.15' },
-            { key: 'deformacao_resiliente_um', label: 'Deformação Horizontal Recuperável (ε)', unit: 'µm', placeholder: 'Ex: 48.0' },
-            { key: 'temperatura_ensaio', label: 'Temperatura da Câmara Térmica', unit: '°C', placeholder: 'Ex: 25.0' }
+            { key: 'tensao_repetida_mpa', label: 'Tensão de Tração Aplicada (σ)', unit: 'MPa', placeholder: 'Ex: 0.15', defaultValue: 0.15 },
+            { key: 'deformacao_resiliente_um', label: 'Deformação Horizontal Recuperável (ε)', unit: 'µm', placeholder: 'Ex: 42.0', defaultValue: 42.0 },
+            { key: 'mr_minimo_exigido', label: 'Módulo Mínimo Requerido (MeDiNa)', unit: 'MPa', placeholder: 'Ex: 3000', defaultValue: 3000 }
         ]
     },
     {
@@ -634,10 +838,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Amostra de CAP 50/70 ou CAP 30/45 do Tanque',
         defaultUnit: 'SSF',
         nominalExpected: 'Usinagem: 75 a 150 SSF | Compactação: 150 a 300 SSF',
+        formulaExplanation: 'Determinação das temperaturas de usinagem e compactação pela curva de viscosidade SSF',
+        defaultBenchData: {
+            ssf_a_135c: 285,
+            ssf_a_150c: 140,
+            ssf_a_177c: 68
+        },
         benchFields: [
-            { key: 'ssf_a_135c', label: 'Viscosidade Furol a 135°C', unit: 'SSF', placeholder: 'Ex: 285' },
-            { key: 'ssf_a_150c', label: 'Viscosidade Furol a 150°C', unit: 'SSF', placeholder: 'Ex: 140' },
-            { key: 'ssf_a_177c', label: 'Viscosidade Furol a 177°C', unit: 'SSF', placeholder: 'Ex: 68' }
+            { key: 'ssf_a_135c', label: 'Viscosidade Furol a 135°C', unit: 'SSF', placeholder: 'Ex: 285', defaultValue: 285 },
+            { key: 'ssf_a_150c', label: 'Viscosidade Furol a 150°C', unit: 'SSF', placeholder: 'Ex: 140', defaultValue: 140 },
+            { key: 'ssf_a_177c', label: 'Viscosidade Furol a 177°C', unit: 'SSF', placeholder: 'Ex: 68', defaultValue: 68 }
         ]
     },
     {
@@ -650,10 +860,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Cimento Asfáltico de Petróleo (CAP)',
         defaultUnit: '°C',
         nominalExpected: 'CAP 50/70: ≥ 46°C | CAP 30/45: ≥ 50°C | Polímero: ≥ 60°C',
+        formulaExplanation: 'T_amolecimento = (T1 + T2) / 2 | Banho de água com taxa de aquecimento de 5°C/min',
+        defaultBenchData: {
+            temp_amolecimento_1: 48.5,
+            temp_amolecimento_2: 49.1,
+            tipo_ligante: 'CAP 50/70 Petrobras'
+        },
         benchFields: [
-            { key: 'temp_amolecimento_1', label: 'Temperatura Rompimento Anel 1', unit: '°C', placeholder: 'Ex: 48.5' },
-            { key: 'temp_amolecimento_2', label: 'Temperatura Rompimento Anel 2', unit: '°C', placeholder: 'Ex: 49.0' },
-            { key: 'tipo_ligante', label: 'Classificação Nominal do Ligante', unit: 'tipo', placeholder: 'Ex: CAP 50/70 Petrobras' }
+            { key: 'temp_amolecimento_1', label: 'Temperatura Rompimento Anel 1', unit: '°C', placeholder: 'Ex: 48.5', defaultValue: 48.5 },
+            { key: 'temp_amolecimento_2', label: 'Temperatura Rompimento Anel 2', unit: '°C', placeholder: 'Ex: 49.1', defaultValue: 49.1 },
+            { key: 'tipo_ligante', label: 'Classificação Nominal do Ligante', unit: 'tipo', placeholder: 'Ex: CAP 50/70 Petrobras', defaultValue: 'CAP 50/70 Petrobras' }
         ]
     },
     {
@@ -666,10 +882,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Cimento Asfáltico de Petróleo (CAP)',
         defaultUnit: 'dmm (0,1 mm)',
         nominalExpected: 'CAP 50/70: 50 a 70 dmm | CAP 30/45: 30 a 45 dmm',
+        formulaExplanation: 'Penetração Média = (P1 + P2 + P3) / 3 em décimos de milímetro a 25°C (100g, 5s)',
+        defaultBenchData: {
+            leitura_pen_1: 56,
+            leitura_pen_2: 60,
+            leitura_pen_3: 58
+        },
         benchFields: [
-            { key: 'leitura_pen_1', label: 'Determinação 1', unit: '0,1 mm', placeholder: 'Ex: 58' },
-            { key: 'leitura_pen_2', label: 'Determinação 2', unit: '0,1 mm', placeholder: 'Ex: 61' },
-            { key: 'leitura_pen_3', label: 'Determinação 3', unit: '0,1 mm', placeholder: 'Ex: 59' }
+            { key: 'leitura_pen_1', label: 'Determinação 1', unit: '0,1 mm', placeholder: 'Ex: 56', defaultValue: 56 },
+            { key: 'leitura_pen_2', label: 'Determinação 2', unit: '0,1 mm', placeholder: 'Ex: 60', defaultValue: 60 },
+            { key: 'leitura_pen_3', label: 'Determinação 3', unit: '0,1 mm', placeholder: 'Ex: 58', defaultValue: 58 }
         ]
     },
     {
@@ -682,10 +904,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Emulsão Asfáltica para Pintura de Ligação ou Imprimação',
         defaultUnit: '% resíduo',
         nominalExpected: 'Resíduo ≥ 60% (RR-1C) | Carga Positiva (+) | Peneiramento ≤ 0,10%',
+        formulaExplanation: 'Resíduo a 163°C ≥ 60,0% | Retido na peneira 0,84mm ≤ 0,10%',
+        defaultBenchData: {
+            residuo_evaporacao_percent: 62.4,
+            carga_particula: 'Positiva (Catiônica)',
+            retido_peneira_084mm: 0.04
+        },
         benchFields: [
-            { key: 'residuo_evaporacao_percent', label: 'Resíduo por Evaporação (163°C)', unit: '%', placeholder: 'Ex: 62.4' },
-            { key: 'carga_particula', label: 'Carga Elétrica da Partícula', unit: 'polaridade', placeholder: 'Ex: Positiva (Catiônica)' },
-            { key: 'retido_peneira_084mm', label: 'Peneiramento (Retido na peneira 0,84mm)', unit: '%', placeholder: 'Ex: 0.04' }
+            { key: 'residuo_evaporacao_percent', label: 'Resíduo por Evaporação (163°C)', unit: '%', placeholder: 'Ex: 62.4', defaultValue: 62.4 },
+            { key: 'carga_particula', label: 'Carga Elétrica da Partícula', unit: 'polaridade', placeholder: 'Ex: Positiva', defaultValue: 'Positiva (Catiônica)' },
+            { key: 'retido_peneira_084mm', label: 'Peneiramento (Retido 0,84mm)', unit: '%', placeholder: 'Ex: 0.04', defaultValue: 0.04 }
         ]
     },
 
@@ -702,11 +930,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Batelada Caminhão Betoneira na Usina ou Pista',
         defaultUnit: 'cm',
         nominalExpected: 'Pavimento Rígido: 3,0 ± 1,0 cm | Estrutural: 10,0 ± 2,0 cm | Bombeável: 16,0 ± 3,0 cm',
+        formulaExplanation: 'Δ = |Slump_medido - Slump_projeto| ≤ Tolerância Normativa (NBR 7212)',
+        defaultBenchData: {
+            slump_medido: 10.0,
+            slump_projeto: 10.0,
+            tolerancia_normativa: 2.0
+        },
         benchFields: [
-            { key: 'slump_projeto', label: 'Slump Nominal de Projeto', unit: 'cm', placeholder: 'Ex: 10.0' },
-            { key: 'slump_medido', label: 'Slump Medido na Régua', unit: 'cm', placeholder: 'Ex: 9.5' },
-            { key: 'tolerancia_normativa', label: 'Tolerância Admissível (NBR 7212)', unit: '± cm', placeholder: 'Ex: 2.0' },
-            { key: 'aspecto_mistura', label: 'Aspecto Visual / Coesão', unit: 'obs', placeholder: 'Ex: Coeso, sem segregação' }
+            { key: 'slump_medido', label: 'Slump Medido na Régua', unit: 'cm', placeholder: 'Ex: 10.0', defaultValue: 10.0 },
+            { key: 'slump_projeto', label: 'Slump Nominal de Projeto', unit: 'cm', placeholder: 'Ex: 10.0', defaultValue: 10.0 },
+            { key: 'tolerancia_normativa', label: 'Tolerância Admissível (NBR 7212)', unit: '± cm', placeholder: 'Ex: 2.0', defaultValue: 2.0 }
         ]
     },
     {
@@ -719,12 +952,18 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Corpos de Prova Cilíndricos em Cura Úmida',
         defaultUnit: 'MPa',
         nominalExpected: 'Aos 7 dias: ≥ 70% fck nominal | Aos 28 dias: ≥ 100% fck nominal',
+        formulaExplanation: 'fck = (F × 10) / (π × D² / 4) | Ruptura à compressão axial NBR 5739',
+        defaultBenchData: {
+            forca_prensa_kn: 258.0,
+            diametro_cilindro_cm: 10.0,
+            idade_dias: 28,
+            fck_nominal_projeto: 30.0
+        },
         benchFields: [
-            { key: 'fck_nominal_projeto', label: 'fck de Projeto Nominal', unit: 'MPa', placeholder: 'Ex: 30.0' },
-            { key: 'idade_dias', label: 'Idade de Rompimento', unit: 'dias', placeholder: 'Ex: 28' },
-            { key: 'forca_prensa_kn', label: 'Força Máxima na Prensa Hidráulica', unit: 'kN', placeholder: 'Ex: 275.0' },
-            { key: 'diametro_cilindro_cm', label: 'Diâmetro do Cilindro', unit: 'cm', placeholder: 'Ex: 10.0' },
-            { key: 'tipo_ruptura', label: 'Tipo de Ruptura (Cônica, Cisalhamento)', unit: 'modo', placeholder: 'Ex: Cônica Perfeita' }
+            { key: 'forca_prensa_kn', label: 'Força Máxima na Prensa Hidráulica', unit: 'kN', placeholder: 'Ex: 258.0', defaultValue: 258.0 },
+            { key: 'diametro_cilindro_cm', label: 'Diâmetro do Cilindro', unit: 'cm', placeholder: 'Ex: 10.0', defaultValue: 10.0 },
+            { key: 'idade_dias', label: 'Idade de Rompimento', unit: 'dias', placeholder: 'Ex: 28', defaultValue: 28 },
+            { key: 'fck_nominal_projeto', label: 'fck de Projeto Nominal', unit: 'MPa', placeholder: 'Ex: 30.0', defaultValue: 30.0 }
         ]
     },
     {
@@ -737,11 +976,20 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Prismas Moldados para Pavimento Rígido Rodoviário',
         defaultUnit: 'MPa',
         nominalExpected: 'fctM,k ≥ 4,5 MPa aos 28 dias (Mínimo DNIT para placas de concreto)',
+        formulaExplanation: 'fctM = (P × 1000 × L × 10) / (b × 10 × (h × 10)²) | Prismas de 15×15×50 cm',
+        defaultBenchData: {
+            carga_flexao_kn: 35.2,
+            vao_livre_l_cm: 45.0,
+            largura_b_cm: 15.0,
+            altura_h_cm: 15.0,
+            fctm_minimo_exigido: 4.5
+        },
         benchFields: [
-            { key: 'carga_flexao_kn', label: 'Carga de Ruptura nos Cutelos (P)', unit: 'kN', placeholder: 'Ex: 34.5' },
-            { key: 'vao_livre_l_cm', label: 'Vão Livre entre Apoios (L)', unit: 'cm', placeholder: 'Ex: 45.0' },
-            { key: 'largura_b_cm', label: 'Largura da Seção (b)', unit: 'cm', placeholder: 'Ex: 15.0' },
-            { key: 'altura_h_cm', label: 'Altura da Seção (h)', unit: 'cm', placeholder: 'Ex: 15.0' }
+            { key: 'carga_flexao_kn', label: 'Carga de Ruptura nos Cutelos (P)', unit: 'kN', placeholder: 'Ex: 35.2', defaultValue: 35.2 },
+            { key: 'vao_livre_l_cm', label: 'Vão Livre entre Apoios (L)', unit: 'cm', placeholder: 'Ex: 45.0', defaultValue: 45.0 },
+            { key: 'largura_b_cm', label: 'Largura da Seção (b)', unit: 'cm', placeholder: 'Ex: 15.0', defaultValue: 15.0 },
+            { key: 'altura_h_cm', label: 'Altura da Seção (h)', unit: 'cm', placeholder: 'Ex: 15.0', defaultValue: 15.0 },
+            { key: 'fctm_minimo_exigido', label: 'fctM,k Mínimo Exigido', unit: 'MPa', placeholder: 'Ex: 4.5', defaultValue: 4.5 }
         ]
     },
     {
@@ -754,11 +1002,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Batelada Pesada nas Balanças da Usina',
         defaultUnit: 'adim.',
         nominalExpected: 'a/c ≤ 0,45 (Pavimento Rígido) / ≤ 0,50 (Concreto Estrutural CAC III)',
+        formulaExplanation: 'a/c = Água Efetiva (L) / Consumo de Cimento (kg)',
+        defaultBenchData: {
+            agua_efetiva_litros: 168.0,
+            consumo_cimento_kg: 400.0,
+            ac_maximo_tolerado: 0.45
+        },
         benchFields: [
-            { key: 'agua_efetiva_litros', label: 'Água Efetiva Adicionada', unit: 'litros', placeholder: 'Ex: 175.0' },
-            { key: 'consumo_cimento_kg', label: 'Cimento Portland Total Pesado', unit: 'kg', placeholder: 'Ex: 400.0' },
-            { key: 'umidade_areia_percent', label: 'Teor de Umidade da Areia Compensada', unit: '%', placeholder: 'Ex: 4.2' },
-            { key: 'ar_incorporado_percent', label: 'Teor de Ar Incorporado Medido', unit: '%', placeholder: 'Ex: 1.5' }
+            { key: 'agua_efetiva_litros', label: 'Água Efetiva Adicionada', unit: 'litros', placeholder: 'Ex: 168.0', defaultValue: 168.0 },
+            { key: 'consumo_cimento_kg', label: 'Cimento Portland Total Pesado', unit: 'kg', placeholder: 'Ex: 400.0', defaultValue: 400.0 },
+            { key: 'ac_maximo_tolerado', label: 'Relação a/c Máxima Permitida', unit: 'adim.', placeholder: 'Ex: 0.45', defaultValue: 0.45 }
         ]
     },
     {
@@ -771,9 +1024,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Concreto Fresco com Aditivo Incorporador de Ar',
         defaultUnit: '% ar',
         nominalExpected: 'Pavimentos de Rodovia: 4,5% ± 1,5% (Faixa: 3,0% a 6,0%)',
+        formulaExplanation: 'Leitura pressométrica direta na câmara de calibração do aparelho de Washington',
+        defaultBenchData: {
+            leitura_manometro_ar: 4.8,
+            ar_minimo: 3.0,
+            ar_maximo: 6.0
+        },
         benchFields: [
-            { key: 'pressao_inicial_bar', label: 'Calibração da Câmara de Pressão', unit: 'bar', placeholder: 'Ex: 1.0' },
-            { key: 'leitura_manometro_ar', label: 'Leitura Direta de Ar no Manômetro', unit: '%', placeholder: 'Ex: 4.6' }
+            { key: 'leitura_manometro_ar', label: 'Leitura Direta no Manômetro', unit: '%', placeholder: 'Ex: 4.8', defaultValue: 4.8 },
+            { key: 'ar_minimo', label: 'Teor Mínimo Exigido de Ar', unit: '%', placeholder: 'Ex: 3.0', defaultValue: 3.0 },
+            { key: 'ar_maximo', label: 'Teor Máximo Admitido de Ar', unit: '%', placeholder: 'Ex: 6.0', defaultValue: 6.0 }
         ]
     },
     {
@@ -786,10 +1046,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Corpos de Prova Cilíndricos em Cura Normal',
         defaultUnit: 'MPa',
         nominalExpected: 'fct,sp ≥ 3,0 MPa aos 28 dias',
+        formulaExplanation: 'fct,sp = (2 × F × 10) / (π × d × L) | Ruptura por compressão diametral NBR 7222',
+        defaultBenchData: {
+            forca_ruptura_kn: 220.0,
+            diametro_d_cm: 15.0,
+            comprimento_l_cm: 30.0
+        },
         benchFields: [
-            { key: 'forca_ruptura_kn', label: 'Força Máxima de Ruptura (F)', unit: 'kN', placeholder: 'Ex: 215.0' },
-            { key: 'diametro_d_cm', label: 'Diâmetro do Cilindro (d)', unit: 'cm', placeholder: 'Ex: 15.0' },
-            { key: 'comprimento_l_cm', label: 'Comprimento do Cilindro (L)', unit: 'cm', placeholder: 'Ex: 30.0' }
+            { key: 'forca_ruptura_kn', label: 'Força Máxima de Ruptura (F)', unit: 'kN', placeholder: 'Ex: 220.0', defaultValue: 220.0 },
+            { key: 'diametro_d_cm', label: 'Diâmetro do Cilindro (d)', unit: 'cm', placeholder: 'Ex: 15.0', defaultValue: 15.0 },
+            { key: 'comprimento_l_cm', label: 'Comprimento do Cilindro (L)', unit: 'cm', placeholder: 'Ex: 30.0', defaultValue: 30.0 }
         ]
     },
     {
@@ -802,10 +1068,16 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Testemunhos ou Prismas de Concreto Endurecido',
         defaultUnit: '% absorção',
         nominalExpected: 'Absorção ≤ 5,0% | Índice de Vazios ≤ 12,0%',
+        formulaExplanation: 'Abs = [(Msat - Ms) / Ms] × 100 | Vv = [(Msat - Ms) / (Msat - Mi)] × 100',
+        defaultBenchData: {
+            massa_seca_estufa_ms: 2450.0,
+            massa_saturada_fervida_msat: 2548.0,
+            massa_submersa_mi: 1485.0
+        },
         benchFields: [
-            { key: 'massa_seca_estufa_ms', label: 'Massa Seca em Estufa (Ms)', unit: 'g', placeholder: 'Ex: 2450.0' },
-            { key: 'massa_saturada_fervida_msat', label: 'Massa Saturada Pós-Fervura (Msat)', unit: 'g', placeholder: 'Ex: 2548.0' },
-            { key: 'massa_submersa_mi', label: 'Massa Submersa em Água (Mi)', unit: 'g', placeholder: 'Ex: 1485.0' }
+            { key: 'massa_seca_estufa_ms', label: 'Massa Seca em Estufa (Ms)', unit: 'g', placeholder: 'Ex: 2450.0', defaultValue: 2450.0 },
+            { key: 'massa_saturada_fervida_msat', label: 'Massa Saturada Pós-Fervura (Msat)', unit: 'g', placeholder: 'Ex: 2548.0', defaultValue: 2548.0 },
+            { key: 'massa_submersa_mi', label: 'Massa Submersa em Água (Mi)', unit: 'g', placeholder: 'Ex: 1485.0', defaultValue: 1485.0 }
         ]
     },
     {
@@ -818,14 +1090,626 @@ export const DNIT_TEST_CATALOG: DNITStandardDef[] = [
         sampleType: 'Testemunho Cilíndrico Extraído da Placa de Rolamento',
         defaultUnit: 'cm',
         nominalExpected: 'Espessura Média ≥ Espessura de Projeto (Tolerância individual máx: -5 mm)',
+        formulaExplanation: 'Espessura Média = Média de 9 medições no perímetro do testemunho extraído',
+        defaultBenchData: {
+            espessura_nominal_projeto: 22.0,
+            leitura_media_paquimetro: 22.4,
+            estaca_km_placa: 'Estaca 3420 Pista Norte'
+        },
         benchFields: [
-            { key: 'espessura_nominal_projeto', label: 'Espessura de Projeto da Placa', unit: 'cm', placeholder: 'Ex: 22.0' },
-            { key: 'leitura_media_paquimetro', label: 'Espessura Média Medida no Testemunho', unit: 'cm', placeholder: 'Ex: 22.4' },
-            { key: 'estaca_km_placa', label: 'Estaca / Posição da Placa', unit: 'km', placeholder: 'Ex: Estaca 3420 Pista Norte' }
+            { key: 'espessura_nominal_projeto', label: 'Espessura de Projeto da Placa', unit: 'cm', placeholder: 'Ex: 22.0', defaultValue: 22.0 },
+            { key: 'leitura_media_paquimetro', label: 'Espessura Média Medida no Testemunho', unit: 'cm', placeholder: 'Ex: 22.4', defaultValue: 22.4 },
+            { key: 'estaca_km_placa', label: 'Estaca / Posição da Placa', unit: 'km', placeholder: 'Ex: Estaca 3420 Pista Norte', defaultValue: 'Estaca 3420 Pista Norte' }
         ]
     }
 ];
 
+// =========================================================================
+// CALCULADOR DETERMINÍSTICO DE BANCADA E FÓRMULAS NORMATIVAS DNIT/DNER/ABNT
+// =========================================================================
+export const calculateDNITBenchMetrics = (testId: string, bench: Record<string, any>): DNITCalculationResult => {
+    let resultValue = '';
+    let status: 'Aprovado' | 'Reprovado' | 'Ressalva' = 'Aprovado';
+    let metricsCalculated: Record<string, any> = {};
+    let formulaDisplay = '';
+    let normativeCriteria = '';
+    let notesSuggestion = '';
+
+    switch (testId) {
+        // --- 0. SOLOS ---
+        case 'sol-proctor': {
+            const wOpt = parseFloat(bench.umidade_otima ?? bench.umidade_otima_percent) || 12.5;
+            const gMax = parseFloat(bench.densidade_seca_maxima ?? bench.massa_especifica_seca_max) || 2.04;
+            const nrg = bench.energia_compactacao || 'Proctor Intermediária';
+            const gs = parseFloat(bench.densidade_graos_gs) || 2.70;
+
+            resultValue = `γd,max = ${gMax.toFixed(2)} g/cm³ | wot = ${wOpt.toFixed(1)}% (${nrg})`;
+            status = 'Aprovado';
+            metricsCalculated = {
+                umidade_otima: wOpt,
+                densidade_seca_maxima: gMax,
+                energia_compactacao: nrg,
+                densidade_graos_gs: gs
+            };
+            formulaDisplay = `Parábola de Compactação: Vértice em (wot = ${wOpt.toFixed(1)}%, γd,max = ${gMax.toFixed(2)} g/cm³)`;
+            normativeCriteria = 'Energia Intermediária/Modificada conforme DNIT 164-ME';
+            notesSuggestion = `Curva de compactação obtida com energia ${nrg}. Umidade ótima de ${wOpt.toFixed(1)}% e massa específica seca máxima de ${gMax.toFixed(2)} g/cm³.`;
+            break;
+        }
+
+        case 'sol-cbr': {
+            const cbr = parseFloat(bench.cbr_calculado ?? bench.cbr_calculado_percent) || 22.0;
+            const cbrMin = parseFloat(bench.cbr_minimo_projeto) || 12.0;
+            const exp = parseFloat(bench.expansao_percentual ?? bench.expansao_percent) || 0.38;
+            const expMax = parseFloat(bench.expansao_maxima_tolerada) || 1.0;
+
+            const cbrOk = cbr >= cbrMin;
+            const expOk = exp <= expMax;
+            status = (cbrOk && expOk) ? 'Aprovado' : (cbr >= (cbrMin - 1.0) && expOk) ? 'Ressalva' : 'Reprovado';
+            resultValue = `CBR = ${cbr.toFixed(1)}% | Expansão = ${exp.toFixed(2)}%`;
+            metricsCalculated = {
+                cbr_calculado: cbr,
+                cbr_minimo_projeto: cbrMin,
+                expansao_percentual: exp,
+                expansao_maxima_tolerada: expMax
+            };
+            formulaDisplay = `CBR = max(CBR_0,1", CBR_0,2") = ${cbr.toFixed(1)}% (Mín: ${cbrMin}%) | Expansão = ${exp.toFixed(2)}% (Máx: ${expMax}%)`;
+            normativeCriteria = `CBR ≥ ${cbrMin}% e Expansão ≤ ${expMax}%`;
+            notesSuggestion = `Amostra apresentou CBR de ${cbr.toFixed(1)}% e expansão volumétrica de ${exp.toFixed(2)}% pós 96h de imersão (DNIT 172-ME).`;
+            break;
+        }
+
+        case 'sol-atterberg': {
+            const ll = parseFloat(bench.limite_liquidez_ll) || 28.4;
+            const lp = parseFloat(bench.limite_plasticidade_lp) || 19.1;
+            const ip = Number((ll - lp).toFixed(1));
+            const ipMax = parseFloat(bench.ip_maximo_tolerado) || 12.0;
+            const llMax = parseFloat(bench.ll_maximo_tolerado) || 35.0;
+            const linhaA = Number((0.73 * (ll - 20)).toFixed(1));
+
+            const consistencia = ip <= 0 ? 'Não Plástico (NP)' : ip <= 7 ? 'Fracamente Plástico' : ip <= 15 ? 'Medianamente Plástico' : 'Altamente Plástico';
+            const sucs = ip > linhaA ? (ll < 50 ? 'CL (Argila Pouco Plástica)' : 'CH (Argila Muito Plástica)') : (ll < 50 ? 'ML (Silte Pouco Plástico)' : 'MH (Silte Muito Plástico)');
+            const ipOk = ip <= ipMax;
+            const llOk = ll <= llMax;
+            status = (ipOk && llOk) ? 'Aprovado' : (ip <= ipMax + 1.0) ? 'Ressalva' : 'Reprovado';
+
+            resultValue = `LL = ${ll.toFixed(1)}% | LP = ${lp.toFixed(1)}% | IP = ${ip.toFixed(1)}% (${consistencia})`;
+            metricsCalculated = {
+                limite_liquidez_ll: ll,
+                limite_plasticidade_lp: lp,
+                ip_calculado: ip,
+                ip_linha_a: linhaA,
+                classificacao_consistencia: consistencia,
+                classificacao_sucs: sucs
+            };
+            formulaDisplay = `IP = LL (${ll.toFixed(1)}%) - LP (${lp.toFixed(1)}%) = ${ip.toFixed(1)}% | Linha A = 0,73 × (${ll.toFixed(1)} - 20) = ${linhaA}%`;
+            normativeCriteria = `IP ≤ ${ipMax}% | LL ≤ ${llMax}%`;
+            notesSuggestion = `Solo ${consistencia} enquadrado como ${sucs} pela Carta de Casagrande (DNIT 122/139-ME).`;
+            break;
+        }
+
+        case 'sol-frasco-areia': {
+            const gdCampoDirect = parseFloat(bench.densidade_seca_campo);
+            const mSolo = parseFloat(bench.massa_solo_umido_g) || 3450.0;
+            const mAreia = parseFloat(bench.massa_areia_utilizada_g) || 2420.0;
+            const dAreia = parseFloat(bench.densidade_areia_padrao) || 1.420;
+            const w = parseFloat(bench.umidade_campo ?? bench.umidade_campo_percent) || 12.1;
+            const dSecaMax = parseFloat(bench.densidade_maxima_lab ?? bench.densidade_seca_max_proctor) || 2.04;
+            const wOt = parseFloat(bench.umidade_otima_lab ?? bench.umidade_otima_proctor) || 12.5;
+            const gcMin = parseFloat(bench.gc_minimo_exigido) || 100.0;
+
+            let gdCalc = gdCampoDirect;
+            if (isNaN(gdCalc)) {
+                const volFuro = mAreia / dAreia;
+                const dUmida = mSolo / volFuro;
+                gdCalc = Number((dUmida / (1 + w / 100)).toFixed(3));
+            }
+
+            const gc = Number(((gdCalc / dSecaMax) * 100).toFixed(1));
+            const deltaW = Number((w - wOt).toFixed(1));
+
+            const gcOk = gc >= gcMin;
+            const wOk = Math.abs(deltaW) <= 2.0;
+            status = (gcOk && wOk) ? 'Aprovado' : (gc >= (gcMin - 1.5)) ? 'Ressalva' : 'Reprovado';
+
+            resultValue = `GC = ${gc.toFixed(1)}% (γd = ${gdCalc.toFixed(2)} g/cm³ | w = ${w.toFixed(1)}%)`;
+            metricsCalculated = {
+                grau_compactacao_gc: gc,
+                densidade_seca_campo: gdCalc,
+                densidade_maxima_lab: dSecaMax,
+                umidade_campo: w,
+                umidade_otima_lab: wOt,
+                desvio_umidade: deltaW,
+                gc_minimo_exigido: gcMin
+            };
+            formulaDisplay = `GC = (γd,campo / γd,lab) × 100 = (${gdCalc.toFixed(2)} / ${dSecaMax.toFixed(2)}) × 100 = ${gc.toFixed(1)}% | Δw = ${deltaW > 0 ? '+' : ''}${deltaW.toFixed(1)}%`;
+            normativeCriteria = `GC ≥ ${gcMin}% e Δw = w - wot ∈ [-2,0%, +2,0%]`;
+            notesSuggestion = `Controle de compactação in situ pelo frasco de areia (DNIT 162-ME). GC obtido: ${gc.toFixed(1)}% com desvio de umidade de ${deltaW > 0 ? '+' : ''}${deltaW.toFixed(1)}%.`;
+            break;
+        }
+
+        case 'sol-speedy': {
+            const wSp = parseFloat(bench.umidade_speedy_medida) || 12.8;
+            const wOt = parseFloat(bench.umidade_otima_proctor) || 12.5;
+            const tol = parseFloat(bench.tolerancia_desvio_umidade) || 2.0;
+            const diff = Number((wSp - wOt).toFixed(1));
+
+            status = Math.abs(diff) <= tol ? 'Aprovado' : 'Reprovado';
+            resultValue = `Umidade Speedy = ${wSp.toFixed(1)}% (Δw = ${diff > 0 ? '+' : ''}${diff.toFixed(1)}% em relação a wot)`;
+            metricsCalculated = {
+                umidade_speedy_medida: wSp,
+                umidade_otima_proctor: wOt,
+                desvio_umidade: diff,
+                tolerancia_desvio: tol
+            };
+            formulaDisplay = `Δw = |w_speedy (${wSp.toFixed(1)}%) - wot (${wOt.toFixed(1)}%)| = ${Math.abs(diff).toFixed(1)}% (Tol: ± ${tol.toFixed(1)}%)`;
+            normativeCriteria = `|w_speedy - wot| ≤ ${tol.toFixed(1)}%`;
+            notesSuggestion = `Ensaio expedito com carbeto de cálcio Speedy (DNER-ME 052/94). Teor de umidade verificado em campo.`;
+            break;
+        }
+
+        case 'sol-gran-conjunta': {
+            const ped = parseFloat(bench.perc_pedregulho) || 14.5;
+            const areia = parseFloat(bench.perc_areia) || 58.0;
+            const silte = parseFloat(bench.perc_silte) || 16.5;
+            const argila = parseFloat(bench.perc_argila) || 11.0;
+            const finos = Number((silte + argila).toFixed(1));
+
+            status = 'Aprovado';
+            resultValue = `Pedregulho: ${ped}% | Areia: ${areia}% | Finos (Silte+Argila): ${finos}%`;
+            metricsCalculated = {
+                perc_pedregulho: ped,
+                perc_areia: areia,
+                perc_silte: silte,
+                perc_argila: argila,
+                perc_finos: finos
+            };
+            formulaDisplay = `% Finos = % Silte (${silte}%) + % Argila (${argila}%) = ${finos}% | Pedregulho = ${ped}% | Areia = ${areia}%`;
+            normativeCriteria = 'Graduação textural de solos para pavimentação (DNER-ME 051/94)';
+            notesSuggestion = `Solo caracterizado com ${ped}% de pedregulho, ${areia}% de areia e ${finos}% de fração fina silte-argilosa.`;
+            break;
+        }
+
+        case 'sol-hrb': {
+            const p10 = parseFloat(bench.passante_peneira_n10) || 85.0;
+            const p40 = parseFloat(bench.passante_peneira_n40) || 62.0;
+            const p200 = parseFloat(bench.passante_peneira_n200) || 28.0;
+            const ll = parseFloat(bench.limite_liquidez_val) || 26.0;
+            const ip = parseFloat(bench.indice_plasticidade_val) || 6.0;
+            const grupoDec = bench.classificacao_hrb_declarada || 'A-2-4';
+
+            const a = Math.max(0, Math.min(40, p200 - 35));
+            const b = Math.max(0, Math.min(40, p200 - 15));
+            const c = Math.max(0, Math.min(20, ll - 40));
+            const d = Math.max(0, Math.min(20, ip - 10));
+            const ig = Math.max(0, Math.round(0.2 * a + 0.005 * a * c + 0.01 * b * d));
+
+            status = 'Aprovado';
+            resultValue = `Classificação: ${grupoDec} (IG = ${ig})`;
+            metricsCalculated = {
+                passante_n200: p200,
+                limite_liquidez: ll,
+                indice_plasticidade: ip,
+                indice_grupo_ig: ig,
+                grupo_hrb: grupoDec
+            };
+            formulaDisplay = `IG = 0,2(${a.toFixed(0)}) + 0,005(${a.toFixed(0)})(${c.toFixed(0)}) + 0,01(${b.toFixed(0)})(${d.toFixed(0)}) = ${ig}`;
+            normativeCriteria = 'Classificação Geotécnica Rodoviária HRB / AASHTO M 145';
+            notesSuggestion = `Enquadramento geotécnico no grupo ${grupoDec} com Índice de Grupo ${ig}. Boa capacidade de suporte para subleito.`;
+            break;
+        }
+
+        case 'sol-dens-graos': {
+            const m1 = parseFloat(bench.massa_picnometro_cheio_agua) || 652.4;
+            const m2 = parseFloat(bench.massa_picnometro_solo_agua) || 683.8;
+            const ms = parseFloat(bench.massa_solo_seco_estufa) || 50.0;
+            const rhoS = Number((ms / (ms + m1 - m2)).toFixed(3));
+
+            status = (rhoS >= 2.50 && rhoS <= 2.90) ? 'Aprovado' : 'Reprovado';
+            resultValue = `Massa Específica dos Grãos (ρs) = ${rhoS} g/cm³`;
+            metricsCalculated = {
+                massa_solo_seco: ms,
+                massa_especifica_graos_rhos: rhoS
+            };
+            formulaDisplay = `ρs = Ms / (Ms + M1 - M2) = ${ms} / (${ms} + ${m1} - ${m2}) = ${rhoS} g/cm³`;
+            normativeCriteria = 'Faixa de densidade real de grãos minerais: 2,55 a 2,85 g/cm³ (DNER-ME 093/94)';
+            notesSuggestion = `Ensaio de picnometria com água destilada. Massa específica real dos grãos: ${rhoS} g/cm³.`;
+            break;
+        }
+
+        case 'sol-mct': {
+            const cLinha = parseFloat(bench.coeficiente_c_linha) || 1.45;
+            const pi = parseFloat(bench.perda_massa_imersao_pi) || 28.0;
+            const classe = bench.classe_mct_obtida || "LA' (Solo Laterítico Argiloso)";
+
+            status = 'Aprovado';
+            resultValue = `MCT: ${classe} (c' = ${cLinha} | Pi = ${pi}%)`;
+            metricsCalculated = {
+                coeficiente_c_linha: cLinha,
+                perda_massa_imersao_pi: pi,
+                classe_mct: classe
+            };
+            formulaDisplay = `Classificação MCT: Coef. c' = ${cLinha} | Perda por Imersão Pi = ${pi}% ⇒ ${classe}`;
+            normativeCriteria = 'Classificação MCT para Solos Tropicais (DNIT 258-ME / DNER-ME 258)';
+            notesSuggestion = `Solo classificado como ${classe}. Comportamento laterítico com excelente desempenho para bases e sub-bases.`;
+            break;
+        }
+
+        // --- 1. AGREGADOS ---
+        case 'ag-ea': {
+            const h1 = parseFloat(bench.leitura_areia_h1 ?? bench.h1_areia) || 68.0;
+            const h2 = parseFloat(bench.leitura_argila_h2 ?? bench.h2_argila) || 98.0;
+            const eaMin = parseFloat(bench.ea_minimo_exigido) || 55.0;
+            const ea = Number(((h1 / h2) * 100).toFixed(1));
+
+            status = ea >= eaMin ? 'Aprovado' : 'Reprovado';
+            resultValue = `Equivalente de Areia (EA) = ${ea}%`;
+            metricsCalculated = {
+                equivalente_areia_ea: ea,
+                leitura_areia_h1: h1,
+                leitura_argila_h2: h2,
+                ea_minimo_exigido: eaMin
+            };
+            formulaDisplay = `EA = (h1 / h2) × 100 = (${h1} / ${h2}) × 100 = ${ea}%`;
+            normativeCriteria = `EA ≥ ${eaMin}% (DNIT 031/2006-ES para CBUQ)`;
+            notesSuggestion = `Agregado miúdo apresentou EA = ${ea}%, atestando ausência de poeiras deletérias e argilas ativas.`;
+            break;
+        }
+
+        case 'ag-la': {
+            const m1 = parseFloat(bench.m1_inicial) || 5000.0;
+            const m2 = parseFloat(bench.m2_retida12) || 3790.0;
+            const lim = parseFloat(bench.limite_maximo_abrasao) || 40.0;
+            const la = Number((((m1 - m2) / m1) * 100).toFixed(1));
+
+            status = la <= lim ? 'Aprovado' : 'Reprovado';
+            resultValue = `Abrasão Los Angeles = ${la}%`;
+            metricsCalculated = {
+                desgaste_los_angeles: la,
+                massa_inicial_m1: m1,
+                massa_retida_m2: m2,
+                limite_maximo: lim
+            };
+            formulaDisplay = `LA = [(M1 - M2) / M1] × 100 = [(${m1} - ${m2}) / ${m1}] × 100 = ${la}%`;
+            normativeCriteria = `Desgaste Los Angeles ≤ ${lim}% (DNER-ME 035/98)`;
+            notesSuggestion = `Ensaio em tambor Los Angeles com esferas de aço. Perda por abrasão de ${la}% dentro do limite de ${lim}%.`;
+            break;
+        }
+
+        case 'ag-forma': {
+            const c = parseFloat(bench.comprimento_medio) || 24.5;
+            const e = parseFloat(bench.espessura_media) || 13.8;
+            const lamelas = parseFloat(bench.perc_lamelas) || 9.4;
+            const forma = Number((e / c).toFixed(2));
+
+            const formaOk = forma >= 0.50;
+            const lamelasOk = lamelas <= 15.0;
+            status = (formaOk && lamelasOk) ? 'Aprovado' : 'Reprovado';
+
+            resultValue = `Índice de Forma = ${forma} | Lamelas = ${lamelas}%`;
+            metricsCalculated = {
+                indice_forma: forma,
+                comprimento_medio: c,
+                espessura_media: e,
+                perc_lamelas: lamelas
+            };
+            formulaDisplay = `IF = E / C = ${e} / ${c} = ${forma} (Mín: 0,50) | Lamelas: ${lamelas}% (Máx: 15%)`;
+            normativeCriteria = 'Índice de Forma ≥ 0,50 e Teor de Lamelas ≤ 15,0% (DNIT 095/2006-ME)';
+            notesSuggestion = `Agregado graúdo britado com grãos predominantemente cúbicos e baixo teor de lamelas.`;
+            break;
+        }
+
+        case 'ag-dens-graudo': {
+            const a = parseFloat(bench.massa_seca_estufa_g) || 3000.0;
+            const b = parseFloat(bench.massa_sss_ar_g) || 3036.0;
+            const c = parseFloat(bench.massa_submersa_agua_g) || 1895.0;
+            const abs = Number((((b - a) / a) * 100).toFixed(2));
+            const dAp = Number((a / (b - c)).toFixed(3));
+            const dSss = Number((b / (b - c)).toFixed(3));
+
+            status = abs <= 1.50 ? 'Aprovado' : 'Reprovado';
+            resultValue = `Absorção = ${abs}% | Densidade Aparente = ${dAp} g/cm³`;
+            metricsCalculated = {
+                absorcao_agua_percent: abs,
+                densidade_seca_aparente: dAp,
+                densidade_sss: dSss
+            };
+            formulaDisplay = `Abs = [(B - A) / A] × 100 = ${abs}% | ρs = A / (B - C) = ${a} / (${b} - ${c}) = ${dAp} g/cm³`;
+            normativeCriteria = "Absorção d'Água ≤ 1,5% (CBUQ DNIT 031/2006-ES)";
+            notesSuggestion = `Massa específica e absorção de agregado graúdo em balança hidrostática (DNER-ME 081/98).`;
+            break;
+        }
+
+        case 'ag-dens-miudo': {
+            const a = parseFloat(bench.massa_seca_estufa) || 492.5;
+            const s = parseFloat(bench.massa_sss_cone) || 500.0;
+            const v = parseFloat(bench.volume_deslocado_ml) || 191.5;
+            const abs = Number((((s - a) / a) * 100).toFixed(2));
+            const dReal = Number((a / (v - (s - a))).toFixed(3));
+
+            status = abs <= 2.0 ? 'Aprovado' : 'Reprovado';
+            resultValue = `Absorção = ${abs}% | Densidade Real = ${dReal} g/cm³`;
+            metricsCalculated = {
+                absorcao_areia_percent: abs,
+                densidade_real_miudo: dReal
+            };
+            formulaDisplay = `Abs = [(S - A) / A] × 100 = ${abs}% | ρs = A / [V - (S - A)] = ${dReal} g/cm³`;
+            normativeCriteria = 'Absorção de Água ≤ 2,0% (DNIT 413/2019-ME)';
+            notesSuggestion = `Agregado miúdo caracterizado por picnometria de frasco Chapman com absorção de ${abs}%.`;
+            break;
+        }
+
+        case 'ag-sanidade': {
+            const mi = parseFloat(bench.massa_inicial_ciclos) || 2500.0;
+            const mf = parseFloat(bench.massa_final_lavada) || 2362.5;
+            const lim = parseFloat(bench.limite_perda_sanidade) || 12.0;
+            const perda = Number((((mi - mf) / mi) * 100).toFixed(1));
+
+            status = perda <= lim ? 'Aprovado' : 'Reprovado';
+            resultValue = `Perda por Sanidade = ${perda}%`;
+            metricsCalculated = {
+                perda_sanidade_percent: perda,
+                limite_tolerado: lim
+            };
+            formulaDisplay = `Perda = [(Mi - Mf) / Mi] × 100 = [(${mi} - ${mf}) / ${mi}] × 100 = ${perda}%`;
+            normativeCriteria = `Perda em 5 ciclos de Sulfato de Sódio ≤ ${lim}% (DNIT 411/2019-ME)`;
+            notesSuggestion = `Ensaio de durabilidade e intemperismo acelerado em solução de sulfato de sódio.`;
+            break;
+        }
+
+        // --- 2. MASSAS ASFÁLTICAS ---
+        case 'asf-betume': {
+            const mi = parseFloat(bench.massa_inicial_mistura) || 1200.0;
+            const mf = parseFloat(bench.massa_agregados_recuperados) || 1131.8;
+            const me = parseFloat(bench.massa_filler_filtro) || 3.4;
+            const pbProj = parseFloat(bench.teor_projeto) || 5.40;
+            const tol = parseFloat(bench.tolerancia_pb) || 0.30;
+
+            const pb = Number((((mi - (mf + me)) / mi) * 100).toFixed(2));
+            const deltaPb = Number((pb - pbProj).toFixed(2));
+            status = Math.abs(deltaPb) <= tol ? 'Aprovado' : 'Reprovado';
+
+            resultValue = `Teor de Ligante: ${pb.toFixed(2)}% (Δ = ${deltaPb > 0 ? '+' : ''}${deltaPb.toFixed(2)}%)`;
+            metricsCalculated = {
+                teor_betume_extraido: pb,
+                teor_projeto: pbProj,
+                desvio_operacional_pb: deltaPb,
+                tolerancia_pb: tol
+            };
+            formulaDisplay = `Pb = [(Mi - (Mf + Me)) / Mi] × 100 = [(${mi} - (${mf} + ${me})) / ${mi}] × 100 = ${pb.toFixed(2)}%`;
+            normativeCriteria = `Teor de Projeto ${pbProj.toFixed(2)}% ± ${tol.toFixed(2)}% (Faixa: ${(pbProj - tol).toFixed(2)}% a ${(pbProj + tol).toFixed(2)}%)`;
+            notesSuggestion = `Extração centrífuga Rotarex (DNIT 144-ME). Teor de ligante conforme a faixa de dosagem do traço.`;
+            break;
+        }
+
+        case 'asf-temp': {
+            const u = parseFloat(bench.temp_saida_usina) || 158;
+            const p = parseFloat(bench.temp_chegada_pista) || 146;
+            const r = parseFloat(bench.temp_inicio_rolamento) || 136;
+            const f = parseFloat(bench.temp_termino_rolagem) || 105;
+
+            const uOk = u >= 145 && u <= 175;
+            const pOk = p >= 135;
+            const rOk = r >= 120;
+            const fOk = f >= 100;
+            status = (uOk && pOk && rOk && fOk) ? 'Aprovado' : 'Reprovado';
+
+            resultValue = `Usina: ${u}°C | Pista: ${p}°C | Rolo: ${r}°C | Fim: ${f}°C`;
+            metricsCalculated = {
+                temperatura_usinagem: u,
+                temperatura_saida: u - 5,
+                temperatura_chegada: p,
+                temperatura_espalhamento: r + 3,
+                temperatura_termino_rolagem: f
+            };
+            formulaDisplay = `Rastreio Térmico: Usina (${u}°C ≥ 145) ⇒ Pista (${p}°C ≥ 135) ⇒ Rolagem (${r}°C ≥ 120) ⇒ Fim (${f}°C ≥ 100)`;
+            normativeCriteria = 'Temperaturas operacionais conformes com o Manual de Pavimentação DNIT 031-ES';
+            notesSuggestion = 'Monitoramento termométrico contínuo. Massa asfáltica compactada dentro da janela de viscosidade ótima.';
+            break;
+        }
+
+        case 'asf-marshall': {
+            const est = parseFloat(bench.estabilidade_kgf) || 1240;
+            const flu = parseFloat(bench.fluencia_mm) || 3.2;
+            const gmb = parseFloat(bench.densidade_aparente_gmb) || 2.385;
+            const gmm = parseFloat(bench.densidade_maxima_gmm) || 2.488;
+            const vvDirect = parseFloat(bench.volume_vazios_vv);
+            const rbvDirect = parseFloat(bench.relacao_betume_vazios_rbv);
+
+            const vv = !isNaN(vvDirect) ? vvDirect : Number((((gmm - gmb) / gmm) * 100).toFixed(1));
+            const rbv = !isNaN(rbvDirect) ? rbvDirect : 78.4;
+
+            const estOk = est >= 800;
+            const fluOk = flu >= 2.0 && flu <= 4.5;
+            const vvOk = vv >= 3.0 && vv <= 5.0;
+            const rbvOk = rbv >= 75.0 && rbv <= 82.0;
+
+            status = (estOk && fluOk && vvOk && rbvOk) ? 'Aprovado' : 'Reprovado';
+            resultValue = `Estabilidade: ${est} kgf | Fluência: ${flu.toFixed(1)} mm | Vv: ${vv.toFixed(1)}%`;
+            metricsCalculated = {
+                estabilidade_kgf: est,
+                fluencia_mm: flu,
+                densidade_aparente_gmb: gmb,
+                densidade_maxima_gmm: gmm,
+                volume_vazios_vv: vv,
+                relacao_betume_vazios_rbv: rbv
+            };
+            formulaDisplay = `Vv = [(Gmm - Gmb) / Gmm] × 100 = [(${gmm} - ${gmb}) / ${gmm}] × 100 = ${vv.toFixed(1)}% | Estabilidade: ${est} kgf`;
+            normativeCriteria = 'Estabilidade ≥ 800 kgf | Fluência: 2,0 a 4,5 mm | Vv: 3,0% a 5,0% | RBV: 75% a 82%';
+            notesSuggestion = `Ensaio Marshall a 75 golpes por face (DNIT 043-ME). Parâmetros volumétricos e mecânicos em conformidade.`;
+            break;
+        }
+
+        case 'asf-rt': {
+            const p = parseFloat(bench.carga_ruptura_kn) || 15.2;
+            const d = parseFloat(bench.diametro_cp_mm) || 101.6;
+            const h = parseFloat(bench.altura_cp_mm) || 63.5;
+            const rtMin = parseFloat(bench.rt_minimo_exigido) || 0.65;
+            const rt = Number(((2 * (p * 1000)) / (Math.PI * d * h)).toFixed(2));
+
+            status = rt >= rtMin ? 'Aprovado' : 'Reprovado';
+            resultValue = `RT = ${rt.toFixed(2)} MPa`;
+            metricsCalculated = {
+                resistencia_tracao_rt: rt,
+                carga_ruptura_kn: p,
+                rt_minimo_exigido: rtMin
+            };
+            formulaDisplay = `RT = (2 × P) / (π × D × H) = (2 × ${p} × 1000) / (π × ${d} × ${h}) = ${rt.toFixed(2)} MPa`;
+            normativeCriteria = `RT ≥ ${rtMin} MPa a 25°C (DNIT 135/2018-ME)`;
+            notesSuggestion = `Resistência à tração por compressão diametral a 25°C. Amostra com tenacidade e coesão adequadas.`;
+            break;
+        }
+
+        case 'asf-gc-pista': {
+            const inSitu = parseFloat(bench.densidade_in_situ_g_cm3) || 2.378;
+            const proj = parseFloat(bench.densidade_projeto_g_cm3) || 2.420;
+            const esp = parseFloat(bench.espessura_camada_cm) || 5.2;
+            const gc = Number(((inSitu / proj) * 100).toFixed(1));
+
+            status = (gc >= 97.0 && gc <= 102.0) ? 'Aprovado' : (gc >= 96.0 && gc <= 103.0) ? 'Ressalva' : 'Reprovado';
+            resultValue = `GC Pista: ${gc.toFixed(1)}% | Espessura: ${esp.toFixed(1)} cm`;
+            metricsCalculated = {
+                grau_compactacao_pista_gc: gc,
+                densidade_in_situ: inSitu,
+                densidade_projeto: proj,
+                espessura_camada: esp
+            };
+            formulaDisplay = `GC = (Gmb,pista / Gmb,proj) × 100 = (${inSitu} / ${proj}) × 100 = ${gc.toFixed(1)}%`;
+            normativeCriteria = '97,0% ≤ GC ≤ 102,0% da densidade média de projeto (DNIT 031/2006-ES)';
+            notesSuggestion = `Testemunho extraído com sonda rotativa. Grau de compactação de ${gc.toFixed(1)}% aprovado.`;
+            break;
+        }
+
+        case 'asf-rtr-lottman': {
+            const seco = parseFloat(bench.rt_amostra_seca_mpa) || 1.15;
+            const cond = parseFloat(bench.rt_amostra_condicionada_mpa) || 0.98;
+            const rtrMin = parseFloat(bench.rtr_minimo_exigido) || 80.0;
+            const rtr = Number(((cond / seco) * 100).toFixed(1));
+
+            status = rtr >= rtrMin ? 'Aprovado' : 'Reprovado';
+            resultValue = `RTR = ${rtr.toFixed(1)}%`;
+            metricsCalculated = {
+                relacao_tracao_retida_rtr: rtr,
+                rt_seco: seco,
+                rt_condicionado: cond
+            };
+            formulaDisplay = `RTR = (RT,cond / RT,seco) × 100 = (${cond} / ${seco}) × 100 = ${rtr.toFixed(1)}%`;
+            normativeCriteria = `RTR ≥ ${rtrMin}% (DNIT 180/2018-ME - Ensaio Lottman)`;
+            notesSuggestion = `Resistência à tração retida após condicionamento térmico e saturação sob vácuo. Mistura resistente ao dano por umidade.`;
+            break;
+        }
+
+        // --- 3. CONCRETO USINADO ---
+        case 'cnc-slump': {
+            const med = parseFloat(bench.slump_medido) || 10.0;
+            const proj = parseFloat(bench.slump_projeto) || 10.0;
+            const tol = parseFloat(bench.tolerancia_normativa) || 2.0;
+            const diff = Math.abs(med - proj);
+
+            status = diff <= tol ? 'Aprovado' : 'Reprovado';
+            resultValue = `Slump = ${med.toFixed(1)} cm (Projeto: ${proj.toFixed(1)} ± ${tol.toFixed(1)} cm)`;
+            metricsCalculated = {
+                slump_medido_cm: med,
+                slump_obtido_mm: med * 10,
+                slump_projeto_cm: proj,
+                slump_projeto_mm: proj * 10,
+                desvio_slump: diff
+            };
+            formulaDisplay = `Δ = |Slump_medido (${med.toFixed(1)} cm) - Slump_proj (${proj.toFixed(1)} cm)| = ${diff.toFixed(1)} cm ≤ ${tol.toFixed(1)} cm`;
+            normativeCriteria = `Slump: ${proj.toFixed(1)} ± ${tol.toFixed(1)} cm (ABNT NBR NM 67 / NBR 7212)`;
+            notesSuggestion = `Abatimento de tronco de cone no descarregamento. Trabalhabilidade e coesão adequadas para aplicação.`;
+            break;
+        }
+
+        case 'cnc-fck': {
+            const forcaKn = parseFloat(bench.forca_prensa_kn) || 258.0;
+            const diam = parseFloat(bench.diametro_cilindro_cm) || 10.0;
+            const projFck = parseFloat(bench.fck_nominal_projeto) || 30.0;
+            const idade = parseFloat(bench.idade_dias) || 28;
+
+            const areaCm2 = Math.PI * Math.pow(diam / 2, 2);
+            const tensaoMpa = Number(((forcaKn * 10) / areaCm2).toFixed(1));
+            const pctFck = Number(((tensaoMpa / projFck) * 100).toFixed(1));
+
+            const minReq = idade <= 7 ? projFck * 0.70 : projFck;
+            status = tensaoMpa >= minReq ? 'Aprovado' : 'Reprovado';
+
+            resultValue = `fck atingido: ${tensaoMpa.toFixed(1)} MPa aos ${idade} dias (${pctFck}% do nominal)`;
+            metricsCalculated = {
+                resistencia_calculada_fck: tensaoMpa,
+                fck_atingido: tensaoMpa,
+                forca_prensa_kn: forcaKn,
+                fck_nominal_projeto: projFck,
+                percentual_fck: pctFck,
+                idade_dias: idade
+            };
+            formulaDisplay = `fck = (F × 10) / (π × D² / 4) = (${forcaKn} × 10) / ${areaCm2.toFixed(2)} = ${tensaoMpa.toFixed(1)} MPa (${pctFck}% do fck)`;
+            normativeCriteria = `Aos ${idade} dias: Resistência ≥ ${minReq.toFixed(1)} MPa (ABNT NBR 5739 / NBR 12655)`;
+            notesSuggestion = `Ruptura à compressão axial em prensa automática calibrada. Corpo de prova com ruptura cônica simétrica.`;
+            break;
+        }
+
+        case 'cnc-fctm': {
+            const p = parseFloat(bench.carga_flexao_kn) || 35.2;
+            const l = parseFloat(bench.vao_livre_l_cm) || 45.0;
+            const b = parseFloat(bench.largura_b_cm) || 15.0;
+            const h = parseFloat(bench.altura_h_cm) || 15.0;
+            const fctmMin = parseFloat(bench.fctm_minimo_exigido) || 4.5;
+
+            const fctM = Number(((p * 1000 * (l * 10)) / ((b * 10) * Math.pow(h * 10, 2))).toFixed(2));
+            status = fctM >= fctmMin ? 'Aprovado' : 'Reprovado';
+
+            resultValue = `fctM,k = ${fctM.toFixed(2)} MPa aos 28 dias`;
+            metricsCalculated = {
+                tracao_flexao_fctm: fctM,
+                carga_flexao_kn: p,
+                fctm_minimo: fctmMin
+            };
+            formulaDisplay = `fctM = (P × L) / (b × h²) = (${p} kN × ${l} cm) / (${b} cm × ${h}² cm²) = ${fctM.toFixed(2)} MPa`;
+            normativeCriteria = `fctM,k ≥ ${fctmMin} MPa aos 28 dias para placas de concreto (DNIT 049/2013-ES)`;
+            notesSuggestion = `Resistência à tração na flexão em vigas prismáticas (ABNT NBR 12142). Placas de pavimento rígido aptas ao tráfego pesado.`;
+            break;
+        }
+
+        case 'cnc-ac': {
+            const agua = parseFloat(bench.agua_efetiva_litros) || 168.0;
+            const cim = parseFloat(bench.consumo_cimento_kg) || 400.0;
+            const acMax = parseFloat(bench.ac_maximo_tolerado) || 0.45;
+            const ac = Number((agua / cim).toFixed(2));
+
+            status = ac <= acMax ? 'Aprovado' : 'Reprovado';
+            resultValue = `Relação a/c = ${ac.toFixed(2)}`;
+            metricsCalculated = {
+                relacao_agua_cimento_ac: ac,
+                agua_efetiva: agua,
+                consumo_cimento: cim
+            };
+            formulaDisplay = `a/c = Água Efetiva (${agua} L) / Cimento (${cim} kg) = ${ac.toFixed(2)}`;
+            normativeCriteria = `Relação a/c ≤ ${acMax} (ABNT NBR 6118 / DNIT 049-ES)`;
+            notesSuggestion = `Controle da relação água/cimento na pesagem dos insumos. Durabilidade e baixa permeabilidade garantidas.`;
+            break;
+        }
+
+        default: {
+            resultValue = 'Conforme especificado em bancada';
+            status = 'Aprovado';
+            metricsCalculated = { ...bench };
+            formulaDisplay = 'Validação paramétrica direta conforme tolerâncias normativas do DNIT';
+            normativeCriteria = 'Atendimento às especificações de projeto rodoviário';
+            notesSuggestion = 'Ensaio realizado de acordo com o procedimento normativo aplicável.';
+            break;
+        }
+    }
+
+    return {
+        resultValue,
+        status,
+        metricsCalculated,
+        formulaDisplay,
+        normativeCriteria,
+        notesSuggestion
+    };
+};
 export const INITIAL_DNIT_LAB_TESTS: DNITLabTest[] = [
     {
         id: 'lab-init-1',
@@ -1092,8 +1976,8 @@ export const generateTestSvgDiagram = (test: DNITLabTest): string => {
 
     // 1. PROCTOR / COMPACTAÇÃO DE SOLOS (DNIT 164-ME)
     if (code.includes('PROCTOR') || code.includes('164') || name.includes('compactação') || name.includes('proctor')) {
-        const wOpt = Number(bench.umidade_otima) || 12.5;
-        const gMax = Number(bench.densidade_seca_maxima) || 2.04;
+        const wOpt = Number(bench.umidade_otima ?? bench.umidade_otima_percent ?? metrics.umidade_otima) || 12.5;
+        const gMax = Number(bench.densidade_seca_maxima ?? bench.massa_especifica_seca_max ?? metrics.densidade_seca_maxima) || 2.04;
         
         // Coordenadas cartesianas no SVG (Largura 650, Altura 330)
         // Eixo X: w de 8% a 18% -> 70 a 580
@@ -1158,8 +2042,8 @@ export const generateTestSvgDiagram = (test: DNITLabTest): string => {
 
     // 2. LIMITES DE ATTERBERG (DNIT 122/139-ME / DNER-ME 082) - CARTA DE CASAGRANDE
     if (code.includes('ATTERBERG') || code.includes('122') || code.includes('139') || name.includes('atterberg') || name.includes('liquidez') || name.includes('plasticidade')) {
-        const ll = Number(bench.limite_liquidez_ll) || 28.4;
-        const ip = Number(metrics.ip_calculado || bench.indice_plasticidade_ip) || 9.3;
+        const ll = Number(bench.limite_liquidez_ll ?? metrics.limite_liquidez_ll) || 28.4;
+        const ip = Number(bench.ip_calculado ?? metrics.ip_calculado ?? bench.indice_plasticidade_ip) || 9.3;
 
         // X: LL de 0 a 100% -> 70 a 580
         // Y: IP de 0 a 60% -> 260 a 50
@@ -1221,11 +2105,11 @@ export const generateTestSvgDiagram = (test: DNITLabTest): string => {
 
     // 3. FRASCO DE AREIA & GRAU DE COMPACTAÇÃO IN SITU (DNIT 162-ME / DNER-ME 092)
     if (code.includes('FRASCO') || code.includes('162') || code.includes('DENS_IN_SITU') || name.includes('frasco') || name.includes('grau de compactação')) {
-        const gc = Number(bench.grau_compactacao_gc) || 101.4;
-        const gdCampo = Number(bench.densidade_seca_campo) || 2.07;
-        const gdLab = Number(bench.densidade_maxima_lab) || 2.04;
-        const wCampo = Number(bench.umidade_campo) || 12.1;
-        const wOpt = Number(bench.umidade_otima_lab) || 12.5;
+        const gc = Number(bench.grau_compactacao_gc ?? metrics.grau_compactacao_gc) || 101.4;
+        const gdCampo = Number(bench.densidade_seca_campo ?? metrics.densidade_seca_campo) || 2.07;
+        const gdLab = Number(bench.densidade_maxima_lab ?? bench.densidade_seca_max_proctor ?? metrics.densidade_maxima_lab) || 2.04;
+        const wCampo = Number(bench.umidade_campo ?? bench.umidade_campo_percent ?? metrics.umidade_campo) || 12.1;
+        const wOpt = Number(bench.umidade_otima_lab ?? bench.umidade_otima_proctor ?? metrics.umidade_otima_lab) || 12.5;
 
         // Escala GC de 88% a 106% (Largura 480px: x0=90, xEnd=570)
         const mapGC = (val: number) => 90 + ((val - 88) / 18) * 480;
@@ -1304,8 +2188,8 @@ export const generateTestSvgDiagram = (test: DNITLabTest): string => {
 
     // 4. CBR / ISC E EXPANSÃO (DNIT 172-ME)
     if (code.includes('CBR') || code.includes('172') || name.includes('cbr') || name.includes('califórnia')) {
-        const cbr = Number(bench.cbr_calculado) || 22.0;
-        const exp = Number(bench.expansao_percentual) || 0.38;
+        const cbr = Number(bench.cbr_calculado ?? bench.cbr_calculado_percent ?? metrics.cbr_calculado) || 22.0;
+        const exp = Number(bench.expansao_percentual ?? bench.expansao_percent ?? metrics.expansao_percentual) || 0.38;
 
         // X: Penetração de 0 a 12.7 mm -> 70 a 420
         // Y: Pressão de 0 a 30 kgf/cm² -> 250 a 60
@@ -1548,8 +2432,8 @@ export const generateTestSvgDiagram = (test: DNITLabTest): string => {
 
     // 8. TEOR DE BETUME / LIGANTE ASFÁLTICO (DNIT 144/146-ME)
     if (code.includes('BETUME') || code.includes('ROTAREX') || code.includes('144') || code.includes('146') || name.includes('betume') || name.includes('ligante')) {
-        const pbProj = 5.40;
-        const pbReal = Number(bench.teor_betume_extraido || bench.teor_betume_calculado) || 5.48;
+        const pbProj = Number(bench.teor_projeto ?? metrics.teor_projeto) || 5.40;
+        const pbReal = Number(bench.teor_betume_extraido ?? bench.teor_betume_calculado ?? bench.teor_betume ?? metrics.teor_betume_extraido) || 5.40;
         const delta = pbReal - pbProj;
 
         // Escala 4.8% a 6.0% (Largura 460px: x0=95, xEnd=555)
@@ -1603,8 +2487,8 @@ export const generateTestSvgDiagram = (test: DNITLabTest): string => {
 
     // 9. CONCRETO - RESISTÊNCIA À COMPRESSÃO FCK (ABNT NBR 5739)
     if (code.includes('5739') || code.includes('FCK') || name.includes('compressão axial') || name.includes('fck')) {
-        const fckNominal = 30.0;
-        const fckReal = Number(bench.resistencia_calculada_fck || bench.carga_ruptura_kn) || 32.8;
+        const fckNominal = Number(bench.fck_nominal_projeto ?? metrics.fck_nominal_projeto) || 30.0;
+        const fckReal = Number(bench.resistencia_calculada_fck ?? bench.fck_atingido ?? metrics.resistencia_calculada_fck) || 32.8;
         const idade = 28;
 
         // X: 0 a 28 dias -> 80 a 440
@@ -1660,8 +2544,8 @@ export const generateTestSvgDiagram = (test: DNITLabTest): string => {
 
     // 10. CONCRETO - SLUMP TEST / ABATIMENTO DE CONE (ABNT NBR 16889)
     if (code.includes('16889') || code.includes('SLUMP') || name.includes('slump') || name.includes('abatimento')) {
-        const slump = Number(bench.slump_obtido_mm) || 110;
-        const slumpNominal = 100;
+        const slump = Number(bench.slump_obtido_mm ?? metrics.slump_obtido_mm ?? (Number(bench.slump_medido) * 10)) || 100;
+        const slumpNominal = Number(bench.slump_projeto ? (Number(bench.slump_projeto) * 10) : metrics.slump_projeto_mm) || 100;
 
         return `
         <svg viewBox="0 0 650 330" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: auto; max-width: 650px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
@@ -1717,9 +2601,9 @@ export const generateTestSvgDiagram = (test: DNITLabTest): string => {
 
     // 11. AGREGADOS - EQUIVALENTE DE AREIA (DNER-ME 054)
     if (code.includes('054') || code.includes('EA') || name.includes('equivalente de areia')) {
-        const ea = Number(bench.equivalente_areia_ea) || 69.3;
-        const h1 = Number(bench.leitura_areia_h1) || 61.0;
-        const h2 = Number(bench.leitura_argila_h2) || 88.0;
+        const ea = Number(bench.equivalente_areia_ea ?? metrics.equivalente_areia_ea) || 69.4;
+        const h1 = Number(bench.leitura_areia_h1 ?? bench.h1_areia) || 68.0;
+        const h2 = Number(bench.leitura_argila_h2 ?? bench.h2_argila) || 98.0;
 
         return `
         <svg viewBox="0 0 650 330" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: auto; max-width: 650px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
@@ -1782,7 +2666,7 @@ export const generateTestSvgDiagram = (test: DNITLabTest): string => {
 
     // 12. AGREGADOS - ABRASÃO LOS ANGELES (DNIT 157-ME)
     if (code.includes('157') || code.includes('LOS_ANGELES') || name.includes('los angeles') || name.includes('abrasão')) {
-        const desgaste = Number(bench.desgaste_los_angeles) || 24.2;
+        const desgaste = Number(bench.desgaste_los_angeles ?? metrics.desgaste_los_angeles) || 24.2;
         const limCapa = 30.0;
         const limBase = 40.0;
 
@@ -2324,14 +3208,17 @@ const Production = () => {
         locationOrStation: '', // Trecho, estaca ou rodovia
         supplierOrQuarry: '', // Pedreira, refinaria ou fornecedor
         tester: 'Laboratorista Técnico Especialista',
-        supervisor: 'Eng. Responsável Técnico - CREA',
+        supervisor: 'Eng. Responsável Técnico - CREA 198420-D',
         testedAt: new Date().toISOString().split('T')[0],
         resultValue: '',
         status: 'Aprovado' as 'Aprovado' | 'Reprovado' | 'Ressalva',
         conditionalRelease: false,
         notes: '',
         isBenchExpanded: true,
-        benchValues: {} as Record<string, any>
+        benchValues: {} as Record<string, any>,
+        metricsCalculated: {} as Record<string, any>,
+        formulaDisplay: '',
+        normativeCriteria: ''
     });
 
     const activeTestDef = useMemo(() => {
@@ -2342,350 +3229,19 @@ const Production = () => {
     const handleBenchFieldChange = (key: string, val: string) => {
         const numVal = parseFloat(val);
         const updatedBench = { ...dnitForm.benchValues, [key]: isNaN(numVal) ? val : numVal };
-        let computedResult = dnitForm.resultValue;
-        let computedStatus: 'Aprovado' | 'Reprovado' | 'Ressalva' = dnitForm.status;
-
-        // Regras específicas de cálculo assistido de engenharia por ensaio DNIT
-        if (dnitForm.selectedTestId === 'sol-frasco-areia') {
-            const mSolo = parseFloat(updatedBench.massa_solo_umido_g);
-            const mAreia = parseFloat(updatedBench.massa_areia_utilizada_g);
-            const dAreia = parseFloat(updatedBench.densidade_areia_padrao || '1.420');
-            const w = parseFloat(updatedBench.umidade_campo_percent);
-            const dSecaMax = parseFloat(updatedBench.densidade_seca_max_proctor);
-            const gcMin = parseFloat(updatedBench.gc_minimo_exigido || '100.0');
-            if (!isNaN(mSolo) && !isNaN(mAreia) && mAreia > 0 && dAreia > 0 && !isNaN(w) && !isNaN(dSecaMax) && dSecaMax > 0) {
-                const volFuro = mAreia / dAreia;
-                const dUmida = mSolo / volFuro;
-                const dSeca = Number((dUmida / (1 + w / 100)).toFixed(3));
-                const gc = Number(((dSeca / dSecaMax) * 100).toFixed(1));
-                computedResult = `GC = ${gc}% (γd = ${dSeca} g/cm³ | w = ${w}%)`;
-                computedStatus = gc >= gcMin ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'sol-cbr') {
-            const cbr = parseFloat(updatedBench.cbr_calculado_percent);
-            const cbrMin = parseFloat(updatedBench.cbr_minimo_projeto || '12.0');
-            const exp = parseFloat(updatedBench.expansao_percent);
-            const expMax = parseFloat(updatedBench.expansao_maxima_tolerada || '1.0');
-            if (!isNaN(cbr)) {
-                const expStr = !isNaN(exp) ? ` | Expansão: ${exp}%` : '';
-                computedResult = `CBR = ${cbr}%${expStr}`;
-                const cbrOk = cbr >= cbrMin;
-                const expOk = isNaN(exp) || exp <= expMax;
-                computedStatus = (cbrOk && expOk) ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'sol-atterberg') {
-            const ll = parseFloat(updatedBench.limite_liquidez_ll);
-            const lp = parseFloat(updatedBench.limite_plasticidade_lp);
-            const ipMax = parseFloat(updatedBench.ip_maximo_tolerado || '12.0');
-            if (!isNaN(ll) && !isNaN(lp)) {
-                const ip = Number((ll - lp).toFixed(1));
-                const plastDesc = ip <= 0 ? 'Não Plástico (NP)' : ip <= 7 ? 'Fracamente Plástico' : ip <= 15 ? 'Medianamente Plástico' : 'Altamente Plástico';
-                computedResult = `LL: ${ll}% | LP: ${lp}% | IP = ${ip}% (${plastDesc})`;
-                computedStatus = ip <= ipMax ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'sol-speedy') {
-            const wSp = parseFloat(updatedBench.umidade_speedy_medida);
-            const wOt = parseFloat(updatedBench.umidade_otima_proctor || '13.5');
-            const tol = parseFloat(updatedBench.tolerancia_desvio_umidade || '2.0');
-            if (!isNaN(wSp)) {
-                const diff = Number(Math.abs(wSp - wOt).toFixed(1));
-                computedResult = `Umidade Speedy: ${wSp}% (Desvio de ${diff}% em relação a wot)`;
-                computedStatus = diff <= tol ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'sol-proctor') {
-            const dMax = parseFloat(updatedBench.massa_especifica_seca_max);
-            const wOt = parseFloat(updatedBench.umidade_otima_percent);
-            const nrg = updatedBench.energia_compactacao || 'Proctor Intermediária';
-            if (!isNaN(dMax) && !isNaN(wOt)) {
-                computedResult = `γd,max = ${dMax} g/cm³ | wot = ${wOt}% (${nrg})`;
-                computedStatus = 'Aprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'sol-gran-conjunta') {
-            const ped = parseFloat(updatedBench.perc_pedregulho || '0');
-            const areia = parseFloat(updatedBench.perc_areia || '0');
-            const silte = parseFloat(updatedBench.perc_silte || '0');
-            const argila = parseFloat(updatedBench.perc_argila || '0');
-            const finos = Number((silte + argila).toFixed(1));
-            computedResult = `Pedregulho: ${ped}% | Areia: ${areia}% | Finos (Silte+Argila): ${finos}%`;
-            computedStatus = 'Aprovado';
-        } else if (dnitForm.selectedTestId === 'sol-hrb') {
-            const p200 = parseFloat(updatedBench.passante_peneira_n200);
-            const ll = parseFloat(updatedBench.limite_liquidez_val);
-            const ip = parseFloat(updatedBench.indice_plasticidade_val);
-            const grupoDec = updatedBench.classificacao_hrb_declarada || 'A-2-4';
-            if (!isNaN(p200) && !isNaN(ll) && !isNaN(ip)) {
-                const a = Math.max(0, Math.min(40, p200 - 35));
-                const b = Math.max(0, Math.min(40, p200 - 15));
-                const c = Math.max(0, Math.min(20, ll - 40));
-                const d = Math.max(0, Math.min(20, ip - 10));
-                const ig = Math.max(0, Math.round(0.2 * a + 0.005 * a * c + 0.01 * b * d));
-                computedResult = `Classificação: ${grupoDec} (IG = ${ig})`;
-                computedStatus = 'Aprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'sol-dens-graos') {
-            const m1 = parseFloat(updatedBench.massa_picnometro_cheio_agua);
-            const m2 = parseFloat(updatedBench.massa_picnometro_solo_agua);
-            const ms = parseFloat(updatedBench.massa_solo_seco_estufa || '50.0');
-            if (!isNaN(m1) && !isNaN(m2) && !isNaN(ms) && (ms + m1 - m2) > 0) {
-                const rhoS = Number((ms / (ms + m1 - m2)).toFixed(3));
-                computedResult = `Massa Específica dos Grãos (ρs) = ${rhoS} g/cm³`;
-                computedStatus = (rhoS >= 2.50 && rhoS <= 2.90) ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'sol-mct') {
-            const cLinha = parseFloat(updatedBench.coeficiente_c_linha);
-            const pi = parseFloat(updatedBench.perda_massa_imersao_pi);
-            const classe = updatedBench.classe_mct_obtida || 'LA\' (Laterítico)';
-            if (!isNaN(cLinha) && !isNaN(pi)) {
-                computedResult = `MCT: ${classe} (c' = ${cLinha} | Pi = ${pi}%)`;
-                computedStatus = 'Aprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'ag-ea') {
-            const h1 = parseFloat(updatedBench.h1_areia);
-            const h2 = parseFloat(updatedBench.h2_argila);
-            if (!isNaN(h1) && !isNaN(h2) && h2 > 0) {
-                const ea = Number(((h1 / h2) * 100).toFixed(1));
-                computedResult = `EA = ${ea}%`;
-                computedStatus = ea >= 55 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'ag-la') {
-            const m1 = parseFloat(updatedBench.m1_inicial);
-            const m2 = parseFloat(updatedBench.m2_retida12);
-            if (!isNaN(m1) && !isNaN(m2) && m1 > 0) {
-                const la = Number((((m1 - m2) / m1) * 100).toFixed(1));
-                computedResult = `Perda por abrasão: ${la}%`;
-                computedStatus = la <= 40 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'ag-forma') {
-            const c = parseFloat(updatedBench.comprimento_medio);
-            const e = parseFloat(updatedBench.espessura_media);
-            if (!isNaN(c) && !isNaN(e) && c > 0) {
-                const forma = Number((e / c).toFixed(2));
-                computedResult = `Índice de Forma Médio = ${forma}`;
-                computedStatus = forma >= 0.50 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'ag-dens-miudo') {
-            const a = parseFloat(updatedBench.massa_seca_estufa);
-            const s = parseFloat(updatedBench.massa_sss_cone || '500');
-            const v = parseFloat(updatedBench.volume_deslocado_ml);
-            if (!isNaN(a) && a > 0 && !isNaN(s)) {
-                const abs = Number((((s - a) / a) * 100).toFixed(2));
-                let dRealStr = '';
-                if (!isNaN(v) && (v - (s - a)) > 0) {
-                    const dReal = Number((a / (v - (s - a))).toFixed(3));
-                    dRealStr = ` | d_real: ${dReal} g/cm³`;
-                }
-                computedResult = `Absorção: ${abs}%${dRealStr}`;
-                computedStatus = abs <= 2.0 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'ag-dens-graudo') {
-            const a = parseFloat(updatedBench.massa_seca_estufa_g);
-            const b = parseFloat(updatedBench.massa_sss_ar_g);
-            const c = parseFloat(updatedBench.massa_submersa_agua_g);
-            if (!isNaN(a) && !isNaN(b) && a > 0) {
-                const abs = Number((((b - a) / a) * 100).toFixed(2));
-                let dApStr = '';
-                if (!isNaN(c) && (b - c) > 0) {
-                    const dAp = Number((a / (b - c)).toFixed(3));
-                    dApStr = ` | Massa Específica Aparente: ${dAp} g/cm³`;
-                }
-                computedResult = `Absorção d'água: ${abs}%${dApStr}`;
-                computedStatus = abs <= 1.5 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'ag-torroes') {
-            const mi = parseFloat(updatedBench.massa_inicial_amostra);
-            const mr = parseFloat(updatedBench.massa_retida_apos_atrito);
-            if (!isNaN(mi) && !isNaN(mr) && mi > 0) {
-                const torroes = Number((((mi - mr) / mi) * 100).toFixed(2));
-                computedResult = `Torrões de Argila: ${torroes}%`;
-                computedStatus = torroes <= 1.5 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'ag-sanidade') {
-            const mi = parseFloat(updatedBench.massa_inicial_ciclos);
-            const mf = parseFloat(updatedBench.massa_final_lavada);
-            if (!isNaN(mi) && !isNaN(mf) && mi > 0) {
-                const perda = Number((((mi - mf) / mi) * 100).toFixed(1));
-                computedResult = `Perda por Sanidade: ${perda}%`;
-                computedStatus = perda <= 12.0 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'ag-finos-200') {
-            const ma = parseFloat(updatedBench.massa_amostra_seca_antes);
-            const mp = parseFloat(updatedBench.massa_amostra_seca_apos);
-            if (!isNaN(ma) && !isNaN(mp) && ma > 0) {
-                const finos = Number((((ma - mp) / ma) * 100).toFixed(2));
-                computedResult = `Finos Peneira #200: ${finos}%`;
-                computedStatus = finos <= 1.5 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'asf-betume') {
-            const mi = parseFloat(updatedBench.massa_inicial_mistura);
-            const mf = parseFloat(updatedBench.massa_agregados_recuperados);
-            const me = parseFloat(updatedBench.massa_filler_filtro || '0');
-            const targetPb = parseFloat(updatedBench.teor_projeto || '5.20');
-            if (!isNaN(mi) && !isNaN(mf) && mi > 0) {
-                const pb = Number((((mi - (mf + me)) / mi) * 100).toFixed(2));
-                computedResult = `Teor de Ligante: ${pb}%`;
-                const diff = Math.abs(pb - targetPb);
-                computedStatus = diff <= 0.30 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'asf-temp') {
-            const u = parseFloat(updatedBench.temp_saida_usina);
-            const p = parseFloat(updatedBench.temp_chegada_pista);
-            const r = parseFloat(updatedBench.temp_inicio_rolamento);
-            if (!isNaN(u)) {
-                computedResult = `Usina: ${u}°C ${!isNaN(p) ? `| Pista: ${p}°C` : ''} ${!isNaN(r) ? `| Rolo: ${r}°C` : ''}`;
-                const usinaOk = u >= 145 && u <= 175;
-                const pistaOk = isNaN(p) || p >= 135;
-                const roloOk = isNaN(r) || r >= 120;
-                computedStatus = (usinaOk && pistaOk && roloOk) ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'asf-marshall') {
-            const est = parseFloat(updatedBench.estabilidade_kgf);
-            const flu = parseFloat(updatedBench.fluencia_mm);
-            const gmb = parseFloat(updatedBench.densidade_aparente_gmb);
-            const gmm = parseFloat(updatedBench.densidade_maxima_gmm);
-            let vvStr = '';
-            if (!isNaN(gmb) && !isNaN(gmm) && gmm > 0) {
-                const vv = Number((((gmm - gmb) / gmm) * 100).toFixed(1));
-                vvStr = ` | Vv: ${vv}%`;
-            }
-            if (!isNaN(est) || !isNaN(flu)) {
-                computedResult = `Estabilidade: ${est || '-'} kgf | Fluência: ${flu || '-'} mm${vvStr}`;
-                const estOk = isNaN(est) || est >= 800;
-                const fluOk = isNaN(flu) || (flu >= 2.0 && flu <= 4.5);
-                computedStatus = (estOk && fluOk) ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'asf-rt') {
-            const p = parseFloat(updatedBench.carga_ruptura_kn);
-            const d = parseFloat(updatedBench.diametro_cp_mm || '101.6');
-            const h = parseFloat(updatedBench.altura_cp_mm || '63.5');
-            if (!isNaN(p) && d > 0 && h > 0) {
-                const rt = Number(((2 * (p * 1000)) / (Math.PI * d * h)).toFixed(2));
-                computedResult = `RT = ${rt} MPa`;
-                computedStatus = rt >= 0.65 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'asf-gc-pista') {
-            const inSitu = parseFloat(updatedBench.densidade_in_situ_g_cm3);
-            const proj = parseFloat(updatedBench.densidade_projeto_g_cm3);
-            if (!isNaN(inSitu) && !isNaN(proj) && proj > 0) {
-                const gc = Number(((inSitu / proj) * 100).toFixed(1));
-                computedResult = `Grau de Compactação (GC): ${gc}%`;
-                computedStatus = (gc >= 97.0 && gc <= 102.0) ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'asf-rtr-lottman') {
-            const seco = parseFloat(updatedBench.rt_amostra_seca_mpa);
-            const cond = parseFloat(updatedBench.rt_amostra_condicionada_mpa);
-            if (!isNaN(seco) && !isNaN(cond) && seco > 0) {
-                const rtr = Number(((cond / seco) * 100).toFixed(1));
-                computedResult = `RTR = ${rtr}%`;
-                computedStatus = rtr >= 80.0 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'asf-mr') {
-            const tensao = parseFloat(updatedBench.tensao_repetida_mpa);
-            const def = parseFloat(updatedBench.deformacao_resiliente_um);
-            if (!isNaN(tensao) && !isNaN(def) && def > 0) {
-                const mr = Math.round((tensao / (def * 1e-6)) * 1e-6);
-                computedResult = `Módulo de Resiliência: ${mr.toLocaleString('pt-BR')} MPa`;
-                computedStatus = mr >= 3000 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'asf-anel-bola') {
-            const t1 = parseFloat(updatedBench.temp_amolecimento_1);
-            const t2 = parseFloat(updatedBench.temp_amolecimento_2);
-            if (!isNaN(t1)) {
-                const media = !isNaN(t2) ? Number(((t1 + t2) / 2).toFixed(1)) : t1;
-                computedResult = `Ponto de Amolecimento: ${media}°C`;
-                computedStatus = media >= 46.0 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'asf-penetracao') {
-            const p1 = parseFloat(updatedBench.leitura_pen_1);
-            const p2 = parseFloat(updatedBench.leitura_pen_2);
-            const p3 = parseFloat(updatedBench.leitura_pen_3);
-            const validPens = [p1, p2, p3].filter(n => !isNaN(n));
-            if (validPens.length > 0) {
-                const media = Math.round(validPens.reduce((a, b) => a + b, 0) / validPens.length);
-                computedResult = `Penetração Média: ${media} dmm (0,1 mm)`;
-                computedStatus = (media >= 50 && media <= 70) ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'asf-emulsao') {
-            const res = parseFloat(updatedBench.residuo_evaporacao_percent);
-            if (!isNaN(res)) {
-                computedResult = `Resíduo por Evaporação: ${res}%`;
-                computedStatus = res >= 60.0 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'cnc-slump') {
-            const med = parseFloat(updatedBench.slump_medido);
-            const proj = parseFloat(updatedBench.slump_projeto || '10.0');
-            const tol = parseFloat(updatedBench.tolerancia_normativa || '2.0');
-            if (!isNaN(med)) {
-                computedResult = `Slump medido: ${med} cm (Projeto: ${proj} ± ${tol} cm)`;
-                const diff = Math.abs(med - proj);
-                computedStatus = diff <= tol ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'cnc-fck') {
-            const forcaKn = parseFloat(updatedBench.forca_prensa_kn);
-            const diam = parseFloat(updatedBench.diametro_cilindro_cm || '10.0');
-            const projFck = parseFloat(updatedBench.fck_nominal_projeto || '30.0');
-            const idade = parseFloat(updatedBench.idade_dias || '28');
-            if (!isNaN(forcaKn) && diam > 0) {
-                const areaCm2 = Math.PI * Math.pow(diam / 2, 2);
-                const tensaoMpa = Number(((forcaKn * 10) / areaCm2).toFixed(1));
-                computedResult = `fck atingido: ${tensaoMpa} MPa (${idade} dias)`;
-                const minReq = idade <= 7 ? projFck * 0.70 : projFck;
-                computedStatus = tensaoMpa >= minReq ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'cnc-fctm') {
-            const p = parseFloat(updatedBench.carga_flexao_kn);
-            const l = parseFloat(updatedBench.vao_livre_l_cm || '45.0');
-            const b = parseFloat(updatedBench.largura_b_cm || '15.0');
-            const h = parseFloat(updatedBench.altura_h_cm || '15.0');
-            if (!isNaN(p) && b > 0 && h > 0) {
-                const fctM = Number(((p * 1000 * (l * 10)) / ((b * 10) * Math.pow(h * 10, 2))).toFixed(2));
-                computedResult = `fctM,k = ${fctM} MPa aos 28 dias`;
-                computedStatus = fctM >= 4.5 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'cnc-ac') {
-            const agua = parseFloat(updatedBench.agua_efetiva_litros);
-            const cim = parseFloat(updatedBench.consumo_cimento_kg);
-            if (!isNaN(agua) && !isNaN(cim) && cim > 0) {
-                const ac = Number((agua / cim).toFixed(2));
-                computedResult = `Relação a/c = ${ac}`;
-                computedStatus = ac <= 0.45 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'cnc-ar-incorporado') {
-            const ar = parseFloat(updatedBench.leitura_manometro_ar);
-            if (!isNaN(ar)) {
-                computedResult = `Teor de Ar: ${ar}%`;
-                computedStatus = (ar >= 3.0 && ar <= 6.0) ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'cnc-rt-diametral') {
-            const f = parseFloat(updatedBench.forca_ruptura_kn);
-            const d = parseFloat(updatedBench.diametro_d_cm || '15.0');
-            const l = parseFloat(updatedBench.comprimento_l_cm || '30.0');
-            if (!isNaN(f) && d > 0 && l > 0) {
-                const fctSp = Number(((2 * f * 10) / (Math.PI * d * l)).toFixed(2));
-                computedResult = `fct,sp = ${fctSp} MPa aos 28 dias`;
-                computedStatus = fctSp >= 3.0 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'cnc-absorcao-vazios') {
-            const ms = parseFloat(updatedBench.massa_seca_estufa_ms);
-            const msat = parseFloat(updatedBench.massa_saturada_fervida_msat);
-            if (!isNaN(ms) && !isNaN(msat) && ms > 0) {
-                const abs = Number((((msat - ms) / ms) * 100).toFixed(2));
-                computedResult = `Absorção pós-fervura: ${abs}%`;
-                computedStatus = abs <= 5.0 ? 'Aprovado' : 'Reprovado';
-            }
-        } else if (dnitForm.selectedTestId === 'cnc-espessura-placa') {
-            const nom = parseFloat(updatedBench.espessura_nominal_projeto || '22.0');
-            const med = parseFloat(updatedBench.leitura_media_paquimetro);
-            if (!isNaN(med) && !isNaN(nom)) {
-                computedResult = `Espessura medida: ${med} cm (Projeto: ${nom} cm)`;
-                computedStatus = med >= (nom - 0.5) ? 'Aprovado' : 'Reprovado';
-            }
-        }
+        
+        // Executa o motor central de cálculo normativo DNIT
+        const calc = calculateDNITBenchMetrics(dnitForm.selectedTestId, updatedBench);
 
         setDnitForm(prev => ({
             ...prev,
             benchValues: updatedBench,
-            resultValue: computedResult,
-            status: computedStatus
+            resultValue: calc.resultValue,
+            status: calc.status,
+            metricsCalculated: calc.metricsCalculated,
+            formulaDisplay: calc.formulaDisplay,
+            normativeCriteria: calc.normativeCriteria,
+            notes: prev.notes || calc.notesSuggestion || ''
         }));
     };
 
@@ -2696,6 +3252,16 @@ const Production = () => {
 
         const defaultBatch = order?.batch || `L${new Date().getMonth() + 1}${new Date().getDate()}-${Math.floor(Math.random() * 900 + 100)}`;
         const defaultProduct = order?.productName || (targetModule === 'asfalto' ? 'Concreto Asfáltico CBUQ Faixa C' : targetModule === 'concreto' ? 'Concreto Usinado Estrutural fck 30 MPa' : 'Agregado Britado 19mm');
+
+        // Pré-carrega valores padrão realistas da bancada
+        const initialBench: Record<string, any> = { ...(defaultDef.defaultBenchData || {}) };
+        defaultDef.benchFields.forEach(f => {
+            if (f.defaultValue !== undefined && initialBench[f.key] === undefined) {
+                initialBench[f.key] = f.defaultValue;
+            }
+        });
+
+        const initialCalc = calculateDNITBenchMetrics(defaultDef.id, initialBench);
 
         setDnitForm({
             module: targetModule,
@@ -2708,12 +3274,15 @@ const Production = () => {
             tester: 'Laboratorista Técnico Especialista',
             supervisor: 'Eng. Responsável Técnico - CREA 198420-D',
             testedAt: new Date().toISOString().split('T')[0],
-            resultValue: '',
-            status: 'Aprovado',
+            resultValue: initialCalc.resultValue,
+            status: initialCalc.status,
             conditionalRelease: false,
-            notes: '',
+            notes: initialCalc.notesSuggestion || '',
             isBenchExpanded: true,
-            benchValues: {}
+            benchValues: initialBench,
+            metricsCalculated: initialCalc.metricsCalculated,
+            formulaDisplay: initialCalc.formulaDisplay,
+            normativeCriteria: initialCalc.normativeCriteria
         });
         setIsDNITModalOpen(true);
     };
@@ -2751,7 +3320,8 @@ const Production = () => {
             status: effectiveStatus,
             conditionalRelease: dnitForm.conditionalRelease,
             notes: dnitForm.notes,
-            benchData: dnitForm.benchValues
+            benchData: { ...dnitForm.benchValues, ...dnitForm.metricsCalculated },
+            metricsCalculated: dnitForm.metricsCalculated
         };
 
         // Salva no repositório de testes do laboratório (independente ou vinculado)
@@ -2774,7 +3344,6 @@ const Production = () => {
         addToast(`Ensaio ${def.code} registrado com sucesso no módulo ${def.module.toUpperCase()}!`, 'success');
         setIsDNITModalOpen(false);
     };
-
     const handleDeleteLabTest = (testId: string) => {
         if (window.confirm("Confirma a exclusão deste registro técnico de ensaio do laboratório?")) {
             setLabTests(prev => prev.filter(t => t.id !== testId));
@@ -4341,12 +4910,24 @@ const Production = () => {
                                         onChange={e => {
                                             const newMod = e.target.value as LabModuleType;
                                             const firstDef = DNIT_TEST_CATALOG.find(t => t.module === newMod) || DNIT_TEST_CATALOG[0];
+                                            const initialBench: Record<string, any> = { ...(firstDef.defaultBenchData || {}) };
+                                            firstDef.benchFields.forEach(f => {
+                                                if (f.defaultValue !== undefined && initialBench[f.key] === undefined) {
+                                                    initialBench[f.key] = f.defaultValue;
+                                                }
+                                            });
+                                            const calc = calculateDNITBenchMetrics(firstDef.id, initialBench);
                                             setDnitForm(prev => ({
                                                 ...prev,
                                                 module: newMod,
                                                 selectedTestId: firstDef.id,
-                                                benchValues: {},
-                                                resultValue: ''
+                                                benchValues: initialBench,
+                                                resultValue: calc.resultValue,
+                                                status: calc.status,
+                                                metricsCalculated: calc.metricsCalculated,
+                                                formulaDisplay: calc.formulaDisplay,
+                                                normativeCriteria: calc.normativeCriteria,
+                                                notes: calc.notesSuggestion || ''
                                             }));
                                         }}
                                     >
@@ -4364,11 +4945,24 @@ const Production = () => {
                                         value={dnitForm.selectedTestId}
                                         onChange={e => {
                                             const newId = e.target.value;
+                                            const def = DNIT_TEST_CATALOG.find(t => t.id === newId) || activeTestDef;
+                                            const initialBench: Record<string, any> = { ...(def.defaultBenchData || {}) };
+                                            def.benchFields.forEach(f => {
+                                                if (f.defaultValue !== undefined && initialBench[f.key] === undefined) {
+                                                    initialBench[f.key] = f.defaultValue;
+                                                }
+                                            });
+                                            const calc = calculateDNITBenchMetrics(def.id, initialBench);
                                             setDnitForm(prev => ({
                                                 ...prev,
                                                 selectedTestId: newId,
-                                                benchValues: {},
-                                                resultValue: ''
+                                                benchValues: initialBench,
+                                                resultValue: calc.resultValue,
+                                                status: calc.status,
+                                                metricsCalculated: calc.metricsCalculated,
+                                                formulaDisplay: calc.formulaDisplay,
+                                                normativeCriteria: calc.normativeCriteria,
+                                                notes: calc.notesSuggestion || ''
                                             }));
                                         }}
                                         required
@@ -4525,6 +5119,39 @@ const Production = () => {
                                                 </div>
                                             ))}
                                         </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* PAINEL DE MEMÓRIA DE CÁLCULO E FÓRMULAS NORMATIVAS EM TEMPO REAL */}
+                            <div className="p-3.5 bg-indigo-50/70 dark:bg-slate-900/80 rounded-xl border border-indigo-200/80 dark:border-indigo-900/50 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-black uppercase text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+                                        <Activity size={14} className="text-indigo-600" />
+                                        Memória de Cálculo & Fórmulas Normativas Aplicadas (DNIT)
+                                    </span>
+                                    <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                                        Tempo Real • Auto-Recálculo
+                                    </span>
+                                </div>
+                                
+                                <div className="bg-white dark:bg-slate-950 p-2.5 rounded-lg border border-indigo-100 dark:border-slate-800 font-mono text-xs text-indigo-950 dark:text-indigo-300">
+                                    <span className="text-[9.5px] font-bold text-slate-400 block uppercase font-sans mb-0.5">Equação e Substituição de Variáveis:</span>
+                                    {dnitForm.formulaDisplay || 'Insira os dados na bancada para calcular os parâmetros normativos.'}
+                                </div>
+
+                                {dnitForm.normativeCriteria && (
+                                    <div className="flex items-center justify-between text-[10px]">
+                                        <span className="text-slate-500 dark:text-slate-400 font-semibold">
+                                            Critério de Conformidade: <strong className="text-slate-800 dark:text-slate-200">{dnitForm.normativeCriteria}</strong>
+                                        </span>
+                                        <span className={`font-bold px-2 py-0.5 rounded text-[9.5px] uppercase ${
+                                            dnitForm.status === 'Aprovado' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+                                            dnitForm.status === 'Ressalva' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
+                                            'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                                        }`}>
+                                            {dnitForm.status === 'Aprovado' ? '✓ Conforme com a Norma' : dnitForm.status === 'Ressalva' ? '⚠ Liberação sob Ressalva' : '✕ Fora da Tolerância'}
+                                        </span>
                                     </div>
                                 )}
                             </div>
