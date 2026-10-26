@@ -2072,6 +2072,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (data.productionOrders) setProductionOrders(data.productionOrders);
     if (data.formulas) setFormulas(data.formulas);
     if (data.productionUnits) setProductionUnits(data.productionUnits);
+    if (data.accounts) setAccounts(data.accounts);
+    if (data.planOfAccounts) setPlanOfAccounts(data.planOfAccounts);
+    if (data.tires) setTires(data.tires);
+    if (data.payroll) setPayroll(data.payroll);
+    if (data.timeLogs) setTimeLogs(data.timeLogs);
+    if (data.vacations) setVacations(data.vacations);
+    if (data.salaryAdvances) setSalaryAdvances(data.salaryAdvances);
   };
 
   const contextValue = useMemo<AppContextType>(() => ({

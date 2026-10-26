@@ -4977,12 +4977,12 @@ const Settings = () => {
 
                                         <button
                                             onClick={() => {
-                                                addToast("Carregar Planta Industrial e sobrescrever dados atuais?", 'info', 10000, {
+                                                addToast("Carregar Planta Industrial completa (Usinas, Laboratório DNIT, Fórmulas, Pneus, DRE e Contas)?", 'info', 10000, {
                                                     label: 'CARREGAR',
                                                     onClick: () => {
                                                         const data = generateCameloData();
                                                         seedDatabase(data);
-                                                        addToast('Ambiente Industrial carregado com sucesso!', 'success');
+                                                        addToast('Planta Industrial completa carregada com sucesso!', 'success');
                                                     }
                                                 });
                                             }}
@@ -4990,7 +4990,7 @@ const Settings = () => {
                                         >
                                             <span className="text-2xl">🏭</span>
                                             <span>Carregar Planta Industrial</span>
-                                            <span className="text-[9px] opacity-75 lowercase font-mono">(britagem • asfalto • concreto)</span>
+                                            <span className="text-[9px] opacity-75 lowercase font-mono">(britagem • usina asfalto • central concreto • laboratório dnit)</span>
                                         </button>
                                         <p className="text-[9px] text-rose-600 dark:text-rose-400 text-center font-bold">Esta ação apaga todos os dados permanentemente</p>
                                     </div>
