@@ -24,7 +24,8 @@ import {
   AlertTriangle,
   Building,
   CheckCircle,
-  RotateCcw
+  RotateCcw,
+  Loader2
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -135,6 +136,7 @@ const Clients = () => {
   const [activeTab, setActiveTab] = useState('clients');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
 
   const toInputDate = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -187,6 +189,75 @@ const Clients = () => {
     setIsModalOpen(false);
     setEditingId(null);
     setFormData({});
+    setIsLoadingCnpj(false);
+  };
+
+  // ==========================================
+  // CONSULTA AUTOMÁTICA DE CNPJ (RECEITA FEDERAL / BRASILAPI)
+  // ==========================================
+  const handleCnpjLookup = async (manualDoc?: string) => {
+    const raw = (manualDoc !== undefined ? manualDoc : formData.document || '').replace(/\D/g, '');
+    if (!raw) return;
+
+    if (raw.length !== 14) {
+      if (manualDoc === undefined) {
+        addToast('Para consultar na Receita Federal, informe os 14 dígitos do CNPJ.', 'warning');
+      }
+      return;
+    }
+
+    if (!validateCNPJ(raw)) {
+      addToast('CNPJ inválido pelo dígito verificador.', 'error');
+      return;
+    }
+
+    setIsLoadingCnpj(true);
+    try {
+      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${raw}`);
+      if (!res.ok) {
+        if (res.status === 404) {
+          addToast('CNPJ não encontrado na base pública da Receita Federal.', 'error');
+        } else {
+          addToast(`Instabilidade na consulta da Receita (${res.status}). Você pode preencher manualmente.`, 'warning');
+        }
+        return;
+      }
+
+      const data = await res.json();
+
+      const situacao = (data.descricao_situacao_cadastral || data.situacao_cadastral || '').toUpperCase();
+      if (situacao && !situacao.includes('ATIVA')) {
+        addToast(`Atenção: Situação cadastral na Receita consta como "${situacao}".`, 'warning', 7000);
+      } else {
+        addToast('Dados preenchidos com sucesso via Receita Federal!', 'success');
+      }
+
+      const cleanPhone = (data.ddd_telefone_1 || '').replace(/\D/g, '');
+      const formattedPhone = cleanPhone ? formatPhone(cleanPhone) : '';
+
+      setFormData((prev: any) => ({
+        ...prev,
+        name: data.razao_social || prev.name || '',
+        tradeName: data.nome_fantasia || prev.tradeName || data.razao_social || '',
+        phone: formattedPhone || prev.phone || '',
+        email: data.email ? data.email.toLowerCase().trim() : (prev.email || ''),
+        address: {
+          ...(prev.address || {}),
+          zipCode: data.cep ? formatCEP(data.cep) : (prev.address?.zipCode || ''),
+          street: data.logradouro || prev.address?.street || '',
+          number: data.numero || prev.address?.number || '',
+          complement: data.complemento || prev.address?.complement || '',
+          district: data.bairro || prev.address?.district || '',
+          city: data.municipio || prev.address?.city || '',
+          state: data.uf || prev.address?.state || ''
+        }
+      }));
+    } catch (err) {
+      console.error('Erro ao consultar CNPJ via BrasilAPI:', err);
+      addToast('Não foi possível conectar ao serviço da Receita. Prossiga com o preenchimento manual.', 'warning');
+    } finally {
+      setIsLoadingCnpj(false);
+    }
   };
 
   // ==========================================
@@ -499,6 +570,7 @@ const Clients = () => {
         if (!term) return true;
 
         const nameMatch = (c.name || '').toLowerCase().includes(term);
+        const tradeMatch = ((c as any).tradeName || '').toLowerCase().includes(term);
         const emailMatch = (c.email || '').toLowerCase().includes(term);
         const phoneMatch = (c.phone || '').includes(term);
         const contactMatch = (c.contactPerson || '').toLowerCase().includes(term);
@@ -506,7 +578,7 @@ const Clients = () => {
         const docFormattedMatch = (c.document || '').toLowerCase().includes(term);
         const docDigitsMatch = cleanTermDigits.length > 0 && (c.document || '').replace(/\D/g, '').includes(cleanTermDigits);
 
-        return nameMatch || emailMatch || phoneMatch || contactMatch || cityMatch || docFormattedMatch || docDigitsMatch;
+        return nameMatch || tradeMatch || emailMatch || phoneMatch || contactMatch || cityMatch || docFormattedMatch || docDigitsMatch;
       });
     }
 
@@ -748,14 +820,16 @@ const Clients = () => {
                       </select>
                     </div>
 
-                    {/* Campo Adicional: Nome Fantasia (Fornecedor) */}
-                    {activeTab === 'suppliers' && (
+                    {/* Campo Adicional: Nome Fantasia (Fornecedor e Cliente) */}
+                    {(activeTab === 'suppliers' || activeTab === 'clients') && (
                       <div className="md:col-span-12">
-                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Nome Fantasia</label>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                          Nome Fantasia {activeTab === 'clients' ? '(Opcional)' : ''}
+                        </label>
                         <input
                           type="text"
                           className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                          placeholder="Ex: Cimentos Votoran"
+                          placeholder={activeTab === 'clients' ? 'Ex: Construtora Exemplo' : 'Ex: Cimentos Votoran'}
                           value={formData.tradeName || ''}
                           onChange={e => setFormData({ ...formData, tradeName: e.target.value })}
                         />
@@ -768,16 +842,61 @@ const Clients = () => {
                     {(activeTab === 'clients' || activeTab === 'suppliers' || activeTab === 'employees') && (
                       <>
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                            {activeTab === 'employees' ? 'CPF' : 'CPF / CNPJ'}
-                          </label>
-                          <input
-                            type="text"
-                            className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium focus:ring-2 focus:ring-cyan-500"
-                            value={formData.document || ''}
-                            onChange={e => setFormData({ ...formData, document: formatCPFOrCNPJ(e.target.value) })}
-                            placeholder={activeTab === 'employees' ? '000.000.000-00' : '00.000.000/0000-00 ou CPF'}
-                          />
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                              {activeTab === 'employees' ? 'CPF' : 'CPF / CNPJ'}
+                            </label>
+                            {(activeTab === 'clients' || activeTab === 'suppliers') && (
+                              <button
+                                type="button"
+                                onClick={() => handleCnpjLookup()}
+                                disabled={isLoadingCnpj}
+                                className="text-[9px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              >
+                                {isLoadingCnpj ? (
+                                  <>
+                                    <Loader2 size={10} className="animate-spin" /> Buscando...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Search size={10} /> Consultar Receita
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                          <div className="relative flex items-center">
+                            <input
+                              type="text"
+                              className={`w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium focus:ring-2 focus:ring-cyan-500 ${(activeTab === 'clients' || activeTab === 'suppliers') ? 'pr-10' : ''}`}
+                              value={formData.document || ''}
+                              onChange={e => setFormData({ ...formData, document: formatCPFOrCNPJ(e.target.value) })}
+                              onBlur={() => {
+                                if (activeTab === 'clients' || activeTab === 'suppliers') {
+                                  const docDigits = (formData.document || '').replace(/\D/g, '');
+                                  if (docDigits.length === 14) {
+                                    handleCnpjLookup(docDigits);
+                                  }
+                                }
+                              }}
+                              placeholder={activeTab === 'employees' ? '000.000.000-00' : '00.000.000/0000-00 ou CPF'}
+                            />
+                            {(activeTab === 'clients' || activeTab === 'suppliers') && (
+                              <button
+                                type="button"
+                                onClick={() => handleCnpjLookup()}
+                                disabled={isLoadingCnpj}
+                                title="Consultar CNPJ na Receita Federal"
+                                className="absolute right-2 p-1.5 text-slate-400 hover:text-cyan-600 hover:bg-slate-200/50 dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
+                              >
+                                {isLoadingCnpj ? (
+                                  <Loader2 size={16} className="animate-spin text-cyan-600" />
+                                ) : (
+                                  <Search size={16} />
+                                )}
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <div className="md:col-span-4">
                           <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">E-mail Principal</label>
@@ -1367,11 +1486,17 @@ const Clients = () => {
                         <p className="text-[10px] font-bold text-slate-400 uppercase tabular-nums">
                           {item.document || item.plate || (item.barcode ? `EAN: ${item.barcode}` : 'REF-' + (item.id || '').slice(-4))}
                         </p>
-                        {activeTab === 'clients' && item.email && (
-                          <p className="text-[10px] text-slate-400 font-medium">{item.email} {item.phone ? `• ${item.phone}` : ''}</p>
+                        {activeTab === 'clients' && (item.tradeName || item.email || item.phone) && (
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            {item.tradeName ? <span className="text-cyan-600 font-bold mr-1">[{item.tradeName}]</span> : null}
+                            {item.email || ''}{item.email && item.phone ? ' • ' : ''}{item.phone || ''}
+                          </p>
                         )}
-                        {activeTab === 'suppliers' && (item.tradeName || item.email) && (
-                          <p className="text-[10px] text-slate-400 font-medium">{item.tradeName ? `Fantasia: ${item.tradeName}` : item.email}</p>
+                        {activeTab === 'suppliers' && (item.tradeName || item.email || item.phone) && (
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            {item.tradeName ? <span className="text-cyan-600 font-bold mr-1">[{item.tradeName}]</span> : null}
+                            {item.email || ''}{item.email && item.phone ? ' • ' : ''}{item.phone || ''}
+                          </p>
                         )}
                         {activeTab === 'employees' && item.role && (
                           <p className="text-[10px] text-slate-400 font-medium">{item.role} {item.department ? `• Depto: ${item.department}` : ''}</p>
