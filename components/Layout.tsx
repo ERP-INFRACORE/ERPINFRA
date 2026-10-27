@@ -40,6 +40,7 @@ import {
   Brush
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useToast } from '../context/ToastContext';
 import { isSupabaseConfigured } from '../src/lib/supabase';
 import AIAuditAgent from './AIAuditAgent';
 import LayoutDesignerDrawer, {
@@ -90,8 +91,37 @@ const Layout = () => {
     sales,
     vacations,
     salaryAdvances,
-    financials
+    financials,
+    isDevMode,
+    toggleDevMode
   } = useApp();
+
+  const { addToast } = useToast();
+  const devClicksRef = React.useRef<{ count: number; lastClick: number }>({ count: 0, lastClick: 0 });
+
+  const handleVersionClick = () => {
+    const now = Date.now();
+    if (now - devClicksRef.current.lastClick > 2500) {
+      devClicksRef.current.count = 1;
+    } else {
+      devClicksRef.current.count += 1;
+    }
+    devClicksRef.current.lastClick = now;
+
+    if (devClicksRef.current.count >= 5) {
+      devClicksRef.current.count = 0;
+      const nextState = !isDevMode;
+      toggleDevMode(nextState);
+      if (nextState) {
+        addToast('🛠️ Modo Desenvolvedor ATIVADO temporariamente nesta sessão! Opções de teste e reset desbloqueadas em Parâmetros.', 'info', 6000);
+      } else {
+        addToast('🔒 Modo Desenvolvedor DESATIVADO. Ambiente de produção protegido.', 'info', 4000);
+      }
+    } else if (devClicksRef.current.count >= 2) {
+      const remaining = 5 - devClicksRef.current.count;
+      addToast(`Clique mais ${remaining} vez${remaining > 1 ? 'es' : ''} para ${isDevMode ? 'desativar' : 'ativar'} o Modo Desenvolvedor.`, 'info', 1200);
+    }
+  };
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -1356,8 +1386,21 @@ const Layout = () => {
 
       {/* Footer (Preserved Original Structure) */}
       <footer className="bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 mt-auto">
-        <div className={`${containerClass} mx-auto py-4 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 font-medium`}>
-          <p>© 2026 InfraCore ERP. Todos os direitos reservados.</p>
+        <div className={`${containerClass} mx-auto py-4 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 font-medium gap-2`}>
+          <div className="flex items-center flex-wrap gap-2">
+            <p>© 2026 InfraCore ERP. Todos os direitos reservados.</p>
+            <span
+              onClick={handleVersionClick}
+              className={`select-none cursor-pointer transition-all px-2 py-0.5 rounded-full text-[10px] font-mono tracking-wider font-bold ${
+                isDevMode
+                  ? 'bg-amber-500 text-white shadow-sm ring-2 ring-amber-400/50'
+                  : 'bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
+              title="Versão do Sistema (5 cliques para Modo Desenvolvedor)"
+            >
+              v1.2.0-beta {isDevMode && '• DEV ATIVO'}
+            </span>
+          </div>
           <div className="flex gap-6 mt-2 md:mt-0">
             <a href="#/settings" className="hover:text-cyan-600 transition-colors">Termos de Uso</a>
             <a href="#/settings" className="hover:text-cyan-600 transition-colors">Política de Privacidade</a>

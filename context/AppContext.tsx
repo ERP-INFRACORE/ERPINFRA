@@ -151,6 +151,8 @@ interface AppContextType {
   clearAllData: () => void;
   addAuditLog: (log: Omit<AuditLog, 'id' | 'timestamp'>) => void;
   seedDatabase: (data: any) => void;
+  isDevMode: boolean;
+  toggleDevMode: (active?: boolean) => void;
   financials: {
     totalRevenue: number;
     totalExpenses: number;
@@ -189,6 +191,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
   const [accounts, setAccounts] = useState<FinancialAccount[]>(INITIAL_ACCOUNTS);
   const [planOfAccounts, setPlanOfAccounts] = useState<PlanOfAccountNode[]>(INITIAL_PLAN_OF_ACCOUNTS);
+
+  // Developer Mode (Session-only in memory, unlocks test and reset tools)
+  const [isDevMode, setIsDevMode] = useState<boolean>(false);
+  const toggleDevMode = useCallback((active?: boolean) => {
+    setIsDevMode(prev => (typeof active === 'boolean' ? active : !prev));
+  }, []);
 
   // Cross-Tab Synchronization Configuration
   const CROSS_TAB_CHANNEL_NAME = 'infracore_erp_cross_tab_sync';
@@ -2104,7 +2112,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addProductionUnit, updateProductionUnit, deleteProductionUnit,
     addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, updateSettings,
     addAccount, deleteAccount, addPlanAccount, deletePlanAccount, updatePlanAccount,
-    clearAllData, addAuditLog, seedDatabase, financials
+    clearAllData, addAuditLog, seedDatabase, isDevMode, toggleDevMode, financials
   }), [
     clients, suppliers, employees, transactions, sales, budgets, purchaseOrders, fleet, inventory, payroll, timeLogs, vacations, salaryAdvances, tires,
     productionOrders, formulas, productionUnits, users, roles, settings, auditLogs, stockMovements,
@@ -2126,7 +2134,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addProductionUnit, updateProductionUnit, deleteProductionUnit,
     addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, updateSettings,
     addAccount, deleteAccount, addPlanAccount, deletePlanAccount, updatePlanAccount,
-    clearAllData, addAuditLog, seedDatabase, financials
+    clearAllData, addAuditLog, seedDatabase, isDevMode, toggleDevMode, financials
   ]);
 
   return (

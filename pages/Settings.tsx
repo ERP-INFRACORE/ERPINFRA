@@ -2669,7 +2669,7 @@ const Settings = () => {
         addUser, updateUser, deleteUser,
         addRole, updateRole, deleteRole,
         updateSettings, clearAllData, hasPermission, seedDatabase,
-        currentUser, addAuditLog
+        currentUser, addAuditLog, isDevMode
     } = useApp();
 
     const isSuperAdmin = useMemo(
@@ -4941,21 +4941,25 @@ const Settings = () => {
                                 <>
                                                                         <DataSecuritySection settings={tempSettings} onUpdate={setTempSettings} addToast={addToast} />
 
-                            {/* Danger Zone */}
-                            <section className="mt-8 pt-8 border-t-2 border-dashed border-slate-200 dark:border-slate-700">
-                                <div className="bg-gradient-to-br from-rose-50 to-red-50 dark:from-rose-950/20 dark:to-red-950/20 border-2 border-rose-200 dark:border-rose-900/50 p-8 rounded-[32px] flex flex-col md:flex-row items-center justify-between gap-6">
+                            {/* Danger Zone (Exclusivo Modo Desenvolvedor) */}
+                            {isDevMode && (
+                            <section className="mt-8 pt-8 border-t-2 border-dashed border-amber-300 dark:border-amber-800 animate-in fade-in duration-300">
+                                <div className="bg-gradient-to-br from-amber-50/80 via-rose-50/50 to-red-50/80 dark:from-amber-950/20 dark:via-rose-950/20 dark:to-red-950/20 border-2 border-amber-300 dark:border-amber-700/60 p-8 rounded-[32px] flex flex-col md:flex-row items-center justify-between gap-6 shadow-md">
                                     <div className="flex items-start gap-4">
-                                        <div className="p-3 bg-rose-500 text-white rounded-2xl shadow-lg shadow-rose-500/30">
+                                        <div className="p-3 bg-amber-500 text-white rounded-2xl shadow-lg shadow-amber-500/30">
                                             <AlertTriangle size={28} />
                                         </div>
                                         <div>
-                                            <h4 className="font-black text-lg text-rose-900 dark:text-rose-400 uppercase tracking-tight">Zona de Perigo</h4>
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="font-black text-lg text-rose-900 dark:text-rose-400 uppercase tracking-tight">Zona de Testes & Perigo</h4>
+                                                <span className="px-2 py-0.5 bg-amber-500 text-white rounded-full text-[10px] font-black uppercase tracking-wider animate-pulse">🛠️ Dev Mode Ativo</span>
+                                            </div>
                                             <p className="text-sm text-rose-700 dark:text-rose-300/70 mt-1 font-medium max-w-md">
-                                                Ações irreversíveis de manutenção e limpeza do sistema. Proceda com extrema cautela.
+                                                Ações destrutivas e carga de sementes industriais de teste. Esta seção é visível apenas na sessão atual de desenvolvedor.
                                             </p>
                                             <div className="mt-3 flex flex-wrap gap-2">
+                                                <span className="px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 rounded-md text-[10px] font-black uppercase font-mono">Sessão Temporária</span>
                                                 <span className="px-2 py-1 bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 rounded-md text-[10px] font-black uppercase">Sem Desfazer</span>
-                                                <span className="px-2 py-1 bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 rounded-md text-[10px] font-black uppercase">Requer Confirmação</span>
                                             </div>
                                         </div>
                                     </div>
@@ -4996,6 +5000,7 @@ const Settings = () => {
                                     </div>
                                 </div>
                             </section>
+                            )}
                                 </>
                             )}
                         </div>
