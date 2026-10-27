@@ -25,7 +25,8 @@ import {
   Building,
   CheckCircle,
   RotateCcw,
-  Loader2
+  Loader2,
+  Wrench
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -583,6 +584,24 @@ export const PLAN_101_PRODUCTS: Omit<InventoryItem, 'id'>[] = [
   }
 ];
 
+export const isServiceItem = (item: any): boolean => {
+  if (!item) return false;
+  const cat = (item.category || '').toLowerCase();
+  const name = (item.name || '').toLowerCase();
+  const unit = (item.unit || '').toLowerCase();
+
+  if (cat.includes('serviç') || cat.includes('locaç') || cat.includes('laborat') || cat.includes('engenharia') || cat.includes('ensaio') || cat.includes('mão de obra')) {
+    return true;
+  }
+  if (unit === 'h' || unit === 'hora' || unit === 'diária' || unit === 'mês' || unit === 'serv') {
+    return true;
+  }
+  if (name.startsWith('serviço') || name.startsWith('locação') || name.startsWith('ensaio') || name.startsWith('execução') || name.includes('bombeamento')) {
+    return true;
+  }
+  return false;
+};
+
 const Clients = () => {
   const {
     clients, addClient, updateClient, deleteClient,
@@ -620,7 +639,8 @@ const Clients = () => {
       case 'clients': return hasPermission('clients.create') || hasPermission('clients.edit') || hasPermission('clients.manage');
       case 'suppliers': return hasPermission('suppliers.manage') || hasPermission('clients.manage');
       case 'employees': return hasPermission('hr.manage') || hasPermission('employees.manage');
-      case 'products': return hasPermission('inventory.create') || hasPermission('inventory.edit') || hasPermission('inventory.manage');
+      case 'products':
+      case 'services': return hasPermission('inventory.create') || hasPermission('inventory.edit') || hasPermission('inventory.manage');
       case 'vehicles': return hasPermission('fleet.manage');
       default: return false;
     }
@@ -631,7 +651,8 @@ const Clients = () => {
       case 'clients': return { status: 'Ativo', registeredAt: new Date().toLocaleDateString('pt-BR'), colorClass: 'bg-cyan-100 text-cyan-600', type: 'Matriz' };
       case 'suppliers': return { status: 'Ativo', registeredAt: new Date().toLocaleDateString('pt-BR') };
       case 'employees': return { status: 'Ativo', admissionDate: new Date().toLocaleDateString('pt-BR') };
-      case 'products': return { quantity: 0, minStock: 10, price: 0, costPrice: 0, unit: 'un' };
+      case 'products': return { status: 'Ativo', quantity: 0, minStock: 10, price: 0, costPrice: 0, unit: 'ton', category: 'Agregados' };
+      case 'services': return { status: 'Ativo', quantity: 0, minStock: 0, price: 0, costPrice: 0, unit: 'h', category: 'Serviços Terceirizados' };
       case 'vehicles': return { status: 'Operacional', fuelLevel: 100, lastMaintenance: new Date().toLocaleDateString('pt-BR'), type: 'Carro' };
       default: return {};
     }
@@ -725,11 +746,17 @@ const Clients = () => {
   };
 
   // ==========================================
-  // SALVAR / CARREGAR PRODUTOS BASEADOS NO PLANO DE CONTAS (1.01)
+  // SALVAR / CARREGAR PRODUTOS E SERVIÇOS DO PLANO DE CONTAS (1.01)
   // ==========================================
-  const handleLoadPlan101Products = (isSilent = false) => {
+  const handleLoadPlan101Products = (scope: 'all' | 'products' | 'services' = 'all', isSilent = false) => {
     let addedCount = 0;
-    PLAN_101_PRODUCTS.forEach((prod, idx) => {
+    const targetItems = PLAN_101_PRODUCTS.filter(item => {
+      if (scope === 'products') return !isServiceItem(item);
+      if (scope === 'services') return isServiceItem(item);
+      return true;
+    });
+
+    targetItems.forEach((prod, idx) => {
       const alreadyExists = (inventory || []).some(
         p => (p.name || '').trim().toLowerCase() === prod.name.trim().toLowerCase() ||
              (prod.barcode && (p.barcode || '').trim() === prod.barcode.trim())
@@ -737,23 +764,26 @@ const Clients = () => {
       if (!alreadyExists) {
         addStockItem({
           ...prod,
-          id: `prod-101-${idx + 1}-${Date.now()}`
+          id: `${isServiceItem(prod) ? 'srv' : 'prod'}-101-${idx + 1}-${Date.now()}`
         } as InventoryItem);
         addedCount++;
       }
     });
 
+    const label = scope === 'services' ? 'serviços' : scope === 'products' ? 'produtos' : 'produtos e serviços';
     if (addedCount > 0) {
-      addToast(`${addedCount} produtos/serviços derivados do Plano 1.01 salvos no estoque com sucesso!`, 'success');
+      addToast(`${addedCount} ${label} derivados do Plano 1.01 salvos com sucesso!`, 'success');
     } else if (!isSilent) {
-      addToast('Todos os 27 itens do Plano 1.01 já estão cadastrados na aba de Produtos.', 'info');
+      addToast('Todos os itens do Plano 1.01 para esta categoria já estão cadastrados.', 'info');
     }
   };
 
-  // Auto-sincronização caso o estoque esteja vazio ao acessar a aba Produtos
+  // Auto-sincronização caso o catálogo esteja vazio ao acessar Produtos ou Serviços
   useEffect(() => {
-    if (activeTab === 'products' && Array.isArray(inventory) && inventory.length === 0) {
-      handleLoadPlan101Products(true);
+    if (Array.isArray(inventory) && inventory.length === 0) {
+      if (activeTab === 'products' || activeTab === 'services') {
+        handleLoadPlan101Products('all', true);
+      }
     }
   }, [activeTab, inventory]);
 
@@ -769,6 +799,7 @@ const Clients = () => {
     if (!trimmedName) {
       addToast(
         activeTab === 'products' ? 'A descrição do produto é obrigatória.' :
+        activeTab === 'services' ? 'A descrição do serviço é obrigatória.' :
         activeTab === 'vehicles' ? 'O modelo do veículo é obrigatório.' :
         'O nome ou razão social é obrigatório.',
         'error'
@@ -916,7 +947,7 @@ const Clients = () => {
         addToast('Erro ao salvar dados do colaborador.', 'error');
         return;
       }
-    } else if (activeTab === 'products') {
+    } else if (activeTab === 'products' || activeTab === 'services') {
       const price = parseFloat(formData.price) || 0;
       const costPrice = parseFloat(formData.costPrice) || 0;
       const quantity = parseFloat(formData.quantity) || 0;
@@ -933,27 +964,29 @@ const Clients = () => {
           p => p.id !== editingId && (p.barcode || '').trim() === barcode
         );
         if (duplicateBarcode) {
-          addToast(`Bloqueio de Duplicidade: Código de barras já cadastrado no produto "${duplicateBarcode.name}".`, 'error');
+          addToast(`Bloqueio de Duplicidade: Código de barras já cadastrado no item "${duplicateBarcode.name}".`, 'error');
           return;
         }
       }
 
-      const product: InventoryItem = {
+      const isSrv = activeTab === 'services';
+      const item: InventoryItem = {
         ...formData,
-        id: editingId || `p-${Date.now()}`,
+        id: editingId || `${isSrv ? 'srv' : 'p'}-${Date.now()}`,
         name: trimmedName,
+        category: formData.category || (isSrv ? 'Serviços Terceirizados' : 'Agregados'),
         price,
         costPrice,
-        quantity,
-        minStock
+        quantity: isSrv ? 0 : quantity,
+        minStock: isSrv ? 0 : minStock
       };
 
       try {
-        if (editingId) updateStockItem(product); else addStockItem(product);
-        addToast(editingId ? 'Produto atualizado com sucesso!' : 'Produto cadastrado com sucesso!', 'success');
+        if (editingId) updateStockItem(item); else addStockItem(item);
+        addToast(editingId ? `${isSrv ? 'Serviço' : 'Produto'} atualizado com sucesso!` : `${isSrv ? 'Serviço' : 'Produto'} cadastrado com sucesso!`, 'success');
       } catch (err) {
-        console.error('Erro ao salvar produto:', err);
-        addToast('Erro ao salvar dados do produto.', 'error');
+        console.error('Erro ao salvar item:', err);
+        addToast(`Erro ao salvar dados do ${isSrv ? 'serviço' : 'produto'}.`, 'error');
         return;
       }
     } else if (activeTab === 'vehicles') {
@@ -1013,7 +1046,7 @@ const Clients = () => {
           if (activeTab === 'clients') deleteClient(id);
           else if (activeTab === 'suppliers') deleteSupplier(id);
           else if (activeTab === 'employees') deleteEmployee(id);
-          else if (activeTab === 'products') deleteStockItem(id);
+          else if (activeTab === 'products' || activeTab === 'services') deleteStockItem(id);
           else if (activeTab === 'vehicles') deleteVehicle(id);
           addToast('Registro excluído com sucesso!', 'success');
         } catch (err) {
@@ -1120,25 +1153,47 @@ const Clients = () => {
 
     if (activeTab === 'products') {
       if (!Array.isArray(inventory)) return [];
-      return inventory.filter(p => {
-        if (!p) return false;
-        if (statusFilter === 'sem_estoque') {
-          if ((p.quantity || 0) > 0) return false;
-        } else if (statusFilter === 'baixo_estoque') {
-          if ((p.quantity || 0) > (p.minStock || 0)) return false;
-        } else if (statusFilter === 'com_estoque') {
-          if ((p.quantity || 0) <= 0) return false;
-        }
-        if (!term) return true;
+      return inventory
+        .filter(p => !isServiceItem(p))
+        .filter(p => {
+          if (!p) return false;
+          if (statusFilter === 'sem_estoque') {
+            if ((p.quantity || 0) > 0) return false;
+          } else if (statusFilter === 'baixo_estoque') {
+            if ((p.quantity || 0) > (p.minStock || 0)) return false;
+          } else if (statusFilter === 'com_estoque') {
+            if ((p.quantity || 0) <= 0) return false;
+          }
+          if (!term) return true;
 
-        const nameMatch = (p.name || '').toLowerCase().includes(term);
-        const catMatch = (p.category || '').toLowerCase().includes(term);
-        const brandMatch = (p.brand || '').toLowerCase().includes(term);
-        const barcodeMatch = (p.barcode || '').toLowerCase().includes(term);
-        const locationMatch = (p.location || '').toLowerCase().includes(term);
+          const nameMatch = (p.name || '').toLowerCase().includes(term);
+          const catMatch = (p.category || '').toLowerCase().includes(term);
+          const brandMatch = (p.brand || '').toLowerCase().includes(term);
+          const barcodeMatch = (p.barcode || '').toLowerCase().includes(term);
+          const locationMatch = (p.location || '').toLowerCase().includes(term);
 
-        return nameMatch || catMatch || brandMatch || barcodeMatch || locationMatch;
-      });
+          return nameMatch || catMatch || brandMatch || barcodeMatch || locationMatch;
+        });
+    }
+
+    if (activeTab === 'services') {
+      if (!Array.isArray(inventory)) return [];
+      return inventory
+        .filter(p => isServiceItem(p))
+        .filter(s => {
+          if (!s) return false;
+          if (statusFilter !== 'all' && (s as any).status !== statusFilter) return false;
+          if (!term) return true;
+
+          const nameMatch = (s.name || '').toLowerCase().includes(term);
+          const catMatch = (s.category || '').toLowerCase().includes(term);
+          const brandMatch = (s.brand || '').toLowerCase().includes(term);
+          const barcodeMatch = (s.barcode || '').toLowerCase().includes(term);
+          const locationMatch = (s.location || '').toLowerCase().includes(term);
+          const descMatch = (s.description || '').toLowerCase().includes(term);
+
+          return nameMatch || catMatch || brandMatch || barcodeMatch || locationMatch || descMatch;
+        });
     }
 
     if (activeTab === 'vehicles') {
@@ -1206,6 +1261,12 @@ const Clients = () => {
           { value: 'baixo_estoque', label: 'Estoque Baixo / Alerta' },
           { value: 'sem_estoque', label: 'Sem Estoque (Zero)' }
         ];
+      case 'services':
+        return [
+          { value: 'all', label: 'Todos os Status' },
+          { value: 'Ativo', label: 'Disponíveis' },
+          { value: 'Inativo', label: 'Indisponíveis' }
+        ];
       case 'vehicles':
         return [
           { value: 'all', label: 'Todos os Status' },
@@ -1237,6 +1298,7 @@ const Clients = () => {
                   {activeTab === 'suppliers' && 'Fornecedor'}
                   {activeTab === 'employees' && 'Colaborador'}
                   {activeTab === 'products' && 'Produto / Material'}
+                  {activeTab === 'services' && 'Serviço / Prestação'}
                   {activeTab === 'vehicles' && 'Veículo da Frota'}
                 </h3>
               </div>
@@ -1260,12 +1322,12 @@ const Clients = () => {
                     {/* Nome / Descrição */}
                     <div className="md:col-span-8">
                       <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                        {activeTab === 'products' ? 'Descrição do Produto *' : activeTab === 'vehicles' ? 'Modelo / Nome do Veículo *' : 'Nome Completo / Razão Social *'}
+                        {activeTab === 'products' ? 'Descrição do Produto *' : activeTab === 'services' ? 'Descrição do Serviço *' : activeTab === 'vehicles' ? 'Modelo / Nome do Veículo *' : 'Nome Completo / Razão Social *'}
                       </label>
                       <input
                         type="text" required
                         className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-4 font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-cyan-500 transition-all text-sm"
-                        placeholder={activeTab === 'clients' ? 'Ex: Construtora Exemplo Ltda' : activeTab === 'vehicles' ? 'Ex: Volvo FH 540' : 'Nome ou Razão Social'}
+                        placeholder={activeTab === 'clients' ? 'Ex: Construtora Exemplo Ltda' : activeTab === 'vehicles' ? 'Ex: Volvo FH 540' : activeTab === 'services' ? 'Ex: Locação de Escavadeira 20t' : 'Nome ou Razão Social'}
                         value={formData.name || ''}
                         onChange={e => setFormData({ ...formData, name: e.target.value })}
                       />
@@ -1300,7 +1362,7 @@ const Clients = () => {
                             <option value="Desligado">Desligado</option>
                           </>
                         )}
-                        {activeTab === 'products' && (
+                        {(activeTab === 'products' || activeTab === 'services') && (
                           <>
                             <option value="Ativo">Ativo / Disponível</option>
                             <option value="Inativo">Inativo / Indisponível</option>
@@ -1418,45 +1480,63 @@ const Clients = () => {
                       </>
                     )}
 
-                    {/* -> PRODUTOS */}
-                    {activeTab === 'products' && (
+                    {/* -> PRODUTOS & SERVIÇOS */}
+                    {(activeTab === 'products' || activeTab === 'services') && (
                       <>
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Marca / Fabricante</label>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                            {activeTab === 'services' ? 'Executor / Equipe Técnica' : 'Marca / Fabricante'}
+                          </label>
                           <input type="text" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                            value={formData.brand || ''} onChange={e => setFormData({ ...formData, brand: e.target.value })} placeholder="Ex: Votoran, Gerdau, Tigre" />
+                            value={formData.brand || ''} onChange={e => setFormData({ ...formData, brand: e.target.value })}
+                            placeholder={activeTab === 'services' ? 'Ex: Equipe de Obras, InfraCore Lab' : 'Ex: Votoran, Gerdau, Tigre'} />
                         </div>
                         <div className="md:col-span-4">
                           <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Categoria</label>
                           <input type="text" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                            value={formData.category || ''} onChange={e => setFormData({ ...formData, category: e.target.value })} list="categories-list" />
+                            value={formData.category || (activeTab === 'services' ? 'Serviços Terceirizados' : 'Agregados')}
+                            onChange={e => setFormData({ ...formData, category: e.target.value })} list="categories-list" />
                           <datalist id="categories-list">
-                            <option value="Agregados" />
-                            <option value="Cimentos e Argamassas" />
-                            <option value="Aços e Metais" />
-                            <option value="Madeiras" />
-                            <option value="Tubos e Conexões" />
-                            <option value="Material Elétrico" />
-                            <option value="Material Hidráulico" />
-                            <option value="Tintas e Solventes" />
-                            <option value="Revestimentos e Pisos" />
-                            <option value="Telhas e Coberturas" />
-                            <option value="Ferramentas Manuais" />
-                            <option value="Ferramentas Elétricas" />
-                            <option value="EPIs - Proteção Individual" />
-                            <option value="Peças de Reposição" />
-                            <option value="Manutenção em Geral" />
-                            <option value="Combustíveis e Óleos" />
-                            <option value="Pneus e Rodagem" />
-                            <option value="Serviços Terceirizados" />
-                            <option value="Locação de Equipamentos" />
-                            <option value="Insumos Administrativos" />
+                            {activeTab === 'services' ? (
+                              <>
+                                <option value="Serviços Terceirizados" />
+                                <option value="Locação de Equipamentos" />
+                                <option value="Mão de Obra Especializada" />
+                                <option value="Ensaios Tecnológicos" />
+                                <option value="Projetos e Engenharia" />
+                                <option value="Manutenção e Reparos" />
+                              </>
+                            ) : (
+                              <>
+                                <option value="Agregados" />
+                                <option value="Cimentos e Argamassas" />
+                                <option value="Aços e Metais" />
+                                <option value="Madeiras" />
+                                <option value="Tubos e Conexões" />
+                                <option value="Material Elétrico" />
+                                <option value="Material Hidráulico" />
+                                <option value="Tintas e Solventes" />
+                                <option value="Revestimentos e Pisos" />
+                                <option value="Telhas e Coberturas" />
+                                <option value="Ferramentas Manuais" />
+                                <option value="Ferramentas Elétricas" />
+                                <option value="EPIs - Proteção Individual" />
+                                <option value="Peças de Reposição" />
+                                <option value="Manutenção em Geral" />
+                                <option value="Combustíveis e Óleos" />
+                                <option value="Pneus e Rodagem" />
+                                <option value="Insumos Administrativos" />
+                              </>
+                            )}
                           </datalist>
                         </div>
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Código de Barras (EAN)</label>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                            {activeTab === 'services' ? 'Código de Referência / Contrato' : 'Código de Barras (EAN)'}
+                          </label>
                           <input type="text" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                            value={formData.barcode || ''} onChange={e => setFormData({ ...formData, barcode: e.target.value })} placeholder="Ex: 7891234567890" />
+                            value={formData.barcode || ''} onChange={e => setFormData({ ...formData, barcode: e.target.value })}
+                            placeholder={activeTab === 'services' ? 'Ex: SRV-101' : 'Ex: 7891234567890'} />
                         </div>
                       </>
                     )}
@@ -1629,52 +1709,86 @@ const Clients = () => {
                       </>
                     )}
 
-                    {/* ADICIONAIS: Produtos */}
-                    {activeTab === 'products' && (
+                    {/* ADICIONAIS: Produtos & Serviços */}
+                    {(activeTab === 'products' || activeTab === 'services') && (
                       <>
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Preço de Venda (R$)</label>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                            {activeTab === 'services' ? 'Preço do Serviço (R$)' : 'Preço de Venda (R$)'}
+                          </label>
                           <input type="number" step="0.01" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-bold text-emerald-600"
                             value={formData.price ?? ''} onChange={e => setFormData({ ...formData, price: e.target.value })} />
                         </div>
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Preço de Custo (R$)</label>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                            {activeTab === 'services' ? 'Custo Operacional Estimado (R$)' : 'Preço de Custo (R$)'}
+                          </label>
                           <input type="number" step="0.01" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium text-slate-500"
                             value={formData.costPrice ?? ''} onChange={e => setFormData({ ...formData, costPrice: e.target.value })} />
                         </div>
+                        {activeTab === 'products' ? (
+                          <div className="md:col-span-4">
+                            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Estoque Atual</label>
+                            <input type="number" step="0.01" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-bold"
+                              value={formData.quantity ?? ''} onChange={e => setFormData({ ...formData, quantity: e.target.value })} />
+                          </div>
+                        ) : (
+                          <div className="md:col-span-4">
+                            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Disponibilidade</label>
+                            <input type="text" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
+                              value={formData.availability || 'Imediata'} onChange={e => setFormData({ ...formData, availability: e.target.value })} placeholder="Ex: Imediata / Sob Agendamento" />
+                          </div>
+                        )}
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Estoque Atual</label>
-                          <input type="number" step="0.01" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-bold"
-                            value={formData.quantity ?? ''} onChange={e => setFormData({ ...formData, quantity: e.target.value })} />
-                        </div>
-                        <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Unidade de Medida</label>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Unidade de Medida / Cobrança</label>
                           <select className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                            value={formData.unit || 'un'} onChange={e => setFormData({ ...formData, unit: e.target.value })}>
-                            <option value="un">Unidade (un)</option>
-                            <option value="kg">Quilo (kg)</option>
-                            <option value="ton">Tonelada (ton)</option>
-                            <option value="m">Metro (m)</option>
-                            <option value="m2">Metro² (m²)</option>
-                            <option value="m3">Metro³ (m³)</option>
-                            <option value="sc">Saco (sc)</option>
-                            <option value="l">Litro (l)</option>
+                            value={formData.unit || (activeTab === 'services' ? 'h' : 'ton')} onChange={e => setFormData({ ...formData, unit: e.target.value })}>
+                            {activeTab === 'services' ? (
+                              <>
+                                <option value="h">Hora (h)</option>
+                                <option value="m2">Metro² (m²)</option>
+                                <option value="m3">Metro³ (m³)</option>
+                                <option value="un">Unidade / Laudo (un)</option>
+                                <option value="dia">Diária (dia)</option>
+                                <option value="mes">Mensal (mês)</option>
+                                <option value="serv">Serviço Global (serv)</option>
+                                <option value="ton">Por Tonelada (ton)</option>
+                              </>
+                            ) : (
+                              <>
+                                <option value="ton">Tonelada (ton)</option>
+                                <option value="m3">Metro³ (m³)</option>
+                                <option value="un">Unidade (un)</option>
+                                <option value="kg">Quilo (kg)</option>
+                                <option value="m">Metro (m)</option>
+                                <option value="m2">Metro² (m²)</option>
+                                <option value="sc">Saco (sc)</option>
+                                <option value="l">Litro (l)</option>
+                              </>
+                            )}
                           </select>
                         </div>
+                        {activeTab === 'products' && (
+                          <>
+                            <div className="md:col-span-4">
+                              <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Estoque Mínimo (Alerta)</label>
+                              <input type="number" step="0.01" min="0" className="w-full bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 rounded-xl p-3 text-sm font-bold text-rose-600"
+                                value={formData.minStock ?? ''} onChange={e => setFormData({ ...formData, minStock: e.target.value })} />
+                            </div>
+                            <div className="md:col-span-4">
+                              <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Peso Unitário (kg)</label>
+                              <input type="number" step="0.001" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
+                                value={formData.weight ?? ''} onChange={e => setFormData({ ...formData, weight: parseFloat(e.target.value) || 0 })} />
+                            </div>
+                          </>
+                        )}
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Estoque Mínimo (Alerta)</label>
-                          <input type="number" step="0.01" min="0" className="w-full bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 rounded-xl p-3 text-sm font-bold text-rose-600"
-                            value={formData.minStock ?? ''} onChange={e => setFormData({ ...formData, minStock: e.target.value })} />
-                        </div>
-                        <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Peso Unitário (kg)</label>
-                          <input type="number" step="0.001" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                            value={formData.weight ?? ''} onChange={e => setFormData({ ...formData, weight: parseFloat(e.target.value) || 0 })} />
-                        </div>
-                        <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Localização (Rua/Box)</label>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                            {activeTab === 'services' ? 'Local / Base de Execução' : 'Localização (Rua/Box/Pátio)'}
+                          </label>
                           <input type="text" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                            value={formData.location || ''} onChange={e => setFormData({ ...formData, location: e.target.value })} placeholder="Ex: Box A-02" />
+                            value={formData.location || ''} onChange={e => setFormData({ ...formData, location: e.target.value })}
+                            placeholder={activeTab === 'services' ? 'Ex: Frentes de Obras, Canteiro' : 'Ex: Box A-02, Silo 01'} />
                         </div>
                       </>
                     )}
@@ -1879,13 +1993,14 @@ const Clients = () => {
           <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">Gestão Operacional</h2>
         </div>
         <div className="flex items-center gap-3">
-          {activeTab === 'products' && canManage('products') && (
+          {(activeTab === 'products' || activeTab === 'services') && canManage(activeTab) && (
             <button
-              onClick={() => handleLoadPlan101Products(false)}
+              onClick={() => handleLoadPlan101Products(activeTab === 'services' ? 'services' : 'products', false)}
               className="px-5 py-4 bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 rounded-2xl font-black uppercase text-xs tracking-wider flex items-center gap-2 shadow-sm transition-all"
-              title="Cadastrar todos os produtos e serviços derivados do item 1.01 (Receita Bruta) do Plano de Contas"
+              title={activeTab === 'services' ? "Cadastrar todos os serviços do item 1.01 do Plano de Contas" : "Cadastrar todos os produtos físicos do item 1.01 do Plano de Contas"}
             >
-              <Package size={18} /> Salvar Itens Plano 1.01
+              {activeTab === 'services' ? <Wrench size={18} /> : <Package size={18} />}
+              {activeTab === 'services' ? 'Salvar Serviços Plano 1.01' : 'Salvar Produtos Plano 1.01'}
             </button>
           )}
           {canManage(activeTab) && (
@@ -1901,7 +2016,8 @@ const Clients = () => {
           <TabButton id="clients" icon={User} label="Clientes" count={(clients || []).length} />
           <TabButton id="suppliers" icon={Warehouse} label="Fornecedores" count={(suppliers || []).length} />
           <TabButton id="employees" icon={Badge} label="Colaboradores" count={(employees || []).length} />
-          <TabButton id="products" icon={Package} label="Produtos" count={(inventory || []).length} />
+          <TabButton id="products" icon={Package} label="Produtos" count={(inventory || []).filter(p => !isServiceItem(p)).length} />
+          <TabButton id="services" icon={Wrench} label="Serviços" count={(inventory || []).filter(p => isServiceItem(p)).length} />
           <TabButton id="vehicles" icon={Truck} label="Veículos" count={(fleet || []).length} />
         </div>
       </div>
@@ -1978,12 +2094,13 @@ const Clients = () => {
                     <Search size={36} className="text-slate-300 dark:text-slate-600" />
                     <p className="font-bold text-sm text-slate-500">Nenhum registro encontrado</p>
                     <p className="text-xs text-slate-400">Tente ajustar seus termos de pesquisa ou o filtro de status.</p>
-                    {activeTab === 'products' && canManage('products') && (
+                    {(activeTab === 'products' || activeTab === 'services') && canManage(activeTab) && (
                       <button
-                        onClick={() => handleLoadPlan101Products(false)}
+                        onClick={() => handleLoadPlan101Products(activeTab === 'services' ? 'services' : 'products', false)}
                         className="mt-4 px-6 py-3 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition-all hover:scale-105 cursor-pointer"
                       >
-                        <Package size={16} /> Salvar Todos os Itens do Plano 1.01
+                        {activeTab === 'services' ? <Wrench size={16} /> : <Package size={16} />}
+                        {activeTab === 'services' ? 'Salvar Serviços do Plano 1.01' : 'Salvar Produtos do Plano 1.01'}
                       </button>
                     )}
                   </div>
@@ -2032,6 +2149,21 @@ const Clients = () => {
                             )}
                           </div>
                         )}
+                        {activeTab === 'services' && (
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] text-cyan-600 font-bold">
+                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price || 0)} / {item.unit || 'h'}
+                              {item.category ? ` • ${item.category}` : ''}
+                            </p>
+                            {(item.location || item.brand) && (
+                              <p className="text-[9px] text-slate-400 font-medium">
+                                {item.location ? `Base/Frente: ${item.location}` : ''}
+                                {item.location && item.brand ? ' • ' : ''}
+                                {item.brand ? `Equipe: ${item.brand}` : ''}
+                              </p>
+                            )}
+                          </div>
+                        )}
                         {activeTab === 'vehicles' && (
                           <p className="text-[10px] text-slate-400 font-medium">{item.type || 'Veículo'} • {item.brand || ''} {item.year ? `(${item.year})` : ''}</p>
                         )}
@@ -2055,7 +2187,7 @@ const Clients = () => {
                   </td>
                   <td className="px-8 py-6 text-right">
                     <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {activeTab === 'products' && canManage('products') && (
+                      {(activeTab === 'products' || activeTab === 'services') && canManage(activeTab) && (
                         <button onClick={() => handleDuplicate(item)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all" title="Duplicar"><Copy size={18} /></button>
                       )}
                       {canManage(activeTab) && (
