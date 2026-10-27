@@ -82,6 +82,78 @@ export const toLocaleDate = (dateStr?: string): string => {
     const d = new Date(dateStr);
     return isNaN(d.getTime()) ? dateStr : d.toLocaleDateString('pt-BR');
 };
+// ============================================
+// CONVERSÃO BIDIRECIONAL CAMELCASE <-> SNAKE_CASE
+// ============================================
+export const camelToSnakeKey = (key: string): string => {
+    return key.replace(/([A-Z])/g, '_$1').toLowerCase();
+};
+
+export const snakeToCamelKey = (key: string): string => {
+    return key.replace(/_([a-z0-9])/g, (_, letter) => letter.toUpperCase());
+};
+
+export const toCamelCaseRecord = <T = any>(row: any): T => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+    const res: Record<string, any> = {};
+    for (const [key, val] of Object.entries(row)) {
+        const camelKey = snakeToCamelKey(key);
+        res[camelKey] = val;
+        if (camelKey !== key) {
+            res[key] = val;
+        }
+    }
+    return res as T;
+};
+
+export const buildPlanOfAccountsTree = (rows: any[]): any[] => {
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+    const nodeMap = new Map<string, any>();
+    rows.forEach(r => {
+        const id = String(r.id);
+        nodeMap.set(id, {
+            id,
+            code: r.code || '',
+            name: r.name || '',
+            type: r.type || 'Despesa',
+            parentId: r.parentId || r.parent_id || null,
+            children: []
+        });
+    });
+    const roots: any[] = [];
+    rows.forEach(r => {
+        const id = String(r.id);
+        const node = nodeMap.get(id);
+        if (!node) return;
+        const parentId = r.parentId || r.parent_id ? String(r.parentId || r.parent_id) : null;
+        if (parentId && nodeMap.has(parentId)) {
+            nodeMap.get(parentId).children.push(node);
+        } else {
+            roots.push(node);
+        }
+    });
+    return roots;
+};
+
+export const flattenPlanOfAccountsTree = (nodes: any[], parentId: string | null = null): any[] => {
+    let list: any[] = [];
+    if (!Array.isArray(nodes)) return list;
+    nodes.forEach(n => {
+        const id = n.id ? (isValidUUID(n.id) ? n.id : toDeterministicUUID(n.id)) : generateUUID();
+        list.push({
+            id,
+            code: n.code,
+            name: n.name,
+            type: n.type || (parentId ? undefined : 'Despesa'),
+            parent_id: parentId && isValidUUID(parentId) ? parentId : (parentId ? toDeterministicUUID(parentId) : null)
+        });
+        if (n.children && n.children.length > 0) {
+            list = list.concat(flattenPlanOfAccountsTree(n.children, id));
+        }
+    });
+    return list;
+};
+
 
 // ============================================
 // SANITIZAÇÃO DE PAYLOAD E CONTRATOS DE DADOS
@@ -98,13 +170,16 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
         delete cleaned.id;
     }
 
-    // Mapeamento específico para transações (compatibilidade de schema PostgreSQL)
+    // 1. Mapeamento canônico para Transações Financeiras
     if (table === 'transactions') {
         const mapped: Record<string, any> = {
             date: toIsoDate(cleaned.date) || new Date().toISOString().split('T')[0],
             due_date: toIsoDate(cleaned.dueDate || cleaned.due_date || cleaned.date),
+            competence_date: toIsoDate(cleaned.competenceDate || cleaned.competence_date || cleaned.date),
             description: cleaned.description || 'Lançamento',
             category: cleaned.category || 'Vendas',
+            cost_center: cleaned.costCenter || cleaned.cost_center || null,
+            payment_method: cleaned.paymentMethod || cleaned.payment_method || null,
             account: cleaned.account || 'Caixa Geral',
             account_id: cleaned.accountId && isValidUUID(cleaned.accountId) ? cleaned.accountId : (cleaned.account_id && isValidUUID(cleaned.account_id) ? cleaned.account_id : null),
             amount: Number(cleaned.amount || 0),
@@ -112,44 +187,53 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
             type: cleaned.type || 'Receita',
             document_number: cleaned.documentNumber || cleaned.document_number || null,
             partner_id: cleaned.partnerId && isValidUUID(cleaned.partnerId) ? cleaned.partnerId : (cleaned.partner_id && isValidUUID(cleaned.partner_id) ? cleaned.partner_id : null),
+            partner_name: cleaned.partnerName || cleaned.partner_name || null,
             origin_module: cleaned.originModule || cleaned.origin_module || null,
-            origin_id: cleaned.originId || cleaned.origin_id || null,
+            origin_id: cleaned.originId && isValidUUID(cleaned.originId) ? cleaned.originId : (cleaned.origin_id && isValidUUID(cleaned.origin_id) ? cleaned.origin_id : null),
             ledger_code: cleaned.ledgerCode || cleaned.ledger_code || null,
             ledger_name: cleaned.ledgerName || cleaned.ledger_name || null,
+            notes: cleaned.notes || null,
         };
-        if (isCreate) {
-            mapped.id = cleaned.id;
-        }
+        if (isCreate) mapped.id = cleaned.id;
         return mapped;
     }
 
-    // Mapeamento específico para vendas
+    // 2. Mapeamento canônico para Vendas & PDV
     if (table === 'sales') {
         const mapped: Record<string, any> = {
             date: toIsoDate(cleaned.date) || new Date().toISOString().split('T')[0],
+            due_date: toIsoDate(cleaned.dueDate || cleaned.due_date || cleaned.date),
+            description: cleaned.description || 'Venda de Produtos/Serviços',
             category: cleaned.category || 'Vendas',
+            account_id: cleaned.accountId && isValidUUID(cleaned.accountId) ? cleaned.accountId : (cleaned.account_id && isValidUUID(cleaned.account_id) ? cleaned.account_id : null),
+            account: cleaned.account || 'Caixa Geral',
             amount: Number(cleaned.amount || 0),
             status: cleaned.status || 'Pendente',
             type: cleaned.type || 'Receita',
+            document_number: cleaned.documentNumber || cleaned.document_number || null,
             client_id: cleaned.clientId && isValidUUID(cleaned.clientId) ? cleaned.clientId : (cleaned.client_id && isValidUUID(cleaned.client_id) ? cleaned.client_id : null),
             client_name: cleaned.clientName || cleaned.client_name || 'Cliente Balcão',
             items: Array.isArray(cleaned.items) ? cleaned.items : [],
             payment_method: cleaned.paymentMethod || cleaned.payment_method || 'credit',
             installments: Number(cleaned.installments || 1),
+            installment_due_dates: cleaned.installmentDueDates || cleaned.installment_due_dates || null,
+            weight_ticket: cleaned.weightTicket || cleaned.weight_ticket || null,
+            measured_weight: cleaned.measuredWeight !== undefined ? cleaned.measuredWeight : (cleaned.measured_weight !== undefined ? cleaned.measured_weight : null),
+            dispatch_status: cleaned.dispatchStatus || cleaned.dispatch_status || null,
+            vehicle_id: cleaned.vehicleId && isValidUUID(cleaned.vehicleId) ? cleaned.vehicleId : (cleaned.vehicle_id && isValidUUID(cleaned.vehicle_id) ? cleaned.vehicle_id : null),
+            driver_name: cleaned.driverName || cleaned.driver_name || null,
+            tare_weight: cleaned.tareWeight !== undefined ? cleaned.tareWeight : (cleaned.tare_weight !== undefined ? cleaned.tare_weight : null),
+            gross_weight: cleaned.grossWeight !== undefined ? cleaned.grossWeight : (cleaned.gross_weight !== undefined ? cleaned.gross_weight : null),
+            net_weight: cleaned.netWeight !== undefined ? cleaned.netWeight : (cleaned.net_weight !== undefined ? cleaned.net_weight : null),
+            weight_notes: cleaned.weightNotes || cleaned.weight_notes || null,
+            ledger_code: cleaned.ledgerCode || cleaned.ledger_code || null,
+            ledger_name: cleaned.ledgerName || cleaned.ledger_name || null,
         };
-        if (cleaned.weightTicket || cleaned.weight_ticket) {
-            mapped.weight_ticket = cleaned.weightTicket || cleaned.weight_ticket;
-        }
-        if (cleaned.measuredWeight !== undefined || cleaned.measured_weight !== undefined) {
-            mapped.measured_weight = cleaned.measuredWeight ?? cleaned.measured_weight;
-        }
-        if (isCreate) {
-            mapped.id = cleaned.id;
-        }
+        if (isCreate) mapped.id = cleaned.id;
         return mapped;
     }
 
-    // Mapeamento específico para orçamentos
+    // 3. Mapeamento canônico para Orçamentos
     if (table === 'budgets') {
         const mapped: Record<string, any> = {
             client_id: cleaned.clientId && isValidUUID(cleaned.clientId) ? cleaned.clientId : (cleaned.client_id && isValidUUID(cleaned.client_id) ? cleaned.client_id : null),
@@ -161,41 +245,137 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
             status: cleaned.status || 'Aberto',
             expiry_date: toIsoDate(cleaned.expiryDate || cleaned.expiry_date) || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
             items: Array.isArray(cleaned.items) ? cleaned.items : [],
+            tare_weight: cleaned.tareWeight !== undefined ? cleaned.tareWeight : (cleaned.tare_weight !== undefined ? cleaned.tare_weight : null),
+            gross_weight: cleaned.grossWeight !== undefined ? cleaned.grossWeight : (cleaned.gross_weight !== undefined ? cleaned.gross_weight : null),
+            net_weight: cleaned.netWeight !== undefined ? cleaned.netWeight : (cleaned.net_weight !== undefined ? cleaned.net_weight : null),
+            weight_notes: cleaned.weightNotes || cleaned.weight_notes || null,
+            payment_method: cleaned.paymentMethod || cleaned.payment_method || null,
         };
-        if (isCreate) {
-            mapped.id = cleaned.id;
-        }
+        if (isCreate) mapped.id = cleaned.id;
         return mapped;
     }
 
-    // Limpeza de campos relacionais locais que não residem na tabela física
-    if (table === 'fleet') {
-        delete cleaned.maintenanceHistory;
-        delete cleaned.fuelLogs;
+    // 4. Mapeamento canônico para Funcionários (RH)
+    if (table === 'employees') {
+        const mapped: Record<string, any> = {
+            name: cleaned.name || '',
+            role: cleaned.role || '',
+            department: cleaned.department || '',
+            status: cleaned.status || 'Ativo',
+            admission_date: toIsoDate(cleaned.admissionDate || cleaned.admission_date) || new Date().toISOString().split('T')[0],
+            salary: Number(cleaned.salary || 0),
+            email: cleaned.email || null,
+            phone: cleaned.phone || null,
+            address: cleaned.address || null,
+            cpf: cleaned.cpf || null,
+            photo: cleaned.photo || null,
+            vacation_days_available: Number(cleaned.vacationDaysAvailable || cleaned.vacation_days_available || 30),
+            cnh: cleaned.cnh || null,
+            cnh_category: cleaned.cnhCategory || cleaned.cnh_category || null,
+            cnh_expiry: cleaned.cnhExpiry || cleaned.cnh_expiry || null,
+            cost_center: cleaned.costCenter || cleaned.cost_center || null,
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
     }
 
-    Object.keys(cleaned).forEach((key) => {
-        if (cleaned[key] === undefined) {
-            delete cleaned[key];
-            return;
+    // 5. Mapeamento canônico para Frota
+    if (table === 'fleet') {
+        const mapped: Record<string, any> = {
+            name: cleaned.name || '',
+            plate: cleaned.plate || '',
+            model: cleaned.model || null,
+            brand: cleaned.brand || null,
+            year: cleaned.year ? Number(cleaned.year) : null,
+            type: cleaned.type || 'Caminhão',
+            status: cleaned.status || 'Operacional',
+            fuel_type: cleaned.fuelType || cleaned.fuel_type || null,
+            fuel_level: cleaned.fuelLevel !== undefined ? cleaned.fuelLevel : (cleaned.fuel_level !== undefined ? cleaned.fuel_level : null),
+            km: Number(cleaned.km || 0),
+            next_maintenance_km: cleaned.nextMaintenanceKm !== undefined ? Number(cleaned.nextMaintenanceKm) : (cleaned.next_maintenance_km !== undefined ? Number(cleaned.next_maintenance_km) : null),
+            insurance_expiry: cleaned.insuranceExpiry || cleaned.insurance_expiry || null,
+            driver_id: cleaned.driverId && isValidUUID(cleaned.driverId) ? cleaned.driverId : (cleaned.driver_id && isValidUUID(cleaned.driver_id) ? cleaned.driver_id : null),
+            chassis: cleaned.chassis || null,
+            renavam: cleaned.renavam || null,
+            color: cleaned.color || null,
+            color_name: cleaned.colorName || cleaned.color_name || null,
+            last_maintenance: cleaned.lastMaintenance || cleaned.last_maintenance || null,
+            cost_center: cleaned.costCenter || cleaned.cost_center || null,
+            department: cleaned.department || null,
+            telemetry_data: cleaned.telemetryData || cleaned.telemetry_data || {},
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 6. Mapeamento canônico para Ordens de Produção
+    if (table === 'production_orders') {
+        const mapped: Record<string, any> = {
+            order_number: cleaned.orderNumber || cleaned.order_number || '',
+            product_name: cleaned.productName || cleaned.product_name || '',
+            product_id: cleaned.productId && isValidUUID(cleaned.productId) ? cleaned.productId : (cleaned.product_id && isValidUUID(cleaned.product_id) ? cleaned.product_id : null),
+            formula_id: cleaned.formulaId && isValidUUID(cleaned.formulaId) ? cleaned.formulaId : (cleaned.formula_id && isValidUUID(cleaned.formula_id) ? cleaned.formula_id : null),
+            quantity: Number(cleaned.quantity || 0),
+            status: cleaned.status || 'Planejado',
+            start_date: toIsoDate(cleaned.startDate || cleaned.start_date) || new Date().toISOString().split('T')[0],
+            due_date: toIsoDate(cleaned.dueDate || cleaned.due_date) || new Date().toISOString().split('T')[0],
+            priority: cleaned.priority || 'Média',
+            progress: Number(cleaned.progress || 0),
+            unit_id: cleaned.unitId && isValidUUID(cleaned.unitId) ? cleaned.unitId : (cleaned.unit_id && isValidUUID(cleaned.unit_id) ? cleaned.unit_id : null),
+            batch: cleaned.batch || null,
+            operator: cleaned.operator || null,
+            quality_tests: Array.isArray(cleaned.qualityTests || cleaned.quality_tests) ? (cleaned.qualityTests || cleaned.quality_tests) : [],
+            raw_materials_deducted: Boolean(cleaned.rawMaterialsDeducted ?? cleaned.raw_materials_deducted),
+            client_id: cleaned.clientId && isValidUUID(cleaned.clientId) ? cleaned.clientId : (cleaned.client_id && isValidUUID(cleaned.client_id) ? cleaned.client_id : null),
+            sale_id: cleaned.saleId && isValidUUID(cleaned.saleId) ? cleaned.saleId : (cleaned.sale_id && isValidUUID(cleaned.sale_id) ? cleaned.sale_id : null),
+            vehicle_id: cleaned.vehicleId && isValidUUID(cleaned.vehicleId) ? cleaned.vehicleId : (cleaned.vehicle_id && isValidUUID(cleaned.vehicle_id) ? cleaned.vehicle_id : null),
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 7. Mapeamento canônico para Plano de Contas
+    if (table === 'plan_of_accounts') {
+        const mapped: Record<string, any> = {
+            code: cleaned.code || '',
+            name: cleaned.name || '',
+            type: cleaned.type || 'Despesa',
+            parent_id: cleaned.parentId && isValidUUID(cleaned.parentId) ? cleaned.parentId : (cleaned.parent_id && isValidUUID(cleaned.parent_id) ? cleaned.parent_id : null),
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // Mapeamento genérico e resiliente para demais tabelas
+    const genericMapped: Record<string, any> = {};
+    for (const [key, val] of Object.entries(cleaned)) {
+        if (val === undefined) continue;
+
+        // Limpeza de relações runtime locais
+        if (key === 'maintenanceHistory' || key === 'fuelLogs' || key === 'children') continue;
+        if (key === 'documentId' && table === 'stock_movements') {
+            genericMapped.document_id = val;
+            continue;
         }
 
-        // documentId em stock_movements é VARCHAR(100), não UUID FK
-        if (key === 'documentId') return;
+        const snakeKey = camelToSnakeKey(key);
 
-        if (key.endsWith('Id')) {
-            const val = cleaned[key];
+        if (key.endsWith('Id') || snakeKey.endsWith('_id')) {
             if (val === '' || val === null || val === undefined) {
-                cleaned[key] = null;
+                genericMapped[snakeKey] = null;
             } else if (isValidUUID(val)) {
-                cleaned[key] = val;
+                genericMapped[snakeKey] = val;
             } else {
-                cleaned[key] = toDeterministicUUID(val);
+                genericMapped[snakeKey] = toDeterministicUUID(val);
             }
+            continue;
         }
-    });
 
-    return cleaned;
+        genericMapped[snakeKey] = val;
+    }
+
+    if (isCreate) genericMapped.id = cleaned.id;
+    return genericMapped;
 };
 
 // ============================================
@@ -503,52 +683,87 @@ export const fetchData = async <T>(table: string): Promise<T[]> => {
 const transformFetchedData = <T>(table: string, data: any[] | null): T[] => {
     if (!Array.isArray(data)) return [];
 
-    if (table === 'transactions') {
-        return data.map(row => ({
-            ...row,
-            date: toLocaleDate(row.date),
-            dueDate: toLocaleDate(row.due_date || row.date),
-            accountId: row.account_id || row.accountId || '',
-            account: row.account || 'Caixa Geral',
-            documentNumber: row.document_number || row.documentNumber || '',
-            partnerId: row.partner_id || row.partnerId || '',
-            partnerName: row.partner_name || row.partnerName || '',
-            originModule: row.origin_module || row.originModule || '',
-            originId: row.origin_id || row.originId || '',
-            ledgerCode: row.ledger_code || row.ledgerCode || '',
-            ledgerName: row.ledger_name || row.ledgerName || '',
-        })) as T[];
+    if (table === 'plan_of_accounts') {
+        return buildPlanOfAccountsTree(data) as unknown as T[];
     }
 
-    if (table === 'sales') {
-        return data.map(row => ({
-            ...row,
-            date: toLocaleDate(row.date),
-            clientId: row.client_id || row.clientId || '',
-            clientName: row.client_name || row.clientName || '',
-            paymentMethod: row.payment_method || row.paymentMethod || '',
-            installments: row.installments || 1,
-            weightTicket: row.weight_ticket || row.weightTicket || '',
-            measuredWeight: row.measured_weight ?? row.measuredWeight,
-        })) as T[];
-    }
+    return data.map(row => {
+        const camelRow = toCamelCaseRecord<any>(row);
 
-    if (table === 'budgets') {
-        return data.map(row => ({
-            ...row,
-            clientId: row.client_id || row.clientId || '',
-            clientName: row.client_name || row.clientName || '',
-            date: toLocaleDate(row.date),
-            expiryDate: toLocaleDate(row.expiry_date || row.expiryDate),
-            subtotal: Number(row.subtotal || 0),
-            discount: Number(row.discount || 0),
-            total: Number(row.total || 0),
-            status: row.status || 'Aberto',
-            items: Array.isArray(row.items) ? row.items : [],
-        })) as T[];
-    }
+        // Conversões específicas de data e normalizações
+        if (table === 'transactions') {
+            camelRow.date = toLocaleDate(camelRow.date);
+            camelRow.dueDate = toLocaleDate(camelRow.dueDate || camelRow.due_date || camelRow.date);
+            if (camelRow.competenceDate || camelRow.competence_date) {
+                camelRow.competenceDate = toLocaleDate(camelRow.competenceDate || camelRow.competence_date);
+            }
+            camelRow.accountId = camelRow.accountId || camelRow.account_id || '';
+            camelRow.account = camelRow.account || 'Caixa Geral';
+            camelRow.documentNumber = camelRow.documentNumber || camelRow.document_number || '';
+            camelRow.partnerId = camelRow.partnerId || camelRow.partner_id || '';
+            camelRow.partnerName = camelRow.partnerName || camelRow.partner_name || '';
+            camelRow.originModule = camelRow.originModule || camelRow.origin_module || '';
+            camelRow.originId = camelRow.originId || camelRow.origin_id || '';
+            camelRow.ledgerCode = camelRow.ledgerCode || camelRow.ledger_code || '';
+            camelRow.ledgerName = camelRow.ledgerName || camelRow.ledger_name || '';
+        } else if (table === 'sales') {
+            camelRow.date = toLocaleDate(camelRow.date);
+            if (camelRow.dueDate || camelRow.due_date) {
+                camelRow.dueDate = toLocaleDate(camelRow.dueDate || camelRow.due_date);
+            }
+            camelRow.clientId = camelRow.clientId || camelRow.client_id || '';
+            camelRow.clientName = camelRow.clientName || camelRow.client_name || '';
+            camelRow.paymentMethod = camelRow.paymentMethod || camelRow.payment_method || '';
+            camelRow.installments = Number(camelRow.installments || 1);
+            camelRow.weightTicket = camelRow.weightTicket || camelRow.weight_ticket || '';
+            camelRow.measuredWeight = camelRow.measuredWeight ?? camelRow.measured_weight;
+            camelRow.tareWeight = camelRow.tareWeight ?? camelRow.tare_weight;
+            camelRow.grossWeight = camelRow.grossWeight ?? camelRow.gross_weight;
+            camelRow.netWeight = camelRow.netWeight ?? camelRow.net_weight;
+            camelRow.ledgerCode = camelRow.ledgerCode || camelRow.ledger_code;
+            camelRow.ledgerName = camelRow.ledgerName || camelRow.ledger_name;
+        } else if (table === 'budgets') {
+            camelRow.clientId = camelRow.clientId || camelRow.client_id || '';
+            camelRow.clientName = camelRow.clientName || camelRow.client_name || '';
+            camelRow.date = toLocaleDate(camelRow.date);
+            camelRow.expiryDate = toLocaleDate(camelRow.expiryDate || camelRow.expiry_date);
+            camelRow.subtotal = Number(camelRow.subtotal || 0);
+            camelRow.discount = Number(camelRow.discount || 0);
+            camelRow.total = Number(camelRow.total || 0);
+            camelRow.status = camelRow.status || 'Aberto';
+            camelRow.items = Array.isArray(camelRow.items) ? camelRow.items : [];
+            camelRow.tareWeight = camelRow.tareWeight ?? camelRow.tare_weight;
+            camelRow.grossWeight = camelRow.grossWeight ?? camelRow.gross_weight;
+            camelRow.netWeight = camelRow.netWeight ?? camelRow.net_weight;
+            camelRow.weightNotes = camelRow.weightNotes || camelRow.weight_notes;
+            camelRow.paymentMethod = camelRow.paymentMethod || camelRow.payment_method;
+        } else if (table === 'employees') {
+            if (camelRow.admissionDate || camelRow.admission_date) {
+                camelRow.admissionDate = toLocaleDate(camelRow.admissionDate || camelRow.admission_date);
+            }
+            camelRow.costCenter = camelRow.costCenter || camelRow.cost_center || '';
+            camelRow.cnhCategory = camelRow.cnhCategory || camelRow.cnh_category || '';
+            camelRow.cnhExpiry = camelRow.cnhExpiry || camelRow.cnh_expiry || '';
+        } else if (table === 'fleet') {
+            camelRow.fuelType = camelRow.fuelType || camelRow.fuel_type;
+            camelRow.fuelLevel = camelRow.fuelLevel ?? camelRow.fuel_level;
+            camelRow.nextMaintenanceKm = camelRow.nextMaintenanceKm ?? camelRow.next_maintenance_km;
+            camelRow.costCenter = camelRow.costCenter || camelRow.cost_center || '';
+            camelRow.department = camelRow.department || camelRow.department || '';
+            camelRow.telemetryData = camelRow.telemetryData || camelRow.telemetry_data || {};
+        } else if (table === 'production_orders') {
+            camelRow.orderNumber = camelRow.orderNumber || camelRow.order_number || '';
+            camelRow.productName = camelRow.productName || camelRow.product_name || '';
+            camelRow.formulaId = camelRow.formulaId || camelRow.formula_id;
+            camelRow.unitId = camelRow.unitId || camelRow.unit_id;
+            camelRow.qualityTests = camelRow.qualityTests || camelRow.quality_tests || [];
+            camelRow.clientId = camelRow.clientId || camelRow.client_id;
+            camelRow.saleId = camelRow.saleId || camelRow.sale_id;
+            camelRow.vehicleId = camelRow.vehicleId || camelRow.vehicle_id;
+        }
 
-    return data as T[];
+        return camelRow as T;
+    });
 };
 
 // Criação com Fallback Resiliente e Sync Queue

@@ -341,7 +341,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const [
         cl, su, emp, inv, tr, fl, ti, us, ro, set, sa, po, pro, prf, pru, fac, pay, stm,
-        bud, tml, vac, adv, aud, maint, fuel
+        bud, tml, vac, adv, aud, maint, fuel, pla
       ] = await Promise.all([
         api.fetchData<Client>('clients'),
         api.fetchData<Supplier>('suppliers'),
@@ -369,7 +369,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         api.fetchData<SalaryAdvance>('salary_advances').catch(() => []),
         api.fetchData<AuditLog>('audit_logs').catch(() => []),
         api.fetchData<MaintenanceRecord>('maintenance_records').catch(() => []),
-        api.fetchData<FuelLog>('fuel_logs').catch(() => [])
+        api.fetchData<FuelLog>('fuel_logs').catch(() => []),
+        api.fetchData<PlanOfAccountNode>('plan_of_accounts').catch(() => [])
       ]);
 
       if (cl && cl.length > 0) setClients(cl);
@@ -404,6 +405,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (vac && vac.length > 0) setVacations(vac);
       if (adv && adv.length > 0) setSalaryAdvances(adv);
       if (aud && aud.length > 0) setAuditLogs(aud);
+      if (pla && pla.length > 0) setPlanOfAccounts(pla);
 
       // Auto-Seed: If database is completely empty, populate initial structure
       if (us && us.length === 0 && ro && ro.length === 0 && cl && cl.length === 0) {
@@ -1922,6 +1924,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!parentId) {
         const newId = generateUUID();
         const nextCode = (prev.length + 1).toString() + ".01";
+        api.createItem('plan_of_accounts', { id: newId, code: nextCode, name, type, parent_id: null })
+          .catch(e => console.warn('Supabase sync plan_of_accounts:', e));
         updatedState = [...prev, {
           id: newId,
           code: nextCode,
@@ -1930,13 +1934,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           children: []
         }];
       } else {
+        const newChildId = generateUUID();
         updatedState = prev.map(group => {
           if (group.id === parentId) {
+            const nextCode = `${group.code}.${(group.children?.length || 0) + 1}`;
+            api.createItem('plan_of_accounts', { id: newChildId, code: nextCode, name, type: group.type, parent_id: parentId })
+              .catch(e => console.warn('Supabase sync plan_of_accounts:', e));
             return {
               ...group,
               children: [...(group.children || []), {
-                id: generateUUID(),
-                code: `${group.code}.${(group.children?.length || 0) + 1}`,
+                id: newChildId,
+                code: nextCode,
                 name,
                 type: group.type
               }]
@@ -1954,6 +1962,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deletePlanAccount = (id: string, parentId?: string | null) => {
+    api.deleteItem('plan_of_accounts', id).catch(e => console.warn('Supabase delete plan_of_accounts:', e));
     setPlanOfAccounts(prev => {
       let updatedState: PlanOfAccountNode[];
       if (!parentId) {
