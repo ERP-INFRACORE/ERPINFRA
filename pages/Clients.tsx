@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Filter,
@@ -118,6 +118,470 @@ export const formatCEP = (val: string): string => {
   const clean = (val || '').replace(/\D/g, '').slice(0, 8);
   return clean.replace(/(\d{5})(\d)/, '$1-$2');
 };
+
+// ==========================================
+// CATÁLOGO CANÔNICO DO PLANO DE CONTAS: ITEM 1.01 (RECEITA OPERACIONAL BRUTA)
+// ==========================================
+export const PLAN_101_PRODUCTS: Omit<InventoryItem, 'id'>[] = [
+  // --- 1.01.01: Venda de Agregados (Brita/Areia/Pó) ---
+  {
+    name: 'Brita 0 (Pedrisco Limpo 4,8mm - 9,5mm)',
+    description: 'Pedrisco limpo de alta densidade para pisos industriais, artefatos de cimento e concreto fino. Código Contábil: 1.01.01',
+    category: 'Agregados',
+    unit: 'ton',
+    price: 68.00,
+    costPrice: 38.00,
+    quantity: 250,
+    minStock: 50,
+    barcode: '7891010100010',
+    location: 'Pátio Britagem - Baia 01',
+    brand: 'InfraCore Mineração',
+    ncm: '2517.10.00',
+    weight: 1000
+  },
+  {
+    name: 'Brita 1 (19mm - Concreto Estrutural)',
+    description: 'Brita graduada 19mm para preparo de concreto usinado estrutural, vigas, pilares e lajes. Código Contábil: 1.01.01',
+    category: 'Agregados',
+    unit: 'ton',
+    price: 72.00,
+    costPrice: 40.00,
+    quantity: 400,
+    minStock: 80,
+    barcode: '7891010100027',
+    location: 'Pátio Britagem - Baia 02',
+    brand: 'InfraCore Mineração',
+    ncm: '2517.10.00',
+    weight: 1000
+  },
+  {
+    name: 'Brita 2 (25mm - Drenagem e Pavimentação)',
+    description: 'Brita grossa 25mm para drenos profundos, sub-base viária e concreto pesado. Código Contábil: 1.01.01',
+    category: 'Agregados',
+    unit: 'ton',
+    price: 70.00,
+    costPrice: 39.00,
+    quantity: 350,
+    minStock: 60,
+    barcode: '7891010100034',
+    location: 'Pátio Britagem - Baia 03',
+    brand: 'InfraCore Mineração',
+    ncm: '2517.10.00',
+    weight: 1000
+  },
+  {
+    name: 'Brita Graduada Simples (BGS)',
+    description: 'Composição dosada de agregados para execução de base e sub-base de pavimentação. Código Contábil: 1.01.01',
+    category: 'Agregados',
+    unit: 'ton',
+    price: 65.00,
+    costPrice: 35.00,
+    quantity: 500,
+    minStock: 100,
+    barcode: '7891010100041',
+    location: 'Pátio Britagem - Baia 04',
+    brand: 'InfraCore Mineração',
+    ncm: '2517.10.00',
+    weight: 1000
+  },
+  {
+    name: 'Areia Industrial Lavada (Areia de Brita)',
+    description: 'Areia manufaturada proveniente de britagem terciária, 100% isenta de argila ou matéria orgânica. Código Contábil: 1.01.01',
+    category: 'Agregados',
+    unit: 'ton',
+    price: 85.00,
+    costPrice: 46.00,
+    quantity: 300,
+    minStock: 50,
+    barcode: '7891010100058',
+    location: 'Pátio Britagem - Silo 01',
+    brand: 'InfraCore Mineração',
+    ncm: '2505.10.00',
+    weight: 1000
+  },
+  {
+    name: 'Pó de Pedra / Pó de Brita',
+    description: 'Finos de britagem para usinagem de massa asfáltica e assentamento de pavimento intertravado. Código Contábil: 1.01.01',
+    category: 'Agregados',
+    unit: 'ton',
+    price: 58.00,
+    costPrice: 30.00,
+    quantity: 450,
+    minStock: 80,
+    barcode: '7891010100065',
+    location: 'Pátio Britagem - Baia 05',
+    brand: 'InfraCore Mineração',
+    ncm: '2517.10.00',
+    weight: 1000
+  },
+
+  // --- 1.01.02: Venda de Rachão/Pedra de Mão ---
+  {
+    name: 'Pedra Rachão (Pedra de Mão / Enrocamento)',
+    description: 'Pedra bruta de 10cm a 30cm para contenção de encostas, muros de gabião e drenagens. Código Contábil: 1.01.02',
+    category: 'Agregados',
+    unit: 'ton',
+    price: 62.00,
+    costPrice: 32.00,
+    quantity: 380,
+    minStock: 50,
+    barcode: '7891010200017',
+    location: 'Pátio Pedreira - Setor A',
+    brand: 'InfraCore Mineração',
+    ncm: '2517.10.00',
+    weight: 1000
+  },
+
+  // --- 1.01.03: Venda de Concreto Usinado ---
+  {
+    name: 'Concreto Usinado FCK 20 MPa (Slump 10±2)',
+    description: 'Concreto usinado dosado em central para fundações rasas, sapatas e contrapisos. Código Contábil: 1.01.03',
+    category: 'Cimentos e Argamassas',
+    unit: 'm3',
+    price: 380.00,
+    costPrice: 265.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010300014',
+    location: 'Usina Dosadora de Concreto 01',
+    brand: 'InfraCore Concreto',
+    ncm: '3824.50.00',
+    weight: 2400
+  },
+  {
+    name: 'Concreto Usinado FCK 25 MPa (Slump 10±2)',
+    description: 'Concreto estrutural normatizado para pilares, vigas e lajes residenciais/comerciais. Código Contábil: 1.01.03',
+    category: 'Cimentos e Argamassas',
+    unit: 'm3',
+    price: 410.00,
+    costPrice: 285.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010300021',
+    location: 'Usina Dosadora de Concreto 01',
+    brand: 'InfraCore Concreto',
+    ncm: '3824.50.00',
+    weight: 2400
+  },
+  {
+    name: 'Concreto Usinado FCK 30 MPa Estrutural',
+    description: 'Concreto de alta resistência para estruturas pesadas, reservatórios e pilares esbeltos. Código Contábil: 1.01.03',
+    category: 'Cimentos e Argamassas',
+    unit: 'm3',
+    price: 445.00,
+    costPrice: 310.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010300038',
+    location: 'Usina Dosadora de Concreto 01',
+    brand: 'InfraCore Concreto',
+    ncm: '3824.50.00',
+    weight: 2400
+  },
+  {
+    name: 'Concreto Usinado FCK 35 MPa (Pisos Industriais)',
+    description: 'Concreto de baixo fator água/cimento aditivado com plastificantes para pisos de alta abrasão. Código Contábil: 1.01.03',
+    category: 'Cimentos e Argamassas',
+    unit: 'm3',
+    price: 485.00,
+    costPrice: 340.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010300045',
+    location: 'Usina Dosadora de Concreto 01',
+    brand: 'InfraCore Concreto',
+    ncm: '3824.50.00',
+    weight: 2400
+  },
+  {
+    name: 'Concreto Usinado FCK 40 MPa (Alta Resistência / OAE)',
+    description: 'Concreto especial de alto desempenho para pontes, viadutos e estruturas pré-moldadas. Código Contábil: 1.01.03',
+    category: 'Cimentos e Argamassas',
+    unit: 'm3',
+    price: 530.00,
+    costPrice: 375.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010300052',
+    location: 'Usina Dosadora de Concreto 01',
+    brand: 'InfraCore Concreto',
+    ncm: '3824.50.00',
+    weight: 2400
+  },
+
+  // --- 1.01.04: Serviço de Bombeamento de Concreto ---
+  {
+    name: 'Serviço de Bombeamento de Concreto (Bomba Lança / Estacionária)',
+    description: 'Lançamento mecânico e transporte pressurizado de concreto em obras civis e industriais. Código Contábil: 1.01.04',
+    category: 'Serviços Terceirizados',
+    unit: 'm3',
+    price: 45.00,
+    costPrice: 22.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010400011',
+    location: 'Frentes de Concretagem Externa',
+    brand: 'InfraCore Concreto',
+    ncm: '9983.99.00'
+  },
+
+  // --- 1.01.05: Venda de Massa Asfáltica (CBUQ) ---
+  {
+    name: 'Massa Asfáltica CBUQ - Capa de Rolamento (Faixa C)',
+    description: 'Mistura asfáltica usinada a quente para revestimento final de pistas de tráfego intenso. Código Contábil: 1.01.05',
+    category: 'Combustíveis e Óleos',
+    unit: 'ton',
+    price: 395.00,
+    costPrice: 285.00,
+    quantity: 80,
+    minStock: 20,
+    barcode: '7891010500018',
+    location: 'Usina de Asfalto - Silo A',
+    brand: 'InfraCore Asfalto',
+    ncm: '2714.90.00',
+    weight: 1000
+  },
+  {
+    name: 'Massa Asfáltica CBUQ - Binder / Ligação (Faixa B)',
+    description: 'Camada intermediária de ligação estrutural entre a base e a capa de rolamento. Código Contábil: 1.01.05',
+    category: 'Combustíveis e Óleos',
+    unit: 'ton',
+    price: 370.00,
+    costPrice: 265.00,
+    quantity: 60,
+    minStock: 15,
+    barcode: '7891010500025',
+    location: 'Usina de Asfalto - Silo B',
+    brand: 'InfraCore Asfalto',
+    ncm: '2714.90.00',
+    weight: 1000
+  },
+  {
+    name: 'Massa Asfáltica CBUQ com Polímero (Alto Tráfego)',
+    description: 'CBUQ modificado com polímeros elastoméricos SBS para resistência máxima a deformações plásticas. Código Contábil: 1.01.05',
+    category: 'Combustíveis e Óleos',
+    unit: 'ton',
+    price: 440.00,
+    costPrice: 320.00,
+    quantity: 40,
+    minStock: 10,
+    barcode: '7891010500032',
+    location: 'Usina de Asfalto - Silo C',
+    brand: 'InfraCore Asfalto',
+    ncm: '2714.90.00',
+    weight: 1000
+  },
+
+  // --- 1.01.06: Venda de Emulsão Asfáltica ---
+  {
+    name: 'Emulsão Asfáltica RR-2C (Pintura de Ligação)',
+    description: 'Emulsão catiônica de ruptura rápida para aderência entre camadas asfálticas sobrepostas. Código Contábil: 1.01.06',
+    category: 'Combustíveis e Óleos',
+    unit: 'ton',
+    price: 3850.00,
+    costPrice: 2900.00,
+    quantity: 15,
+    minStock: 5,
+    barcode: '7891010600015',
+    location: 'Tanque Estacionário 01',
+    brand: 'InfraCore Asfalto',
+    ncm: '2714.90.00',
+    weight: 1000
+  },
+  {
+    name: 'Emulsão Asfáltica RL-1C (Imprimação Impermeabilizante)',
+    description: 'Emulsão catiônica de ruptura lenta com alta penetração em bases granulares de brita. Código Contábil: 1.01.06',
+    category: 'Combustíveis e Óleos',
+    unit: 'ton',
+    price: 4100.00,
+    costPrice: 3150.00,
+    quantity: 12,
+    minStock: 4,
+    barcode: '7891010600022',
+    location: 'Tanque Estacionário 02',
+    brand: 'InfraCore Asfalto',
+    ncm: '2714.90.00',
+    weight: 1000
+  },
+
+  // --- 1.01.07: Execução de Obras de Pavimentação ---
+  {
+    name: 'Execução de Pavimentação Asfáltica (Aplicação e Rolagem)',
+    description: 'Serviço mecanizado completo com espalhamento por vibroacabadora e rolagem compactadora tandem/pneumática. Código Contábil: 1.01.07',
+    category: 'Serviços Terceirizados',
+    unit: 'm2',
+    price: 38.00,
+    costPrice: 24.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010700012',
+    location: 'Frentes de Pavimentação Viária',
+    brand: 'InfraCore Engenharia',
+    ncm: '9983.99.00'
+  },
+
+  // --- 1.01.08: Obras de Infraestrutura e Terraplenagem ---
+  {
+    name: 'Serviço de Terraplenagem, Corte e Aterro',
+    description: 'Desmonte, escavação mecanizada, transporte interno e compactação de aterro controlado. Código Contábil: 1.01.08',
+    category: 'Serviços Terceirizados',
+    unit: 'm3',
+    price: 28.00,
+    costPrice: 16.50,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010800019',
+    location: 'Frentes de Terraplenagem',
+    brand: 'InfraCore Engenharia',
+    ncm: '9983.99.00'
+  },
+  {
+    name: 'Regularização e Compactação de Subleito / Base',
+    description: 'Conformação com motoniveladora e compactação até 100% do Proctor Normal para recebimento de pavimento. Código Contábil: 1.01.08',
+    category: 'Serviços Terceirizados',
+    unit: 'm2',
+    price: 12.50,
+    costPrice: 7.20,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010800026',
+    location: 'Frentes de Terraplenagem',
+    brand: 'InfraCore Engenharia',
+    ncm: '9983.99.00'
+  },
+
+  // --- 1.01.09: Obras de Arte Especiais ---
+  {
+    name: 'Construção de Obras de Arte Especiais (Pontes, Viadutos e Galerias)',
+    description: 'Execução de estruturas pesadas em concreto armado e protendido para transposição de córregos e rodovias. Código Contábil: 1.01.09',
+    category: 'Serviços Terceirizados',
+    unit: 'un',
+    price: 150000.00,
+    costPrice: 98000.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010900016',
+    location: 'Projetos Estruturais OAE',
+    brand: 'InfraCore Engenharia',
+    ncm: '9983.99.00'
+  },
+
+  // --- 1.01.10: Locação de Equipamentos e Maquinário ---
+  {
+    name: 'Locação de Escavadeira Hidráulica 20t (Hora/Máquina)',
+    description: 'Escavadeira hidráulica sobre esteiras 20 toneladas com operador qualificado e horímetro fiscalizado. Código Contábil: 1.01.10',
+    category: 'Locação de Equipamentos',
+    unit: 'h',
+    price: 280.00,
+    costPrice: 160.00,
+    quantity: 5,
+    minStock: 1,
+    barcode: '7891011000012',
+    location: 'Pátio Central de Frotas',
+    brand: 'Caterpillar / Komatsu',
+    ncm: '8429.52.00'
+  },
+  {
+    name: 'Locação de Retroescavadeira 4x4 (Hora/Máquina)',
+    description: 'Retroescavadeira traçada 4x4 com concha frontal de 1m3 e caçamba escavadeira traseira. Código Contábil: 1.01.10',
+    category: 'Locação de Equipamentos',
+    unit: 'h',
+    price: 190.00,
+    costPrice: 110.00,
+    quantity: 8,
+    minStock: 2,
+    barcode: '7891011000029',
+    location: 'Pátio Central de Frotas',
+    brand: 'JCB / Case',
+    ncm: '8429.51.00'
+  },
+  {
+    name: 'Locação de Rolo Compactador Vibratório Pé de Carneiro / Liso (Hora)',
+    description: 'Rolo compactador vibratório autopropelido para solos granulares, coesivos e asfalto. Código Contábil: 1.01.10',
+    category: 'Locação de Equipamentos',
+    unit: 'h',
+    price: 220.00,
+    costPrice: 130.00,
+    quantity: 4,
+    minStock: 1,
+    barcode: '7891011000036',
+    location: 'Pátio Central de Frotas',
+    brand: 'Dynapac / Hamm',
+    ncm: '8429.40.00'
+  },
+  {
+    name: 'Locação de Caminhão Basculante Caçamba Traçado 6x4 (Hora)',
+    description: 'Caminhão basculante traçado 6x4 com caçamba de 14m3 a 16m3 para transporte de terra e brita. Código Contábil: 1.01.10',
+    category: 'Locação de Equipamentos',
+    unit: 'h',
+    price: 210.00,
+    costPrice: 125.00,
+    quantity: 12,
+    minStock: 3,
+    barcode: '7891011000043',
+    location: 'Pátio Central de Frotas',
+    brand: 'Volvo / Scania',
+    ncm: '8704.23.10'
+  },
+  {
+    name: 'Locação de Vibroacabadora de Asfalto (Hora/Máquina)',
+    description: 'Vibroacabadora sobre esteiras com mesa niveladora telescópica eletrônica para acabamento de CBUQ. Código Contábil: 1.01.10',
+    category: 'Locação de Equipamentos',
+    unit: 'h',
+    price: 450.00,
+    costPrice: 270.00,
+    quantity: 2,
+    minStock: 1,
+    barcode: '7891011000050',
+    location: 'Pátio Central de Frotas',
+    brand: 'Vögele / Ciber',
+    ncm: '8479.10.90'
+  },
+
+  // --- 1.01.11: Serviços de Laboratório/Tecnológicos ---
+  {
+    name: 'Ensaio de Rompimento de Corpo de Prova de Concreto (NBR 5739)',
+    description: 'Capeamento e determinação da resistência à compressão axial com emissão de curva de evolução FCK. Código Contábil: 1.01.11',
+    category: 'Serviços Terceirizados',
+    unit: 'un',
+    price: 45.00,
+    costPrice: 18.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891011100019',
+    location: 'Laboratório Tecnológico - Asfalto & Concreto',
+    brand: 'InfraCore Lab',
+    ncm: '9983.99.00'
+  },
+  {
+    name: 'Ensaio de Grau de Compactação e Umidade In Situ (DNIT / NBR 7182)',
+    description: 'Ensaio do frasco de areia e determinação da umidade Speedy com cálculo imediato do GC%. Código Contábil: 1.01.11',
+    category: 'Serviços Terceirizados',
+    unit: 'un',
+    price: 95.00,
+    costPrice: 38.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891011100026',
+    location: 'Laboratório Tecnológico - Solos & Terraplenagem',
+    brand: 'InfraCore Lab',
+    ncm: '9983.99.00'
+  },
+  {
+    name: 'Ensaio de Granulometria de Agregados e Equivalente de Areia',
+    description: 'Peneiramento mecânico com módulo de finura, dimensão máxima característica e equivalente de areia. Código Contábil: 1.01.11',
+    category: 'Serviços Terceirizados',
+    unit: 'un',
+    price: 120.00,
+    costPrice: 45.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891011100033',
+    location: 'Laboratório Tecnológico - Agregados & Solos',
+    brand: 'InfraCore Lab',
+    ncm: '9983.99.00'
+  }
+];
 
 const Clients = () => {
   const {
@@ -259,6 +723,39 @@ const Clients = () => {
       setIsLoadingCnpj(false);
     }
   };
+
+  // ==========================================
+  // SALVAR / CARREGAR PRODUTOS BASEADOS NO PLANO DE CONTAS (1.01)
+  // ==========================================
+  const handleLoadPlan101Products = (isSilent = false) => {
+    let addedCount = 0;
+    PLAN_101_PRODUCTS.forEach((prod, idx) => {
+      const alreadyExists = (inventory || []).some(
+        p => (p.name || '').trim().toLowerCase() === prod.name.trim().toLowerCase() ||
+             (prod.barcode && (p.barcode || '').trim() === prod.barcode.trim())
+      );
+      if (!alreadyExists) {
+        addStockItem({
+          ...prod,
+          id: `prod-101-${idx + 1}-${Date.now()}`
+        } as InventoryItem);
+        addedCount++;
+      }
+    });
+
+    if (addedCount > 0) {
+      addToast(`${addedCount} produtos/serviços derivados do Plano 1.01 salvos no estoque com sucesso!`, 'success');
+    } else if (!isSilent) {
+      addToast('Todos os 27 itens do Plano 1.01 já estão cadastrados na aba de Produtos.', 'info');
+    }
+  };
+
+  // Auto-sincronização caso o estoque esteja vazio ao acessar a aba Produtos
+  useEffect(() => {
+    if (activeTab === 'products' && Array.isArray(inventory) && inventory.length === 0) {
+      handleLoadPlan101Products(true);
+    }
+  }, [activeTab, inventory]);
 
   // ==========================================
   // SALVAR COM VALIDAÇÕES E BLOQUEIO DE DUPLICIDADE
@@ -1381,11 +1878,22 @@ const Clients = () => {
           <p className="text-[10px] font-black text-cyan-600 uppercase tracking-[0.3em] mb-1">Cadastros Centrais</p>
           <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">Gestão Operacional</h2>
         </div>
-        {canManage(activeTab) && (
-          <button onClick={() => handleOpenModal()} className="px-6 py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3 shadow-xl hover:scale-105 transition-all">
-            <Plus size={20} /> Adicionar Novo
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {activeTab === 'products' && canManage('products') && (
+            <button
+              onClick={() => handleLoadPlan101Products(false)}
+              className="px-5 py-4 bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 rounded-2xl font-black uppercase text-xs tracking-wider flex items-center gap-2 shadow-sm transition-all"
+              title="Cadastrar todos os produtos e serviços derivados do item 1.01 (Receita Bruta) do Plano de Contas"
+            >
+              <Package size={18} /> Salvar Itens Plano 1.01
+            </button>
+          )}
+          {canManage(activeTab) && (
+            <button onClick={() => handleOpenModal()} className="px-6 py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3 shadow-xl hover:scale-105 transition-all">
+              <Plus size={20} /> Adicionar Novo
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="border-b border-slate-100 dark:border-slate-700">
@@ -1470,6 +1978,14 @@ const Clients = () => {
                     <Search size={36} className="text-slate-300 dark:text-slate-600" />
                     <p className="font-bold text-sm text-slate-500">Nenhum registro encontrado</p>
                     <p className="text-xs text-slate-400">Tente ajustar seus termos de pesquisa ou o filtro de status.</p>
+                    {activeTab === 'products' && canManage('products') && (
+                      <button
+                        onClick={() => handleLoadPlan101Products(false)}
+                        className="mt-4 px-6 py-3 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition-all hover:scale-105 cursor-pointer"
+                      >
+                        <Package size={16} /> Salvar Todos os Itens do Plano 1.01
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -1502,9 +2018,19 @@ const Clients = () => {
                           <p className="text-[10px] text-slate-400 font-medium">{item.role} {item.department ? `• Depto: ${item.department}` : ''}</p>
                         )}
                         {activeTab === 'products' && (
-                          <p className="text-[10px] text-cyan-600 font-bold">
-                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price || 0)} • Estoque: {item.quantity || 0} {item.unit || 'un'}
-                          </p>
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] text-cyan-600 font-bold">
+                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price || 0)} • Estoque: {item.quantity || 0} {item.unit || 'un'}
+                              {item.category ? ` • Cat: ${item.category}` : ''}
+                            </p>
+                            {(item.location || item.brand) && (
+                              <p className="text-[9px] text-slate-400 font-medium">
+                                {item.location ? `Loc: ${item.location}` : ''}
+                                {item.location && item.brand ? ' • ' : ''}
+                                {item.brand ? `Marca: ${item.brand}` : ''}
+                              </p>
+                            )}
+                          </div>
                         )}
                         {activeTab === 'vehicles' && (
                           <p className="text-[10px] text-slate-400 font-medium">{item.type || 'Veículo'} • {item.brand || ''} {item.year ? `(${item.year})` : ''}</p>
