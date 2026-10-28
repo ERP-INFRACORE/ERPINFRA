@@ -2162,26 +2162,6 @@ const Clients = () => {
           <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">Gestão Operacional</h2>
         </div>
         <div className="flex items-center gap-3">
-          {(activeTab === 'products' || activeTab === 'services') && canManage(activeTab) && (
-            <>
-              <button
-                onClick={() => handleClassifyProducts101(activeTab as any)}
-                className="px-5 py-4 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-2xl font-black uppercase text-xs tracking-wider flex items-center gap-2 shadow-sm transition-all"
-                title={activeTab === 'services' ? "Classificar serviços existentes nas contas do grupo 1.01" : "Classificar produtos existentes nas contas do grupo 1.01"}
-              >
-                <CheckCircle size={18} />
-                Classificar {activeTab === 'services' ? 'Serviços' : 'Produtos'} (1.01)
-              </button>
-              <button
-                onClick={() => handleLoadPlan101Products(activeTab === 'services' ? 'services' : 'products', false)}
-                className="px-5 py-4 bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 rounded-2xl font-black uppercase text-xs tracking-wider flex items-center gap-2 shadow-sm transition-all"
-                title={activeTab === 'services' ? "Cadastrar todos os serviços do item 1.01 do Plano de Contas" : "Cadastrar todos os produtos físicos do item 1.01 do Plano de Contas"}
-              >
-                {activeTab === 'services' ? <Wrench size={18} /> : <Package size={18} />}
-                {activeTab === 'services' ? 'Salvar Serviços Plano 1.01' : 'Salvar Produtos Plano 1.01'}
-              </button>
-            </>
-          )}
           {canManage(activeTab) && (
             <button onClick={() => handleOpenModal()} className="px-6 py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3 shadow-xl hover:scale-105 transition-all">
               <Plus size={20} /> Adicionar Novo
@@ -2273,15 +2253,6 @@ const Clients = () => {
                     <Search size={36} className="text-slate-300 dark:text-slate-600" />
                     <p className="font-bold text-sm text-slate-500">Nenhum registro encontrado</p>
                     <p className="text-xs text-slate-400">Tente ajustar seus termos de pesquisa ou o filtro de status.</p>
-                    {(activeTab === 'products' || activeTab === 'services') && canManage(activeTab) && (
-                      <button
-                        onClick={() => handleLoadPlan101Products(activeTab === 'services' ? 'services' : 'products', false)}
-                        className="mt-4 px-6 py-3 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition-all hover:scale-105 cursor-pointer"
-                      >
-                        {activeTab === 'services' ? <Wrench size={16} /> : <Package size={16} />}
-                        {activeTab === 'services' ? 'Salvar Serviços do Plano 1.01' : 'Salvar Produtos do Plano 1.01'}
-                      </button>
-                    )}
                   </div>
                 </td>
               </tr>
