@@ -495,13 +495,20 @@ const getLocalTableCache = <T>(table: string): T[] => {
     if (typeof localStorage === 'undefined') return [];
     try {
         const raw = localStorage.getItem(`${CACHE_PREFIX}${table}`);
-        if (raw) return JSON.parse(raw);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) return parsed;
+            if (parsed && typeof parsed === 'object') return [parsed] as unknown as T[];
+        }
 
         // Fallback para o snapshot consolidado infracore_erp_data
         const appRaw = localStorage.getItem('infracore_erp_data');
         if (appRaw) {
             const parsed = JSON.parse(appRaw);
             if (Array.isArray(parsed[table])) return parsed[table];
+            if (table === 'settings' && parsed.settings && typeof parsed.settings === 'object') {
+                return [parsed.settings] as unknown as T[];
+            }
         }
     } catch (e) {
         console.warn(`Failed to read cache for table ${table}:`, e);
@@ -509,10 +516,11 @@ const getLocalTableCache = <T>(table: string): T[] => {
     return [];
 };
 
-const saveLocalTableCache = (table: string, data: any[]) => {
-    if (typeof localStorage === 'undefined' || !Array.isArray(data)) return;
+const saveLocalTableCache = (table: string, data: any) => {
+    if (typeof localStorage === 'undefined' || data === undefined || data === null) return;
     try {
-        localStorage.setItem(`${CACHE_PREFIX}${table}`, JSON.stringify(data));
+        const toStore = Array.isArray(data) ? data : [data];
+        localStorage.setItem(`${CACHE_PREFIX}${table}`, JSON.stringify(toStore));
     } catch (e) {
         console.warn(`Failed to persist cache for table ${table}:`, e);
     }
@@ -875,24 +883,31 @@ export const deleteItem = async (table: string, id: string): Promise<boolean> =>
 
 // Atualização de Configurações do Sistema
 export const updateSettings = async (settings: AppSettings) => {
+    // 1. Sempre persiste imediatamente no cache local dedicado para integridade instantânea
+    saveLocalTableCache('settings', [settings]);
+
     if (!isSupabaseConfigured() || !isOnline()) {
         enqueueMutation('settings', 'update', 'system_settings', settings);
         return settings;
     }
 
     try {
-        const { data: existing } = await supabase.from('settings').select('id').limit(1).single();
-        if (existing) {
-            return updateItem('settings', existing.id, settings);
-        } else {
-            return createItem('settings', settings);
-        }
-    } catch (e) {
-        if (isNetworkError(e)) {
+        const { data: existing, error: selectErr } = await supabase.from('settings').select('id').limit(1).maybeSingle();
+        if (selectErr) {
+            console.warn('Tabela settings no Supabase indisponível ou inacessível, enfileirando mutação:', selectErr.message);
             enqueueMutation('settings', 'update', 'system_settings', settings);
             return settings;
         }
-        throw e;
+
+        if (existing && existing.id) {
+            return await updateItem('settings', existing.id, settings);
+        } else {
+            return await createItem('settings', settings);
+        }
+    } catch (e) {
+        console.warn('Falha remota ao sincronizar settings, preservando em fila offline:', e);
+        enqueueMutation('settings', 'update', 'system_settings', settings);
+        return settings;
     }
 };
 

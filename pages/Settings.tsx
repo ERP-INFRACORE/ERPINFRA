@@ -2835,7 +2835,13 @@ const Settings = () => {
 
 
     // Sync temp settings on mount/update (only if not dirty, strategy can vary)
-    // For this simple app, we'll just track changes.
+    // Sincroniza tempSettings quando o contexto carrega as configurações do banco/storage
+    useEffect(() => {
+        if (!hasChanges) {
+            setTempSettings(settings);
+        }
+    }, [settings, hasChanges]);
+
     useEffect(() => {
         const isDifferent = JSON.stringify(tempSettings) !== JSON.stringify(settings);
         setHasChanges(isDifferent);

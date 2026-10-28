@@ -187,7 +187,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [productionUnits, setProductionUnits] = useState<ProductionUnit[]>(INITIAL_PRODUCTION_UNITS);
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [roles, setRoles] = useState<AppRole[]>(INITIAL_ROLES);
-  const [settings, setSettings] = useState<AppSettings>(INITIAL_SETTINGS);
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('infracore_erp_data');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed.settings && typeof parsed.settings === 'object' && parsed.settings.companyName !== undefined) {
+            return parsed.settings;
+          }
+        }
+        const dedicated = localStorage.getItem('infracore_cache_table_settings');
+        if (dedicated) {
+          const parsed = JSON.parse(dedicated);
+          if (Array.isArray(parsed) && parsed[0]) return parsed[0];
+          if (parsed && typeof parsed === 'object') return parsed;
+        }
+      } catch (e) {
+        console.warn('Falha ao restaurar cache síncrono inicial de settings:', e);
+      }
+    }
+    return INITIAL_SETTINGS;
+  });
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
   const [accounts, setAccounts] = useState<FinancialAccount[]>(INITIAL_ACCOUNTS);
   const [planOfAccounts, setPlanOfAccounts] = useState<PlanOfAccountNode[]>(INITIAL_PLAN_OF_ACCOUNTS);
@@ -424,7 +445,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
 
           if (set && set.length === 0) {
-            await api.createItem('settings', INITIAL_SETTINGS);
+            const currentIsDefault = settings.companyName === INITIAL_SETTINGS.companyName;
+            await api.createItem('settings', currentIsDefault ? INITIAL_SETTINGS : settings).catch(() => {});
           }
 
           for (const item of INITIAL_SUPPLIERS) {
@@ -937,6 +959,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateSettings = (updated: AppSettings) => {
     setSettings(updated);
+    try {
+      localStorage.setItem('infracore_cache_table_settings', JSON.stringify([updated]));
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        parsed.settings = updated;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      }
+    } catch (e) {
+      console.warn('Falha ao gravar cache síncrono de settings:', e);
+    }
     broadcastCrossTab({
       type: 'MUTATION',
       table: 'settings',
@@ -944,7 +977,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'settings',
       item: updated
     });
-    if (isSupabaseConfigured()) api.updateSettings(updated);
+    if (isSupabaseConfigured()) {
+      api.updateSettings(updated).catch(err => console.warn('Falha ao sincronizar settings com nuvem:', err));
+    }
   };
 
   // Inventory
