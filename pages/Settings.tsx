@@ -80,6 +80,7 @@ import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { User, AppRole, AppSettings, AuditLog } from '../types';
 import { APP_PERMISSIONS, ALL_PERMISSIONS_FLAT } from '../permission_constants';
+import { INITIAL_ROLES, INITIAL_USERS } from '../context/constants/initialState';
 import { generateCameloData } from '../src/utils/seeder';
 import AIAuditAgent from '../components/AIAuditAgent';
 import AIAgentsHub from '../components/AIAgentsHub';
@@ -2663,6 +2664,58 @@ const isStrongPassword = (pwd: string): boolean => {
     return s.hasMinLength && s.hasUpper && s.hasLower && s.hasNumber && s.hasSymbol;
 };
 
+
+export const CRITICAL_PERMISSIONS = new Set([
+    'all',
+    'finance.admin',
+    'finance.delete_transaction',
+    'finance.delete',
+    'finance.manage_accounts',
+    'finance.manage_plan',
+    'users.manage',
+    'roles.manage',
+    'settings.company',
+    'settings.system',
+    'clients.delete',
+    'sales.cancel',
+    'inventory.adjust',
+    'purchases.approve',
+    'production.formulas',
+    'hr.payroll'
+]);
+
+export const getRoleModuleBadges = (role: AppRole): { name: string; color: string }[] => {
+    if (role.permissions.includes('all') || role.permissions.includes('*')) {
+        return [{ name: 'Acesso Global Total', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-purple-200 dark:border-purple-800' }];
+    }
+    const badges: { name: string; color: string }[] = [];
+    if (role.permissions.some(p => p.startsWith('sales.') || p.startsWith('clients.'))) {
+        badges.push({ name: 'Comercial', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800' });
+    }
+    if (role.permissions.some(p => p.startsWith('finance.'))) {
+        badges.push({ name: 'Financeiro', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' });
+    }
+    if (role.permissions.some(p => p.startsWith('purchases.') || p.startsWith('suppliers.'))) {
+        badges.push({ name: 'Compras', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800' });
+    }
+    if (role.permissions.some(p => p.startsWith('inventory.'))) {
+        badges.push({ name: 'Almoxarifado', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border-orange-200 dark:border-orange-800' });
+    }
+    if (role.permissions.some(p => p.startsWith('production.') || p.startsWith('quality.'))) {
+        badges.push({ name: 'Produção', color: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800' });
+    }
+    if (role.permissions.some(p => p.startsWith('fleet.'))) {
+        badges.push({ name: 'Frota', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800' });
+    }
+    if (role.permissions.some(p => p.startsWith('hr.') || p.startsWith('employees.'))) {
+        badges.push({ name: 'RH & DP', color: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 border-rose-200 dark:border-rose-800' });
+    }
+    if (role.permissions.some(p => p.startsWith('settings.') || p.startsWith('users.') || p.startsWith('roles.') || p.startsWith('audit.'))) {
+        badges.push({ name: 'Segurança', color: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600' });
+    }
+    return badges;
+};
+
 const Settings = () => {
     const {
         users, roles, settings, auditLogs, employees,
@@ -2703,8 +2756,13 @@ const Settings = () => {
     const [userRoleFilter, setUserRoleFilter] = useState<string>('all');
     const [showPassword, setShowPassword] = useState(false);
 
-    // Role Directory & Matrix Filter
+        // Role Directory & Matrix Filter
     const [roleSearchQuery, setRoleSearchQuery] = useState('');
+    const [roleStateFilter, setRoleStateFilter] = useState<'all' | 'active' | 'inactive' | 'critical'>('all');
+    const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
+    const [roleListSearchQuery, setRoleListSearchQuery] = useState('');
+    const [roleListTypeFilter, setRoleListTypeFilter] = useState<'all' | 'admin' | 'operational' | 'assigned' | 'unassigned'>('all');
+    const [previousRolePermissions, setPreviousRolePermissions] = useState<string[] | null>(null);
 
     // Audit Filters & Pagination
     const [auditSearch, setAuditSearch] = useState('');
@@ -3288,6 +3346,60 @@ const Settings = () => {
                 addToast(`Perfil "${role.name}" removido com sucesso!`, 'info');
             }
         });
+    };
+
+        const handleDuplicateRole = (sourceRole: AppRole) => {
+        if (!hasPermission('roles.manage') && !isSuperAdmin) {
+            addToast('Você não tem permissão para duplicar perfis de acesso.', 'error');
+            return;
+        }
+        const cleanPermissions = sourceRole.permissions.filter(p => p !== 'all' && p !== '*');
+        setEditingRole({
+            id: '',
+            name: `${sourceRole.name} (Cópia)`,
+            description: `Baseado em ${sourceRole.name}: ${sourceRole.description}`,
+            permissions: isSuperAdminRole(sourceRole) && isSuperAdmin ? ['all', ...cleanPermissions] : cleanPermissions
+        });
+        setRoleSearchQuery('');
+        setRoleStateFilter('all');
+        setSelectedCategoryFilter('all');
+        setPreviousRolePermissions(null);
+        setIsRoleModalOpen(true);
+        addToast(`Perfil "${sourceRole.name}" clonado como base para novo perfil!`, 'info');
+    };
+
+    const handleSyncDefaultRolesAndUsers = () => {
+        if (!hasPermission('roles.manage') && !hasPermission('users.manage') && !isSuperAdmin) {
+            addToast('Você não tem permissão para gerenciar perfis e usuários.', 'error');
+            return;
+        }
+        let rolesAdded = 0;
+        let usersAdded = 0;
+        INITIAL_ROLES.forEach(initRole => {
+            if (!roles.some(r => r.id === initRole.id)) {
+                addRole(initRole);
+                rolesAdded++;
+            }
+        });
+        INITIAL_USERS.forEach(initUser => {
+            if (!users.some(u => u.username.toLowerCase() === initUser.username.toLowerCase())) {
+                addUser(initUser);
+                usersAdded++;
+            }
+        });
+        if (rolesAdded > 0 || usersAdded > 0) {
+            addAuditLog({
+                userId: currentUser?.id || '',
+                userName: currentUser?.name || 'Sistema',
+                module: 'Segurança',
+                action: 'Sincronização de Grade RBAC',
+                details: `Grade padrão sincronizada: +${rolesAdded} perfis e +${usersAdded} usuários genéricos adicionados.`,
+                severity: 'info'
+            });
+            addToast(`Grade padrão sincronizada com sucesso! +${rolesAdded} perfil(is) e +${usersAdded} usuário(s) adicionados.`, 'success');
+        } else {
+            addToast('Todos os 12 perfis e usuários genéricos já estão presentes no sistema.', 'info');
+        }
     };
 
     // Helper for Exporting
@@ -4329,7 +4441,7 @@ const Settings = () => {
                                 {/* Visualização de Perfis (Roles) */}
                                 {activeSecuritySubTab === 'roles' && (
                                     <div className="space-y-6">
-                                        <div className="flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/20 p-6 rounded-[24px] border border-indigo-100 dark:border-indigo-900/30">
+                                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-indigo-50 dark:bg-indigo-900/20 p-6 rounded-[24px] border border-indigo-100 dark:border-indigo-900/30">
                                             <div className="flex items-center gap-4">
                                                 <div className="p-3 bg-purple-500 text-white rounded-xl shadow-lg shadow-purple-500/30">
                                                     <ShieldCheck size={24} />
@@ -4337,106 +4449,233 @@ const Settings = () => {
                                                 <div>
                                                     <h3 className="font-black text-slate-900 dark:text-white text-lg">Perfis de Acesso (RBAC Roles)</h3>
                                                     <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">
-                                                        Controle granular de permissões por cargo, suportando UUIDs e perfis legados.
+                                                        Controle granular de permissões por cargo, alçadas e segregação de funções.
                                                     </p>
                                                 </div>
                                             </div>
                                             {canManageRoles && (
-                                                <button
-                                                    onClick={() => {
-                                                        setEditingRole({ id: '', name: '', description: '', permissions: [] });
-                                                        setRoleSearchQuery('');
-                                                        setIsRoleModalOpen(true);
-                                                    }}
-                                                    className="px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center gap-2 shadow-xl shrink-0"
-                                                >
-                                                    <Plus size={16} /> Novo Perfil
-                                                </button>
+                                                <div className="flex items-center gap-2 flex-wrap shrink-0">
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingRole({ id: '', name: '', description: '', permissions: [] });
+                                                            setRoleSearchQuery('');
+                                                            setRoleStateFilter('all');
+                                                            setSelectedCategoryFilter('all');
+                                                            setPreviousRolePermissions(null);
+                                                            setIsRoleModalOpen(true);
+                                                        }}
+                                                        className="px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center gap-2 shadow-xl shrink-0"
+                                                    >
+                                                        <Plus size={16} /> Novo Perfil
+                                                    </button>
+                                                    <button
+                                                        onClick={handleSyncDefaultRolesAndUsers}
+                                                        className="px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-lg shrink-0"
+                                                        title="Sincronizar a grade completa de 12 perfis e 12 usuários genéricos pré-configurados"
+                                                    >
+                                                        <RefreshCw size={16} /> Grade Padrão (12 Funções)
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
 
-                                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                            {roles.map(role => {
+                                        {/* Toolbar de Busca e Filtros de Perfis */}
+                                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+                                            <div className="relative w-full sm:w-80">
+                                                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Buscar por nome, descrição ou área..."
+                                                    value={roleListSearchQuery}
+                                                    onChange={e => setRoleListSearchQuery(e.target.value)}
+                                                    className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-purple-500/20 dark:text-white"
+                                                />
+                                                {roleListSearchQuery && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setRoleListSearchQuery('')}
+                                                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                                <select
+                                                    value={roleListTypeFilter}
+                                                    onChange={e => setRoleListTypeFilter(e.target.value as any)}
+                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold py-2 px-3 outline-none dark:text-white"
+                                                >
+                                                    <option value="all">Todos os Perfis ({roles.length})</option>
+                                                    <option value="admin">Administradores</option>
+                                                    <option value="operational">Operacionais</option>
+                                                    <option value="assigned">Com Usuários Atribuídos</option>
+                                                    <option value="unassigned">Sem Usuários Atribuídos</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {/* Grid de Cards de Perfis */}
+                                        {(() => {
+                                            const q = roleListSearchQuery.toLowerCase().trim();
+                                            const filteredRoles = roles.filter(role => {
                                                 const isSuper = isSuperAdminRole(role);
-                                                const userCount = users.filter(u => u.roleId === role.id || (isSuper && isUserAdmin(u, roles))).length;
-                                                const canEditRole = isSuperAdmin || !isSuper;
+                                                const assignedUsers = users.filter(u => u.roleId === role.id || (isSuper && isUserAdmin(u, roles)));
+                                                
+                                                if (roleListTypeFilter === 'admin' && !isSuper) return false;
+                                                if (roleListTypeFilter === 'operational' && isSuper) return false;
+                                                if (roleListTypeFilter === 'assigned' && assignedUsers.length === 0) return false;
+                                                if (roleListTypeFilter === 'unassigned' && assignedUsers.length > 0) return false;
 
+                                                if (!q) return true;
                                                 return (
-                                                    <div key={role.id} className="bg-white dark:bg-slate-800 p-8 rounded-[32px] border border-slate-200 dark:border-slate-700 flex flex-col hover:border-purple-300 transition-all shadow-sm justify-between">
-                                                        <div>
-                                                            <div className="flex items-center justify-between mb-4">
-                                                                <div className="flex items-center gap-2">
-                                                                    <Shield size={32} className={isSuper ? 'text-purple-600' : 'text-purple-500'} />
-                                                                    {isSuper && (
-                                                                        <span className="text-[9px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
-                                                                            Administrador
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-full font-black text-slate-500 dark:text-slate-300 uppercase">
-                                                                    {role.permissions.includes('all') ? 'Acesso Total' : `${role.permissions.length} Permissões`}
-                                                                </span>
-                                                            </div>
-                                                            <h4 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-2">{role.name}</h4>
-                                                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">{role.description}</p>
-                                                            <div className="mb-6 flex items-center gap-2">
-                                                                <span className="text-xs font-bold text-slate-400">
-                                                                    {userCount === 0 ? 'Nenhum usuário vinculado' : `${userCount} usuário(s) associado(s)`}
-                                                                </span>
-                                                            </div>
-                                                        </div>
+                                                    role.name.toLowerCase().includes(q) ||
+                                                    role.description.toLowerCase().includes(q) ||
+                                                    role.permissions.some(p => p.toLowerCase().includes(q))
+                                                );
+                                            });
 
-                                                        <div className="flex items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-700/60">
-                                                            {canEditRole ? (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        setEditingRole(role);
-                                                                        setRoleSearchQuery('');
-                                                                        setIsRoleModalOpen(true);
-                                                                    }}
-                                                                    className="flex-1 py-3 bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/20 dark:hover:text-purple-300 transition-all"
-                                                                >
-                                                                    Editar Acessos
-                                                                </button>
-                                                            ) : (
-                                                                <span
-                                                                    title="Apenas administradores podem editar o perfil de Administrador"
-                                                                    className="flex-1 py-3 bg-slate-50 dark:bg-slate-700/30 text-slate-400 dark:text-slate-500 rounded-xl text-xs font-black uppercase tracking-widest text-center cursor-not-allowed flex items-center justify-center gap-1.5"
-                                                                >
-                                                                    <Lock size={14} /> Administrador
-                                                                </span>
-                                                            )}
-
-                                                            {isSuper ? (
-                                                                <span
-                                                                    title="Perfil de Administrador protegido pelo sistema contra exclusão"
-                                                                    className="p-3 bg-slate-50 dark:bg-slate-700/30 text-slate-300 dark:text-slate-600 rounded-xl cursor-not-allowed"
-                                                                >
-                                                                    <Lock size={16} />
-                                                                </span>
-                                                            ) : userCount > 0 ? (
-                                                                <span
-                                                                    title={`Não é possível excluir: há ${userCount} usuário(s) vinculado(s)`}
-                                                                    className="p-3 bg-slate-50 dark:bg-slate-700/30 text-slate-300 dark:text-slate-600 rounded-xl cursor-not-allowed"
-                                                                >
-                                                                    <Trash2 size={16} />
-                                                                </span>
-                                                            ) : (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleDeleteRole(role)}
-                                                                    className="p-3 bg-slate-50 dark:bg-slate-700/50 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-all"
-                                                                    title="Excluir Perfil"
-                                                                >
-                                                                    <Trash2 size={16} />
-                                                                </button>
-                                                            )}
-                                                        </div>
+                                            if (filteredRoles.length === 0) {
+                                                return (
+                                                    <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 p-8">
+                                                        <Shield className="mx-auto text-slate-300 dark:text-slate-600 mb-2" size={32} />
+                                                        <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                                                            Nenhum perfil encontrado com os filtros selecionados.
+                                                        </p>
                                                     </div>
                                                 );
-                                            })}
-                                        </div>
+                                            }
+
+                                            return (
+                                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                                    {filteredRoles.map(role => {
+                                                        const isSuper = isSuperAdminRole(role);
+                                                        const attachedUsers = users.filter(u => u.roleId === role.id || (isSuper && isUserAdmin(u, roles)));
+                                                        const canEditRole = isSuperAdmin || !isSuper;
+                                                        const moduleBadges = getRoleModuleBadges(role);
+
+                                                        return (
+                                                            <div key={role.id} className="bg-white dark:bg-slate-800 p-7 rounded-[32px] border border-slate-200 dark:border-slate-700 flex flex-col hover:border-purple-300 dark:hover:border-purple-700/60 transition-all shadow-sm justify-between gap-5">
+                                                                <div>
+                                                                    <div className="flex items-center justify-between mb-3">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <Shield size={28} className={isSuper ? 'text-purple-600' : 'text-indigo-500'} />
+                                                                            {isSuper && (
+                                                                                <span className="text-[9px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
+                                                                                    Administrador
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-full font-black text-slate-500 dark:text-slate-300 uppercase">
+                                                                            {role.permissions.includes('all') ? 'Acesso Total' : `${role.permissions.length} Permissões`}
+                                                                        </span>
+                                                                    </div>
+                                                                    
+                                                                    <h4 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight mb-1.5">{role.name}</h4>
+                                                                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed line-clamp-2">{role.description}</p>
+                                                                    
+                                                                    {/* Badges de Áreas de Negócio Concedidas */}
+                                                                    <div className="flex flex-wrap gap-1.5 mb-4">
+                                                                        {moduleBadges.map((badge, idx) => (
+                                                                            <span key={idx} className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${badge.color}`}>
+                                                                                {badge.name}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+
+                                                                    {/* Lista de Usuários Vinculados */}
+                                                                    <div className="pt-3 border-t border-slate-100 dark:border-slate-700/50">
+                                                                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 mb-2">
+                                                                            <span className="flex items-center gap-1.5">
+                                                                                <Users size={13} /> {attachedUsers.length === 0 ? 'Nenhum usuário vinculado' : `${attachedUsers.length} usuário(s) associado(s):`}
+                                                                            </span>
+                                                                        </div>
+                                                                        {attachedUsers.length > 0 && (
+                                                                            <div className="flex flex-wrap gap-1">
+                                                                                {attachedUsers.slice(0, 4).map(u => (
+                                                                                    <span key={u.id} className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60">
+                                                                                        @{u.username}
+                                                                                    </span>
+                                                                                ))}
+                                                                                {attachedUsers.length > 4 && (
+                                                                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+                                                                                        +{attachedUsers.length - 4} mais
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Ações do Card */}
+                                                                <div className="flex items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-700/60">
+                                                                    {canEditRole ? (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setEditingRole(role);
+                                                                                setRoleSearchQuery('');
+                                                                                setRoleStateFilter('all');
+                                                                                setSelectedCategoryFilter('all');
+                                                                                setPreviousRolePermissions(null);
+                                                                                setIsRoleModalOpen(true);
+                                                                            }}
+                                                                            className="flex-1 py-2.5 bg-slate-50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/20 dark:hover:text-purple-300 transition-all flex items-center justify-center gap-1.5"
+                                                                        >
+                                                                            <Edit2 size={13} /> Editar Acessos
+                                                                        </button>
+                                                                    ) : (
+                                                                        <span
+                                                                            title="Apenas administradores podem editar o perfil de Administrador"
+                                                                            className="flex-1 py-2.5 bg-slate-50 dark:bg-slate-700/30 text-slate-400 dark:text-slate-500 rounded-xl text-xs font-black uppercase tracking-widest text-center cursor-not-allowed flex items-center justify-center gap-1.5"
+                                                                        >
+                                                                            <Lock size={14} /> Administrador
+                                                                        </span>
+                                                                    )}
+
+                                                                    {/* Botão Duplicar / Clonar Perfil */}
+                                                                    {canManageRoles && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleDuplicateRole(role)}
+                                                                            className="p-2.5 bg-slate-50 dark:bg-slate-700/50 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-all"
+                                                                            title="Duplicar este perfil como base para novo cargo"
+                                                                        >
+                                                                            <Copy size={15} />
+                                                                        </button>
+                                                                    )}
+
+                                                                    {isSuper ? (
+                                                                        <span
+                                                                            title="Perfil de Administrador protegido pelo sistema contra exclusão"
+                                                                            className="p-2.5 bg-slate-50 dark:bg-slate-700/30 text-slate-300 dark:text-slate-600 rounded-xl cursor-not-allowed"
+                                                                        >
+                                                                            <Lock size={15} />
+                                                                        </span>
+                                                                    ) : attachedUsers.length > 0 ? (
+                                                                        <span
+                                                                            title={`Não é possível excluir: há ${attachedUsers.length} usuário(s) vinculado(s)`}
+                                                                            className="p-2.5 bg-slate-50 dark:bg-slate-700/30 text-slate-300 dark:text-slate-600 rounded-xl cursor-not-allowed"
+                                                                        >
+                                                                            <Trash2 size={15} />
+                                                                        </span>
+                                                                    ) : (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleDeleteRole(role)}
+                                                                            className="p-2.5 bg-slate-50 dark:bg-slate-700/50 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-all"
+                                                                            title="Excluir Perfil"
+                                                                        >
+                                                                            <Trash2 size={15} />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 )}
 
