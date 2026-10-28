@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Filter,
@@ -24,7 +24,9 @@ import {
   AlertTriangle,
   Building,
   CheckCircle,
-  RotateCcw
+  RotateCcw,
+  Loader2,
+  Wrench
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -118,6 +120,592 @@ export const formatCEP = (val: string): string => {
   return clean.replace(/(\d{5})(\d)/, '$1-$2');
 };
 
+// ==========================================
+// OPÇÕES E CLASSIFICAÇÃO CONTÁBIL: PLANO DE CONTAS 1.01 (RECEITA OPERACIONAL BRUTA)
+// ==========================================
+export const PLAN_101_OPTIONS = {
+  products: [
+    '1.01.01 - Venda de Agregados (Brita/Areia/Pó)',
+    '1.01.02 - Venda de Rachão/Pedra de Mão',
+    '1.01.03 - Venda de Concreto Usinado',
+    '1.01.05 - Venda de Massa Asfáltica (CBUQ)',
+    '1.01.06 - Venda de Emulsão Asfáltica',
+    'Outros Produtos e Insumos'
+  ],
+  services: [
+    '1.01.04 - Serviço de Bombeamento de Concreto',
+    '1.01.07 - Execução de Obras de Pavimentação',
+    '1.01.08 - Obras de Infraestrutura e Terraplenagem',
+    '1.01.09 - Obras de Arte Especiais (Pontes/Viadutos)',
+    '1.01.10 - Locação de Equipamentos e Maquinário',
+    '1.01.11 - Serviços de Laboratório/Tecnológicos',
+    'Outros Serviços Operacionais'
+  ]
+};
+
+export const classifyProductCategory101 = (item: { name?: string; category?: string; description?: string }): string => {
+  if (!item) return '1.01.01 - Venda de Agregados (Brita/Areia/Pó)';
+  const currentCat = (item.category || '').trim();
+  if (currentCat.startsWith('1.01.')) return currentCat;
+
+  const n = (item.name || '').toLowerCase();
+  const d = (item.description || '').toLowerCase();
+  const c = currentCat.toLowerCase();
+
+  // Teste prioritário de Agregados por Brita / Areia / BGS / Pedrisco / Pó de Pedra
+  if (n.startsWith('brita') || n.includes('pedrisco') || n.includes('areia industrial') || n.includes('areia de brita') || n.includes('bgs') || n.includes('pó de pedra') || n.includes('po de pedra') || n.includes('pó de brita') || n.includes('po de brita')) {
+    return '1.01.01 - Venda de Agregados (Brita/Areia/Pó)';
+  }
+
+  // Rachão / Pedra de Mão
+  if (n.includes('rachão') || n.includes('rachao') || n.includes('pedra de mão') || n.includes('pedra de mao') || n.includes('enrocamento')) {
+    return '1.01.02 - Venda de Rachão/Pedra de Mão';
+  }
+
+  // Concreto Usinado
+  if (n.includes('concreto usinado')) {
+    return '1.01.03 - Venda de Concreto Usinado';
+  }
+
+  // Bombeamento de Concreto
+  if (n.includes('bombeamento')) {
+    return '1.01.04 - Serviço de Bombeamento de Concreto';
+  }
+
+  // CBUQ / Massa Asfáltica
+  if (n.includes('cbuq') || n.includes('massa asfáltica') || n.includes('massa asfaltica')) {
+    return '1.01.05 - Venda de Massa Asfáltica (CBUQ)';
+  }
+
+  // Emulsão Asfáltica
+  if (n.includes('emulsão') || n.includes('emulsao')) {
+    return '1.01.06 - Venda de Emulsão Asfáltica';
+  }
+
+  // Execução de Pavimentação
+  if (n.includes('pavimentação') || n.includes('pavimentacao') || n.includes('fresagem') || n.includes('recapeamento') || n.includes('tapa buraco')) {
+    return '1.01.07 - Execução de Obras de Pavimentação';
+  }
+
+  // Terraplenagem / Infraestrutura
+  if (n.includes('terraplenagem') || n.includes('subleito') || n.includes('aterro') || n.includes('regularização') || n.includes('regularizacao')) {
+    return '1.01.08 - Obras de Infraestrutura e Terraplenagem';
+  }
+
+  // Obras de Arte Especiais
+  if (n.includes('obras de arte') || n.includes('pontes') || n.includes('viadutos') || n.includes('galerias') || n.includes('oae')) {
+    return '1.01.09 - Obras de Arte Especiais (Pontes/Viadutos)';
+  }
+
+  // Locação de Equipamentos
+  if (n.includes('locação') || n.includes('locacao')) {
+    return '1.01.10 - Locação de Equipamentos e Maquinário';
+  }
+
+  // Ensaios / Laboratório
+  if (n.includes('ensaio') || n.includes('laboratório') || n.includes('laboratorio')) {
+    return '1.01.11 - Serviços de Laboratório/Tecnológicos';
+  }
+
+  // Fallback baseado em conteúdo geral
+  const full = n + ' ' + d + ' ' + c;
+  if (full.includes('locação') || full.includes('locacao')) return '1.01.10 - Locação de Equipamentos e Maquinário';
+  if (full.includes('ensaio') || full.includes('nbr 5739') || full.includes('nbr 7182') || full.includes('corpo de prova')) return '1.01.11 - Serviços de Laboratório/Tecnológicos';
+  if (full.includes('bombeamento')) return '1.01.04 - Serviço de Bombeamento de Concreto';
+  if (full.includes('pavimentação') || full.includes('pavimentacao')) return '1.01.07 - Execução de Obras de Pavimentação';
+  if (full.includes('terraplenagem')) return '1.01.08 - Obras de Infraestrutura e Terraplenagem';
+  if (full.includes('obras de arte')) return '1.01.09 - Obras de Arte Especiais (Pontes/Viadutos)';
+  if (full.includes('rachão') || full.includes('rachao')) return '1.01.02 - Venda de Rachão/Pedra de Mão';
+  if (full.includes('concreto usinado') || full.includes('fck')) return '1.01.03 - Venda de Concreto Usinado';
+  if (full.includes('cbuq') || full.includes('massa asfáltica')) return '1.01.05 - Venda de Massa Asfáltica (CBUQ)';
+  if (full.includes('emulsão') || full.includes('rr-2c') || full.includes('rl-1c')) return '1.01.06 - Venda de Emulsão Asfáltica';
+  if (full.includes('brita') || full.includes('areia') || full.includes('agregado')) return '1.01.01 - Venda de Agregados (Brita/Areia/Pó)';
+
+  return currentCat || '1.01.01 - Venda de Agregados (Brita/Areia/Pó)';
+};
+
+// ==========================================
+// CATÁLOGO CANÔNICO DO PLANO DE CONTAS: ITEM 1.01 (RECEITA OPERACIONAL BRUTA)
+// ==========================================
+export const PLAN_101_PRODUCTS: Omit<InventoryItem, 'id'>[] = [
+  // --- 1.01.01: Venda de Agregados (Brita/Areia/Pó) ---
+  {
+    name: 'Brita 0 (Pedrisco Limpo 4,8mm - 9,5mm)',
+    description: 'Pedrisco limpo de alta densidade para pisos industriais, artefatos de cimento e concreto fino. Código Contábil: 1.01.01',
+    category: '1.01.01 - Venda de Agregados (Brita/Areia/Pó)',
+    unit: 'ton',
+    price: 68.00,
+    costPrice: 38.00,
+    quantity: 250,
+    minStock: 50,
+    barcode: '7891010100010',
+    location: 'Pátio Britagem - Baia 01',
+    brand: 'InfraCore Mineração',
+    ncm: '2517.10.00',
+    weight: 1000
+  },
+  {
+    name: 'Brita 1 (19mm - Concreto Estrutural)',
+    description: 'Brita graduada 19mm para preparo de concreto usinado estrutural, vigas, pilares e lajes. Código Contábil: 1.01.01',
+    category: '1.01.01 - Venda de Agregados (Brita/Areia/Pó)',
+    unit: 'ton',
+    price: 72.00,
+    costPrice: 40.00,
+    quantity: 400,
+    minStock: 80,
+    barcode: '7891010100027',
+    location: 'Pátio Britagem - Baia 02',
+    brand: 'InfraCore Mineração',
+    ncm: '2517.10.00',
+    weight: 1000
+  },
+  {
+    name: 'Brita 2 (25mm - Drenagem e Pavimentação)',
+    description: 'Brita grossa 25mm para drenos profundos, sub-base viária e concreto pesado. Código Contábil: 1.01.01',
+    category: '1.01.01 - Venda de Agregados (Brita/Areia/Pó)',
+    unit: 'ton',
+    price: 70.00,
+    costPrice: 39.00,
+    quantity: 350,
+    minStock: 60,
+    barcode: '7891010100034',
+    location: 'Pátio Britagem - Baia 03',
+    brand: 'InfraCore Mineração',
+    ncm: '2517.10.00',
+    weight: 1000
+  },
+  {
+    name: 'Brita Graduada Simples (BGS)',
+    description: 'Composição dosada de agregados para execução de base e sub-base de pavimentação. Código Contábil: 1.01.01',
+    category: '1.01.01 - Venda de Agregados (Brita/Areia/Pó)',
+    unit: 'ton',
+    price: 65.00,
+    costPrice: 35.00,
+    quantity: 500,
+    minStock: 100,
+    barcode: '7891010100041',
+    location: 'Pátio Britagem - Baia 04',
+    brand: 'InfraCore Mineração',
+    ncm: '2517.10.00',
+    weight: 1000
+  },
+  {
+    name: 'Areia Industrial Lavada (Areia de Brita)',
+    description: 'Areia manufaturada proveniente de britagem terciária, 100% isenta de argila ou matéria orgânica. Código Contábil: 1.01.01',
+    category: '1.01.01 - Venda de Agregados (Brita/Areia/Pó)',
+    unit: 'ton',
+    price: 85.00,
+    costPrice: 46.00,
+    quantity: 300,
+    minStock: 50,
+    barcode: '7891010100058',
+    location: 'Pátio Britagem - Silo 01',
+    brand: 'InfraCore Mineração',
+    ncm: '2505.10.00',
+    weight: 1000
+  },
+  {
+    name: 'Pó de Pedra / Pó de Brita',
+    description: 'Finos de britagem para usinagem de massa asfáltica e assentamento de pavimento intertravado. Código Contábil: 1.01.01',
+    category: '1.01.01 - Venda de Agregados (Brita/Areia/Pó)',
+    unit: 'ton',
+    price: 58.00,
+    costPrice: 30.00,
+    quantity: 450,
+    minStock: 80,
+    barcode: '7891010100065',
+    location: 'Pátio Britagem - Baia 05',
+    brand: 'InfraCore Mineração',
+    ncm: '2517.10.00',
+    weight: 1000
+  },
+
+  // --- 1.01.02: Venda de Rachão/Pedra de Mão ---
+  {
+    name: 'Pedra Rachão (Pedra de Mão / Enrocamento)',
+    description: 'Pedra bruta de 10cm a 30cm para contenção de encostas, muros de gabião e drenagens. Código Contábil: 1.01.02',
+    category: '1.01.02 - Venda de Rachão/Pedra de Mão',
+    unit: 'ton',
+    price: 62.00,
+    costPrice: 32.00,
+    quantity: 380,
+    minStock: 50,
+    barcode: '7891010200017',
+    location: 'Pátio Pedreira - Setor A',
+    brand: 'InfraCore Mineração',
+    ncm: '2517.10.00',
+    weight: 1000
+  },
+
+  // --- 1.01.03: Venda de Concreto Usinado ---
+  {
+    name: 'Concreto Usinado FCK 20 MPa (Slump 10±2)',
+    description: 'Concreto usinado dosado em central para fundações rasas, sapatas e contrapisos. Código Contábil: 1.01.03',
+    category: '1.01.03 - Venda de Concreto Usinado',
+    unit: 'm3',
+    price: 380.00,
+    costPrice: 265.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010300014',
+    location: 'Usina Dosadora de Concreto 01',
+    brand: 'InfraCore Concreto',
+    ncm: '3824.50.00',
+    weight: 2400
+  },
+  {
+    name: 'Concreto Usinado FCK 25 MPa (Slump 10±2)',
+    description: 'Concreto estrutural normatizado para pilares, vigas e lajes residenciais/comerciais. Código Contábil: 1.01.03',
+    category: '1.01.03 - Venda de Concreto Usinado',
+    unit: 'm3',
+    price: 410.00,
+    costPrice: 285.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010300021',
+    location: 'Usina Dosadora de Concreto 01',
+    brand: 'InfraCore Concreto',
+    ncm: '3824.50.00',
+    weight: 2400
+  },
+  {
+    name: 'Concreto Usinado FCK 30 MPa Estrutural',
+    description: 'Concreto de alta resistência para estruturas pesadas, reservatórios e pilares esbeltos. Código Contábil: 1.01.03',
+    category: '1.01.03 - Venda de Concreto Usinado',
+    unit: 'm3',
+    price: 445.00,
+    costPrice: 310.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010300038',
+    location: 'Usina Dosadora de Concreto 01',
+    brand: 'InfraCore Concreto',
+    ncm: '3824.50.00',
+    weight: 2400
+  },
+  {
+    name: 'Concreto Usinado FCK 35 MPa (Pisos Industriais)',
+    description: 'Concreto de baixo fator água/cimento aditivado com plastificantes para pisos de alta abrasão. Código Contábil: 1.01.03',
+    category: '1.01.03 - Venda de Concreto Usinado',
+    unit: 'm3',
+    price: 485.00,
+    costPrice: 340.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010300045',
+    location: 'Usina Dosadora de Concreto 01',
+    brand: 'InfraCore Concreto',
+    ncm: '3824.50.00',
+    weight: 2400
+  },
+  {
+    name: 'Concreto Usinado FCK 40 MPa (Alta Resistência / OAE)',
+    description: 'Concreto especial de alto desempenho para pontes, viadutos e estruturas pré-moldadas. Código Contábil: 1.01.03',
+    category: '1.01.03 - Venda de Concreto Usinado',
+    unit: 'm3',
+    price: 530.00,
+    costPrice: 375.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010300052',
+    location: 'Usina Dosadora de Concreto 01',
+    brand: 'InfraCore Concreto',
+    ncm: '3824.50.00',
+    weight: 2400
+  },
+
+  // --- 1.01.04: Serviço de Bombeamento de Concreto ---
+  {
+    name: 'Serviço de Bombeamento de Concreto (Bomba Lança / Estacionária)',
+    description: 'Lançamento mecânico e transporte pressurizado de concreto em obras civis e industriais. Código Contábil: 1.01.04',
+    category: '1.01.04 - Serviço de Bombeamento de Concreto',
+    unit: 'm3',
+    price: 45.00,
+    costPrice: 22.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010400011',
+    location: 'Frentes de Concretagem Externa',
+    brand: 'InfraCore Concreto',
+    ncm: '9983.99.00'
+  },
+
+  // --- 1.01.05: Venda de Massa Asfáltica (CBUQ) ---
+  {
+    name: 'Massa Asfáltica CBUQ - Capa de Rolamento (Faixa C)',
+    description: 'Mistura asfáltica usinada a quente para revestimento final de pistas de tráfego intenso. Código Contábil: 1.01.05',
+    category: '1.01.05 - Venda de Massa Asfáltica (CBUQ)',
+    unit: 'ton',
+    price: 395.00,
+    costPrice: 285.00,
+    quantity: 80,
+    minStock: 20,
+    barcode: '7891010500018',
+    location: 'Usina de Asfalto - Silo A',
+    brand: 'InfraCore Asfalto',
+    ncm: '2714.90.00',
+    weight: 1000
+  },
+  {
+    name: 'Massa Asfáltica CBUQ - Binder / Ligação (Faixa B)',
+    description: 'Camada intermediária de ligação estrutural entre a base e a capa de rolamento. Código Contábil: 1.01.05',
+    category: '1.01.05 - Venda de Massa Asfáltica (CBUQ)',
+    unit: 'ton',
+    price: 370.00,
+    costPrice: 265.00,
+    quantity: 60,
+    minStock: 15,
+    barcode: '7891010500025',
+    location: 'Usina de Asfalto - Silo B',
+    brand: 'InfraCore Asfalto',
+    ncm: '2714.90.00',
+    weight: 1000
+  },
+  {
+    name: 'Massa Asfáltica CBUQ com Polímero (Alto Tráfego)',
+    description: 'CBUQ modificado com polímeros elastoméricos SBS para resistência máxima a deformações plásticas. Código Contábil: 1.01.05',
+    category: '1.01.05 - Venda de Massa Asfáltica (CBUQ)',
+    unit: 'ton',
+    price: 440.00,
+    costPrice: 320.00,
+    quantity: 40,
+    minStock: 10,
+    barcode: '7891010500032',
+    location: 'Usina de Asfalto - Silo C',
+    brand: 'InfraCore Asfalto',
+    ncm: '2714.90.00',
+    weight: 1000
+  },
+
+  // --- 1.01.06: Venda de Emulsão Asfáltica ---
+  {
+    name: 'Emulsão Asfáltica RR-2C (Pintura de Ligação)',
+    description: 'Emulsão catiônica de ruptura rápida para aderência entre camadas asfálticas sobrepostas. Código Contábil: 1.01.06',
+    category: '1.01.06 - Venda de Emulsão Asfáltica',
+    unit: 'ton',
+    price: 3850.00,
+    costPrice: 2900.00,
+    quantity: 15,
+    minStock: 5,
+    barcode: '7891010600015',
+    location: 'Tanque Estacionário 01',
+    brand: 'InfraCore Asfalto',
+    ncm: '2714.90.00',
+    weight: 1000
+  },
+  {
+    name: 'Emulsão Asfáltica RL-1C (Imprimação Impermeabilizante)',
+    description: 'Emulsão catiônica de ruptura lenta com alta penetração em bases granulares de brita. Código Contábil: 1.01.06',
+    category: '1.01.06 - Venda de Emulsão Asfáltica',
+    unit: 'ton',
+    price: 4100.00,
+    costPrice: 3150.00,
+    quantity: 12,
+    minStock: 4,
+    barcode: '7891010600022',
+    location: 'Tanque Estacionário 02',
+    brand: 'InfraCore Asfalto',
+    ncm: '2714.90.00',
+    weight: 1000
+  },
+
+  // --- 1.01.07: Execução de Obras de Pavimentação ---
+  {
+    name: 'Execução de Pavimentação Asfáltica (Aplicação e Rolagem)',
+    description: 'Serviço mecanizado completo com espalhamento por vibroacabadora e rolagem compactadora tandem/pneumática. Código Contábil: 1.01.07',
+    category: '1.01.07 - Execução de Obras de Pavimentação',
+    unit: 'm2',
+    price: 38.00,
+    costPrice: 24.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010700012',
+    location: 'Frentes de Pavimentação Viária',
+    brand: 'InfraCore Engenharia',
+    ncm: '9983.99.00'
+  },
+
+  // --- 1.01.08: Obras de Infraestrutura e Terraplenagem ---
+  {
+    name: 'Serviço de Terraplenagem, Corte e Aterro',
+    description: 'Desmonte, escavação mecanizada, transporte interno e compactação de aterro controlado. Código Contábil: 1.01.08',
+    category: '1.01.08 - Obras de Infraestrutura e Terraplenagem',
+    unit: 'm3',
+    price: 28.00,
+    costPrice: 16.50,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010800019',
+    location: 'Frentes de Terraplenagem',
+    brand: 'InfraCore Engenharia',
+    ncm: '9983.99.00'
+  },
+  {
+    name: 'Regularização e Compactação de Subleito / Base',
+    description: 'Conformação com motoniveladora e compactação até 100% do Proctor Normal para recebimento de pavimento. Código Contábil: 1.01.08',
+    category: '1.01.08 - Obras de Infraestrutura e Terraplenagem',
+    unit: 'm2',
+    price: 12.50,
+    costPrice: 7.20,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010800026',
+    location: 'Frentes de Terraplenagem',
+    brand: 'InfraCore Engenharia',
+    ncm: '9983.99.00'
+  },
+
+  // --- 1.01.09: Obras de Arte Especiais ---
+  {
+    name: 'Construção de Obras de Arte Especiais (Pontes, Viadutos e Galerias)',
+    description: 'Execução de estruturas pesadas em concreto armado e protendido para transposição de córregos e rodovias. Código Contábil: 1.01.09',
+    category: '1.01.09 - Obras de Arte Especiais (Pontes/Viadutos)',
+    unit: 'un',
+    price: 150000.00,
+    costPrice: 98000.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891010900016',
+    location: 'Projetos Estruturais OAE',
+    brand: 'InfraCore Engenharia',
+    ncm: '9983.99.00'
+  },
+
+  // --- 1.01.10: Locação de Equipamentos e Maquinário ---
+  {
+    name: 'Locação de Escavadeira Hidráulica 20t (Hora/Máquina)',
+    description: 'Escavadeira hidráulica sobre esteiras 20 toneladas com operador qualificado e horímetro fiscalizado. Código Contábil: 1.01.10',
+    category: '1.01.10 - Locação de Equipamentos e Maquinário',
+    unit: 'h',
+    price: 280.00,
+    costPrice: 160.00,
+    quantity: 5,
+    minStock: 1,
+    barcode: '7891011000012',
+    location: 'Pátio Central de Frotas',
+    brand: 'Caterpillar / Komatsu',
+    ncm: '8429.52.00'
+  },
+  {
+    name: 'Locação de Retroescavadeira 4x4 (Hora/Máquina)',
+    description: 'Retroescavadeira traçada 4x4 com concha frontal de 1m3 e caçamba escavadeira traseira. Código Contábil: 1.01.10',
+    category: '1.01.10 - Locação de Equipamentos e Maquinário',
+    unit: 'h',
+    price: 190.00,
+    costPrice: 110.00,
+    quantity: 8,
+    minStock: 2,
+    barcode: '7891011000029',
+    location: 'Pátio Central de Frotas',
+    brand: 'JCB / Case',
+    ncm: '8429.51.00'
+  },
+  {
+    name: 'Locação de Rolo Compactador Vibratório Pé de Carneiro / Liso (Hora)',
+    description: 'Rolo compactador vibratório autopropelido para solos granulares, coesivos e asfalto. Código Contábil: 1.01.10',
+    category: '1.01.10 - Locação de Equipamentos e Maquinário',
+    unit: 'h',
+    price: 220.00,
+    costPrice: 130.00,
+    quantity: 4,
+    minStock: 1,
+    barcode: '7891011000036',
+    location: 'Pátio Central de Frotas',
+    brand: 'Dynapac / Hamm',
+    ncm: '8429.40.00'
+  },
+  {
+    name: 'Locação de Caminhão Basculante Caçamba Traçado 6x4 (Hora)',
+    description: 'Caminhão basculante traçado 6x4 com caçamba de 14m3 a 16m3 para transporte de terra e brita. Código Contábil: 1.01.10',
+    category: '1.01.10 - Locação de Equipamentos e Maquinário',
+    unit: 'h',
+    price: 210.00,
+    costPrice: 125.00,
+    quantity: 12,
+    minStock: 3,
+    barcode: '7891011000043',
+    location: 'Pátio Central de Frotas',
+    brand: 'Volvo / Scania',
+    ncm: '8704.23.10'
+  },
+  {
+    name: 'Locação de Vibroacabadora de Asfalto (Hora/Máquina)',
+    description: 'Vibroacabadora sobre esteiras com mesa niveladora telescópica eletrônica para acabamento de CBUQ. Código Contábil: 1.01.10',
+    category: '1.01.10 - Locação de Equipamentos e Maquinário',
+    unit: 'h',
+    price: 450.00,
+    costPrice: 270.00,
+    quantity: 2,
+    minStock: 1,
+    barcode: '7891011000050',
+    location: 'Pátio Central de Frotas',
+    brand: 'Vögele / Ciber',
+    ncm: '8479.10.90'
+  },
+
+  // --- 1.01.11: Serviços de Laboratório/Tecnológicos ---
+  {
+    name: 'Ensaio de Rompimento de Corpo de Prova de Concreto (NBR 5739)',
+    description: 'Capeamento e determinação da resistência à compressão axial com emissão de curva de evolução FCK. Código Contábil: 1.01.11',
+    category: '1.01.11 - Serviços de Laboratório/Tecnológicos',
+    unit: 'un',
+    price: 45.00,
+    costPrice: 18.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891011100019',
+    location: 'Laboratório Tecnológico - Asfalto & Concreto',
+    brand: 'InfraCore Lab',
+    ncm: '9983.99.00'
+  },
+  {
+    name: 'Ensaio de Grau de Compactação e Umidade In Situ (DNIT / NBR 7182)',
+    description: 'Ensaio do frasco de areia e determinação da umidade Speedy com cálculo imediato do GC%. Código Contábil: 1.01.11',
+    category: '1.01.11 - Serviços de Laboratório/Tecnológicos',
+    unit: 'un',
+    price: 95.00,
+    costPrice: 38.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891011100026',
+    location: 'Laboratório Tecnológico - Solos & Terraplenagem',
+    brand: 'InfraCore Lab',
+    ncm: '9983.99.00'
+  },
+  {
+    name: 'Ensaio de Granulometria de Agregados e Equivalente de Areia',
+    description: 'Peneiramento mecânico com módulo de finura, dimensão máxima característica e equivalente de areia. Código Contábil: 1.01.11',
+    category: '1.01.11 - Serviços de Laboratório/Tecnológicos',
+    unit: 'un',
+    price: 120.00,
+    costPrice: 45.00,
+    quantity: 0,
+    minStock: 0,
+    barcode: '7891011100033',
+    location: 'Laboratório Tecnológico - Agregados & Solos',
+    brand: 'InfraCore Lab',
+    ncm: '9983.99.00'
+  }
+];
+
+export const isServiceItem = (item: any): boolean => {
+  if (!item) return false;
+  const cat = (item.category || '').toLowerCase();
+  const name = (item.name || '').toLowerCase();
+  const unit = (item.unit || '').toLowerCase();
+
+  if (cat.includes('serviç') || cat.includes('locaç') || cat.includes('laborat') || cat.includes('engenharia') || cat.includes('ensaio') || cat.includes('mão de obra')) {
+    return true;
+  }
+  if (unit === 'h' || unit === 'hora' || unit === 'diária' || unit === 'mês' || unit === 'serv') {
+    return true;
+  }
+  if (name.startsWith('serviço') || name.startsWith('locação') || name.startsWith('ensaio') || name.startsWith('execução') || name.includes('bombeamento')) {
+    return true;
+  }
+  return false;
+};
+
 const Clients = () => {
   const {
     clients, addClient, updateClient, deleteClient,
@@ -135,6 +723,7 @@ const Clients = () => {
   const [activeTab, setActiveTab] = useState('clients');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
 
   const toInputDate = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -154,7 +743,8 @@ const Clients = () => {
       case 'clients': return hasPermission('clients.create') || hasPermission('clients.edit') || hasPermission('clients.manage');
       case 'suppliers': return hasPermission('suppliers.manage') || hasPermission('clients.manage');
       case 'employees': return hasPermission('hr.manage') || hasPermission('employees.manage');
-      case 'products': return hasPermission('inventory.create') || hasPermission('inventory.edit') || hasPermission('inventory.manage');
+      case 'products':
+      case 'services': return hasPermission('inventory.create') || hasPermission('inventory.edit') || hasPermission('inventory.manage');
       case 'vehicles': return hasPermission('fleet.manage');
       default: return false;
     }
@@ -165,7 +755,8 @@ const Clients = () => {
       case 'clients': return { status: 'Ativo', registeredAt: new Date().toLocaleDateString('pt-BR'), colorClass: 'bg-cyan-100 text-cyan-600', type: 'Matriz' };
       case 'suppliers': return { status: 'Ativo', registeredAt: new Date().toLocaleDateString('pt-BR') };
       case 'employees': return { status: 'Ativo', admissionDate: new Date().toLocaleDateString('pt-BR') };
-      case 'products': return { quantity: 0, minStock: 10, price: 0, costPrice: 0, unit: 'un' };
+      case 'products': return { status: 'Ativo', quantity: 0, minStock: 10, price: 0, costPrice: 0, unit: 'ton', category: '1.01.01 - Venda de Agregados (Brita/Areia/Pó)' };
+      case 'services': return { status: 'Ativo', quantity: 0, minStock: 0, price: 0, costPrice: 0, unit: 'h', category: '1.01.04 - Serviço de Bombeamento de Concreto' };
       case 'vehicles': return { status: 'Operacional', fuelLevel: 100, lastMaintenance: new Date().toLocaleDateString('pt-BR'), type: 'Carro' };
       default: return {};
     }
@@ -175,7 +766,12 @@ const Clients = () => {
     setActiveTab(type);
     if (item) {
       setEditingId(item.id);
-      setFormData(type === 'vehicles' ? { ...item, name: item.model || item.name } : { ...item });
+      const initialData = type === 'vehicles' ? { ...item, name: item.model || item.name } : { ...item };
+      // Classificação automática em 1.01 se o item possuir categoria legada
+      if ((type === 'products' || type === 'services') && (!initialData.category || !initialData.category.startsWith('1.01.'))) {
+        initialData.category = classifyProductCategory101(initialData);
+      }
+      setFormData(initialData);
     } else {
       setEditingId(null);
       setFormData(getInitialFormData(type));
@@ -187,7 +783,164 @@ const Clients = () => {
     setIsModalOpen(false);
     setEditingId(null);
     setFormData({});
+    setIsLoadingCnpj(false);
   };
+
+  // ==========================================
+  // CONSULTA AUTOMÁTICA DE CNPJ (RECEITA FEDERAL / BRASILAPI)
+  // ==========================================
+  const handleCnpjLookup = async (manualDoc?: string) => {
+    const raw = (manualDoc !== undefined ? manualDoc : formData.document || '').replace(/\D/g, '');
+    if (!raw) return;
+
+    if (raw.length !== 14) {
+      if (manualDoc === undefined) {
+        addToast('Para consultar na Receita Federal, informe os 14 dígitos do CNPJ.', 'warning');
+      }
+      return;
+    }
+
+    if (!validateCNPJ(raw)) {
+      addToast('CNPJ inválido pelo dígito verificador.', 'error');
+      return;
+    }
+
+    setIsLoadingCnpj(true);
+    try {
+      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${raw}`);
+      if (!res.ok) {
+        if (res.status === 404) {
+          addToast('CNPJ não encontrado na base pública da Receita Federal.', 'error');
+        } else {
+          addToast(`Instabilidade na consulta da Receita (${res.status}). Você pode preencher manualmente.`, 'warning');
+        }
+        return;
+      }
+
+      const data = await res.json();
+
+      const situacao = (data.descricao_situacao_cadastral || data.situacao_cadastral || '').toUpperCase();
+      if (situacao && !situacao.includes('ATIVA')) {
+        addToast(`Atenção: Situação cadastral na Receita consta como "${situacao}".`, 'warning', 7000);
+      } else {
+        addToast('Dados preenchidos com sucesso via Receita Federal!', 'success');
+      }
+
+      const cleanPhone = (data.ddd_telefone_1 || '').replace(/\D/g, '');
+      const formattedPhone = cleanPhone ? formatPhone(cleanPhone) : '';
+
+      setFormData((prev: any) => ({
+        ...prev,
+        name: data.razao_social || prev.name || '',
+        tradeName: data.nome_fantasia || prev.tradeName || data.razao_social || '',
+        phone: formattedPhone || prev.phone || '',
+        email: data.email ? data.email.toLowerCase().trim() : (prev.email || ''),
+        address: {
+          ...(prev.address || {}),
+          zipCode: data.cep ? formatCEP(data.cep) : (prev.address?.zipCode || ''),
+          street: data.logradouro || prev.address?.street || '',
+          number: data.numero || prev.address?.number || '',
+          complement: data.complemento || prev.address?.complement || '',
+          district: data.bairro || prev.address?.district || '',
+          city: data.municipio || prev.address?.city || '',
+          state: data.uf || prev.address?.state || ''
+        }
+      }));
+    } catch (err) {
+      console.error('Erro ao consultar CNPJ via BrasilAPI:', err);
+      addToast('Não foi possível conectar ao serviço da Receita. Prossiga com o preenchimento manual.', 'warning');
+    } finally {
+      setIsLoadingCnpj(false);
+    }
+  };
+
+  // ==========================================
+  // SALVAR / CARREGAR PRODUTOS E SERVIÇOS DO PLANO DE CONTAS (1.01)
+  // ==========================================
+  const handleLoadPlan101Products = (scope: 'all' | 'products' | 'services' = 'all', isSilent = false) => {
+    let addedCount = 0;
+    const targetItems = PLAN_101_PRODUCTS.filter(item => {
+      if (scope === 'products') return !isServiceItem(item);
+      if (scope === 'services') return isServiceItem(item);
+      return true;
+    });
+
+    targetItems.forEach((prod, idx) => {
+      const alreadyExists = (inventory || []).some(
+        p => (p.name || '').trim().toLowerCase() === prod.name.trim().toLowerCase() ||
+             (prod.barcode && (p.barcode || '').trim() === prod.barcode.trim())
+      );
+      if (!alreadyExists) {
+        addStockItem({
+          ...prod,
+          id: `${isServiceItem(prod) ? 'srv' : 'prod'}-101-${idx + 1}-${Date.now()}`
+        } as InventoryItem);
+        addedCount++;
+      }
+    });
+
+    const label = scope === 'services' ? 'serviços' : scope === 'products' ? 'produtos' : 'produtos e serviços';
+    if (addedCount > 0) {
+      addToast(`${addedCount} ${label} derivados do Plano 1.01 salvos com sucesso!`, 'success');
+    } else if (!isSilent) {
+      addToast('Todos os itens do Plano 1.01 para esta categoria já estão cadastrados.', 'info');
+    }
+  };
+
+  // Classificação de itens existentes no Plano de Contas 1.01 sem adicionar novos itens
+  const handleClassifyProducts101 = (scope: 'all' | 'products' | 'services' = 'all') => {
+    let updatedCount = 0;
+    (inventory || []).forEach(item => {
+      const isSrv = isServiceItem(item);
+      if (scope === 'products' && isSrv) return;
+      if (scope === 'services' && !isSrv) return;
+
+      const classifiedCat = classifyProductCategory101(item);
+      if (item.category !== classifiedCat) {
+        updateStockItem({
+          ...item,
+          category: classifiedCat
+        });
+        updatedCount++;
+      }
+    });
+
+    const label = scope === 'services' ? 'serviços' : scope === 'products' ? 'produtos' : 'itens';
+    if (updatedCount > 0) {
+      addToast(`${updatedCount} ${label} classificados com sucesso no Plano de Contas 1.01!`, 'success');
+    } else {
+      addToast(`Todos os ${label} já estão classificados no Plano de Contas 1.01.`, 'info');
+    }
+  };
+
+  // Auto-classificação defensiva de produtos e serviços existentes que ainda não tenham código 1.01
+  useEffect(() => {
+    if (Array.isArray(inventory) && inventory.length > 0) {
+      const needsClassification = inventory.some(item => !item.category || !item.category.trim().startsWith('1.01.'));
+      if (needsClassification) {
+        inventory.forEach(item => {
+          if (!item.category || !item.category.trim().startsWith('1.01.')) {
+            const classifiedCat = classifyProductCategory101(item);
+            if (classifiedCat !== item.category) {
+              updateStockItem({
+                ...item,
+                category: classifiedCat
+              });
+            }
+          }
+        });
+      }
+    }
+  }, [inventory]);
+
+  // Auto-sincronização caso o catálogo esteja vazio ao acessar Produtos ou Serviços
+  useEffect(() => {
+    if (Array.isArray(inventory) && inventory.length === 0) {
+      if (activeTab === 'products' || activeTab === 'services') {
+        handleLoadPlan101Products('all', true);
+      }
+    }
+  }, [activeTab, inventory]);
 
   // ==========================================
   // SALVAR COM VALIDAÇÕES E BLOQUEIO DE DUPLICIDADE
@@ -201,6 +954,7 @@ const Clients = () => {
     if (!trimmedName) {
       addToast(
         activeTab === 'products' ? 'A descrição do produto é obrigatória.' :
+        activeTab === 'services' ? 'A descrição do serviço é obrigatória.' :
         activeTab === 'vehicles' ? 'O modelo do veículo é obrigatório.' :
         'O nome ou razão social é obrigatório.',
         'error'
@@ -348,7 +1102,7 @@ const Clients = () => {
         addToast('Erro ao salvar dados do colaborador.', 'error');
         return;
       }
-    } else if (activeTab === 'products') {
+    } else if (activeTab === 'products' || activeTab === 'services') {
       const price = parseFloat(formData.price) || 0;
       const costPrice = parseFloat(formData.costPrice) || 0;
       const quantity = parseFloat(formData.quantity) || 0;
@@ -365,27 +1119,29 @@ const Clients = () => {
           p => p.id !== editingId && (p.barcode || '').trim() === barcode
         );
         if (duplicateBarcode) {
-          addToast(`Bloqueio de Duplicidade: Código de barras já cadastrado no produto "${duplicateBarcode.name}".`, 'error');
+          addToast(`Bloqueio de Duplicidade: Código de barras já cadastrado no item "${duplicateBarcode.name}".`, 'error');
           return;
         }
       }
 
-      const product: InventoryItem = {
+      const isSrv = activeTab === 'services';
+      const item: InventoryItem = {
         ...formData,
-        id: editingId || `p-${Date.now()}`,
+        id: editingId || `${isSrv ? 'srv' : 'p'}-${Date.now()}`,
         name: trimmedName,
+        category: formData.category || (isSrv ? '1.01.04 - Serviço de Bombeamento de Concreto' : '1.01.01 - Venda de Agregados (Brita/Areia/Pó)'),
         price,
         costPrice,
-        quantity,
-        minStock
+        quantity: isSrv ? 0 : quantity,
+        minStock: isSrv ? 0 : minStock
       };
 
       try {
-        if (editingId) updateStockItem(product); else addStockItem(product);
-        addToast(editingId ? 'Produto atualizado com sucesso!' : 'Produto cadastrado com sucesso!', 'success');
+        if (editingId) updateStockItem(item); else addStockItem(item);
+        addToast(editingId ? `${isSrv ? 'Serviço' : 'Produto'} atualizado com sucesso!` : `${isSrv ? 'Serviço' : 'Produto'} cadastrado com sucesso!`, 'success');
       } catch (err) {
-        console.error('Erro ao salvar produto:', err);
-        addToast('Erro ao salvar dados do produto.', 'error');
+        console.error('Erro ao salvar item:', err);
+        addToast(`Erro ao salvar dados do ${isSrv ? 'serviço' : 'produto'}.`, 'error');
         return;
       }
     } else if (activeTab === 'vehicles') {
@@ -445,7 +1201,7 @@ const Clients = () => {
           if (activeTab === 'clients') deleteClient(id);
           else if (activeTab === 'suppliers') deleteSupplier(id);
           else if (activeTab === 'employees') deleteEmployee(id);
-          else if (activeTab === 'products') deleteStockItem(id);
+          else if (activeTab === 'products' || activeTab === 'services') deleteStockItem(id);
           else if (activeTab === 'vehicles') deleteVehicle(id);
           addToast('Registro excluído com sucesso!', 'success');
         } catch (err) {
@@ -499,6 +1255,7 @@ const Clients = () => {
         if (!term) return true;
 
         const nameMatch = (c.name || '').toLowerCase().includes(term);
+        const tradeMatch = ((c as any).tradeName || '').toLowerCase().includes(term);
         const emailMatch = (c.email || '').toLowerCase().includes(term);
         const phoneMatch = (c.phone || '').includes(term);
         const contactMatch = (c.contactPerson || '').toLowerCase().includes(term);
@@ -506,7 +1263,7 @@ const Clients = () => {
         const docFormattedMatch = (c.document || '').toLowerCase().includes(term);
         const docDigitsMatch = cleanTermDigits.length > 0 && (c.document || '').replace(/\D/g, '').includes(cleanTermDigits);
 
-        return nameMatch || emailMatch || phoneMatch || contactMatch || cityMatch || docFormattedMatch || docDigitsMatch;
+        return nameMatch || tradeMatch || emailMatch || phoneMatch || contactMatch || cityMatch || docFormattedMatch || docDigitsMatch;
       });
     }
 
@@ -551,25 +1308,47 @@ const Clients = () => {
 
     if (activeTab === 'products') {
       if (!Array.isArray(inventory)) return [];
-      return inventory.filter(p => {
-        if (!p) return false;
-        if (statusFilter === 'sem_estoque') {
-          if ((p.quantity || 0) > 0) return false;
-        } else if (statusFilter === 'baixo_estoque') {
-          if ((p.quantity || 0) > (p.minStock || 0)) return false;
-        } else if (statusFilter === 'com_estoque') {
-          if ((p.quantity || 0) <= 0) return false;
-        }
-        if (!term) return true;
+      return inventory
+        .filter(p => !isServiceItem(p))
+        .filter(p => {
+          if (!p) return false;
+          if (statusFilter === 'sem_estoque') {
+            if ((p.quantity || 0) > 0) return false;
+          } else if (statusFilter === 'baixo_estoque') {
+            if ((p.quantity || 0) > (p.minStock || 0)) return false;
+          } else if (statusFilter === 'com_estoque') {
+            if ((p.quantity || 0) <= 0) return false;
+          }
+          if (!term) return true;
 
-        const nameMatch = (p.name || '').toLowerCase().includes(term);
-        const catMatch = (p.category || '').toLowerCase().includes(term);
-        const brandMatch = (p.brand || '').toLowerCase().includes(term);
-        const barcodeMatch = (p.barcode || '').toLowerCase().includes(term);
-        const locationMatch = (p.location || '').toLowerCase().includes(term);
+          const nameMatch = (p.name || '').toLowerCase().includes(term);
+          const catMatch = (p.category || '').toLowerCase().includes(term);
+          const brandMatch = (p.brand || '').toLowerCase().includes(term);
+          const barcodeMatch = (p.barcode || '').toLowerCase().includes(term);
+          const locationMatch = (p.location || '').toLowerCase().includes(term);
 
-        return nameMatch || catMatch || brandMatch || barcodeMatch || locationMatch;
-      });
+          return nameMatch || catMatch || brandMatch || barcodeMatch || locationMatch;
+        });
+    }
+
+    if (activeTab === 'services') {
+      if (!Array.isArray(inventory)) return [];
+      return inventory
+        .filter(p => isServiceItem(p))
+        .filter(s => {
+          if (!s) return false;
+          if (statusFilter !== 'all' && (s as any).status !== statusFilter) return false;
+          if (!term) return true;
+
+          const nameMatch = (s.name || '').toLowerCase().includes(term);
+          const catMatch = (s.category || '').toLowerCase().includes(term);
+          const brandMatch = (s.brand || '').toLowerCase().includes(term);
+          const barcodeMatch = (s.barcode || '').toLowerCase().includes(term);
+          const locationMatch = (s.location || '').toLowerCase().includes(term);
+          const descMatch = (s.description || '').toLowerCase().includes(term);
+
+          return nameMatch || catMatch || brandMatch || barcodeMatch || locationMatch || descMatch;
+        });
     }
 
     if (activeTab === 'vehicles') {
@@ -637,6 +1416,12 @@ const Clients = () => {
           { value: 'baixo_estoque', label: 'Estoque Baixo / Alerta' },
           { value: 'sem_estoque', label: 'Sem Estoque (Zero)' }
         ];
+      case 'services':
+        return [
+          { value: 'all', label: 'Todos os Status' },
+          { value: 'Ativo', label: 'Disponíveis' },
+          { value: 'Inativo', label: 'Indisponíveis' }
+        ];
       case 'vehicles':
         return [
           { value: 'all', label: 'Todos os Status' },
@@ -668,6 +1453,7 @@ const Clients = () => {
                   {activeTab === 'suppliers' && 'Fornecedor'}
                   {activeTab === 'employees' && 'Colaborador'}
                   {activeTab === 'products' && 'Produto / Material'}
+                  {activeTab === 'services' && 'Serviço / Prestação'}
                   {activeTab === 'vehicles' && 'Veículo da Frota'}
                 </h3>
               </div>
@@ -691,12 +1477,12 @@ const Clients = () => {
                     {/* Nome / Descrição */}
                     <div className="md:col-span-8">
                       <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                        {activeTab === 'products' ? 'Descrição do Produto *' : activeTab === 'vehicles' ? 'Modelo / Nome do Veículo *' : 'Nome Completo / Razão Social *'}
+                        {activeTab === 'products' ? 'Descrição do Produto *' : activeTab === 'services' ? 'Descrição do Serviço *' : activeTab === 'vehicles' ? 'Modelo / Nome do Veículo *' : 'Nome Completo / Razão Social *'}
                       </label>
                       <input
                         type="text" required
                         className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-4 font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-cyan-500 transition-all text-sm"
-                        placeholder={activeTab === 'clients' ? 'Ex: Construtora Exemplo Ltda' : activeTab === 'vehicles' ? 'Ex: Volvo FH 540' : 'Nome ou Razão Social'}
+                        placeholder={activeTab === 'clients' ? 'Ex: Construtora Exemplo Ltda' : activeTab === 'vehicles' ? 'Ex: Volvo FH 540' : activeTab === 'services' ? 'Ex: Locação de Escavadeira 20t' : 'Nome ou Razão Social'}
                         value={formData.name || ''}
                         onChange={e => setFormData({ ...formData, name: e.target.value })}
                       />
@@ -731,7 +1517,7 @@ const Clients = () => {
                             <option value="Desligado">Desligado</option>
                           </>
                         )}
-                        {activeTab === 'products' && (
+                        {(activeTab === 'products' || activeTab === 'services') && (
                           <>
                             <option value="Ativo">Ativo / Disponível</option>
                             <option value="Inativo">Inativo / Indisponível</option>
@@ -748,14 +1534,16 @@ const Clients = () => {
                       </select>
                     </div>
 
-                    {/* Campo Adicional: Nome Fantasia (Fornecedor) */}
-                    {activeTab === 'suppliers' && (
+                    {/* Campo Adicional: Nome Fantasia (Fornecedor e Cliente) */}
+                    {(activeTab === 'suppliers' || activeTab === 'clients') && (
                       <div className="md:col-span-12">
-                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Nome Fantasia</label>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                          Nome Fantasia {activeTab === 'clients' ? '(Opcional)' : ''}
+                        </label>
                         <input
                           type="text"
                           className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                          placeholder="Ex: Cimentos Votoran"
+                          placeholder={activeTab === 'clients' ? 'Ex: Construtora Exemplo' : 'Ex: Cimentos Votoran'}
                           value={formData.tradeName || ''}
                           onChange={e => setFormData({ ...formData, tradeName: e.target.value })}
                         />
@@ -768,16 +1556,61 @@ const Clients = () => {
                     {(activeTab === 'clients' || activeTab === 'suppliers' || activeTab === 'employees') && (
                       <>
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                            {activeTab === 'employees' ? 'CPF' : 'CPF / CNPJ'}
-                          </label>
-                          <input
-                            type="text"
-                            className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium focus:ring-2 focus:ring-cyan-500"
-                            value={formData.document || ''}
-                            onChange={e => setFormData({ ...formData, document: formatCPFOrCNPJ(e.target.value) })}
-                            placeholder={activeTab === 'employees' ? '000.000.000-00' : '00.000.000/0000-00 ou CPF'}
-                          />
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                              {activeTab === 'employees' ? 'CPF' : 'CPF / CNPJ'}
+                            </label>
+                            {(activeTab === 'clients' || activeTab === 'suppliers') && (
+                              <button
+                                type="button"
+                                onClick={() => handleCnpjLookup()}
+                                disabled={isLoadingCnpj}
+                                className="text-[9px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              >
+                                {isLoadingCnpj ? (
+                                  <>
+                                    <Loader2 size={10} className="animate-spin" /> Buscando...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Search size={10} /> Consultar Receita
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                          <div className="relative flex items-center">
+                            <input
+                              type="text"
+                              className={`w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium focus:ring-2 focus:ring-cyan-500 ${(activeTab === 'clients' || activeTab === 'suppliers') ? 'pr-10' : ''}`}
+                              value={formData.document || ''}
+                              onChange={e => setFormData({ ...formData, document: formatCPFOrCNPJ(e.target.value) })}
+                              onBlur={() => {
+                                if (activeTab === 'clients' || activeTab === 'suppliers') {
+                                  const docDigits = (formData.document || '').replace(/\D/g, '');
+                                  if (docDigits.length === 14) {
+                                    handleCnpjLookup(docDigits);
+                                  }
+                                }
+                              }}
+                              placeholder={activeTab === 'employees' ? '000.000.000-00' : '00.000.000/0000-00 ou CPF'}
+                            />
+                            {(activeTab === 'clients' || activeTab === 'suppliers') && (
+                              <button
+                                type="button"
+                                onClick={() => handleCnpjLookup()}
+                                disabled={isLoadingCnpj}
+                                title="Consultar CNPJ na Receita Federal"
+                                className="absolute right-2 p-1.5 text-slate-400 hover:text-cyan-600 hover:bg-slate-200/50 dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
+                              >
+                                {isLoadingCnpj ? (
+                                  <Loader2 size={16} className="animate-spin text-cyan-600" />
+                                ) : (
+                                  <Search size={16} />
+                                )}
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <div className="md:col-span-4">
                           <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">E-mail Principal</label>
@@ -802,45 +1635,77 @@ const Clients = () => {
                       </>
                     )}
 
-                    {/* -> PRODUTOS */}
-                    {activeTab === 'products' && (
+                    {/* -> PRODUTOS & SERVIÇOS */}
+                    {(activeTab === 'products' || activeTab === 'services') && (
                       <>
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Marca / Fabricante</label>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                            {activeTab === 'services' ? 'Executor / Equipe Técnica' : 'Marca / Fabricante'}
+                          </label>
                           <input type="text" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                            value={formData.brand || ''} onChange={e => setFormData({ ...formData, brand: e.target.value })} placeholder="Ex: Votoran, Gerdau, Tigre" />
+                            value={formData.brand || ''} onChange={e => setFormData({ ...formData, brand: e.target.value })}
+                            placeholder={activeTab === 'services' ? 'Ex: Equipe de Obras, InfraCore Lab' : 'Ex: Votoran, Gerdau, Tigre'} />
                         </div>
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Categoria</label>
-                          <input type="text" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                            value={formData.category || ''} onChange={e => setFormData({ ...formData, category: e.target.value })} list="categories-list" />
-                          <datalist id="categories-list">
-                            <option value="Agregados" />
-                            <option value="Cimentos e Argamassas" />
-                            <option value="Aços e Metais" />
-                            <option value="Madeiras" />
-                            <option value="Tubos e Conexões" />
-                            <option value="Material Elétrico" />
-                            <option value="Material Hidráulico" />
-                            <option value="Tintas e Solventes" />
-                            <option value="Revestimentos e Pisos" />
-                            <option value="Telhas e Coberturas" />
-                            <option value="Ferramentas Manuais" />
-                            <option value="Ferramentas Elétricas" />
-                            <option value="EPIs - Proteção Individual" />
-                            <option value="Peças de Reposição" />
-                            <option value="Manutenção em Geral" />
-                            <option value="Combustíveis e Óleos" />
-                            <option value="Pneus e Rodagem" />
-                            <option value="Serviços Terceirizados" />
-                            <option value="Locação de Equipamentos" />
-                            <option value="Insumos Administrativos" />
-                          </datalist>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                              Categoria (Plano de Contas 1.01)
+                            </label>
+                            <span className="text-[9px] font-extrabold text-cyan-600 uppercase tracking-wide">
+                              Receita Operacional
+                            </span>
+                          </div>
+                          <select
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-sm font-semibold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-cyan-500 outline-none transition-all cursor-pointer"
+                            value={formData.category || (activeTab === 'services' ? '1.01.04 - Serviço de Bombeamento de Concreto' : '1.01.01 - Venda de Agregados (Brita/Areia/Pó)')}
+                            onChange={e => setFormData({ ...formData, category: e.target.value })}
+                          >
+                            {activeTab === 'services' ? (
+                              <>
+                                <optgroup label="1.01 - Serviços Operacionais (Plano de Contas)">
+                                  {PLAN_101_OPTIONS.services.map(opt => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                  ))}
+                                </optgroup>
+                                <optgroup label="Outras Categorias">
+                                  <option value="Serviços Terceirizados">Serviços Terceirizados</option>
+                                  <option value="Mão de Obra Especializada">Mão de Obra Especializada</option>
+                                  <option value="Projetos e Engenharia">Projetos e Engenharia</option>
+                                  <option value="Manutenção e Reparos">Manutenção e Reparos</option>
+                                </optgroup>
+                              </>
+                            ) : (
+                              <>
+                                <optgroup label="1.01 - Produtos Industriais e Materiais (Plano de Contas)">
+                                  {PLAN_101_OPTIONS.products.map(opt => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                  ))}
+                                </optgroup>
+                                <optgroup label="Outras Categorias de Estoque">
+                                  <option value="Agregados">Agregados</option>
+                                  <option value="Cimentos e Argamassas">Cimentos e Argamassas</option>
+                                  <option value="Combustíveis e Óleos">Combustíveis e Óleos</option>
+                                  <option value="Aços e Metais">Aços e Metais</option>
+                                  <option value="Tubos e Conexões">Tubos e Conexões</option>
+                                  <option value="EPIs - Proteção Individual">EPIs - Proteção Individual</option>
+                                  <option value="Peças de Reposição">Peças de Reposição</option>
+                                </optgroup>
+                              </>
+                            )}
+                            {formData.category &&
+                              !PLAN_101_OPTIONS[activeTab === 'services' ? 'services' : 'products'].includes(formData.category) &&
+                              !['Agregados', 'Cimentos e Argamassas', 'Combustíveis e Óleos', 'Aços e Metais', 'Tubos e Conexões', 'EPIs - Proteção Individual', 'Peças de Reposição', 'Serviços Terceirizados', 'Mão de Obra Especializada', 'Projetos e Engenharia', 'Manutenção e Reparos'].includes(formData.category) && (
+                              <option value={formData.category}>{formData.category} (Personalizada)</option>
+                            )}
+                          </select>
                         </div>
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Código de Barras (EAN)</label>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                            {activeTab === 'services' ? 'Código de Referência / Contrato' : 'Código de Barras (EAN)'}
+                          </label>
                           <input type="text" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                            value={formData.barcode || ''} onChange={e => setFormData({ ...formData, barcode: e.target.value })} placeholder="Ex: 7891234567890" />
+                            value={formData.barcode || ''} onChange={e => setFormData({ ...formData, barcode: e.target.value })}
+                            placeholder={activeTab === 'services' ? 'Ex: SRV-101' : 'Ex: 7891234567890'} />
                         </div>
                       </>
                     )}
@@ -1013,52 +1878,86 @@ const Clients = () => {
                       </>
                     )}
 
-                    {/* ADICIONAIS: Produtos */}
-                    {activeTab === 'products' && (
+                    {/* ADICIONAIS: Produtos & Serviços */}
+                    {(activeTab === 'products' || activeTab === 'services') && (
                       <>
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Preço de Venda (R$)</label>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                            {activeTab === 'services' ? 'Preço do Serviço (R$)' : 'Preço de Venda (R$)'}
+                          </label>
                           <input type="number" step="0.01" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-bold text-emerald-600"
                             value={formData.price ?? ''} onChange={e => setFormData({ ...formData, price: e.target.value })} />
                         </div>
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Preço de Custo (R$)</label>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                            {activeTab === 'services' ? 'Custo Operacional Estimado (R$)' : 'Preço de Custo (R$)'}
+                          </label>
                           <input type="number" step="0.01" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium text-slate-500"
                             value={formData.costPrice ?? ''} onChange={e => setFormData({ ...formData, costPrice: e.target.value })} />
                         </div>
+                        {activeTab === 'products' ? (
+                          <div className="md:col-span-4">
+                            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Estoque Atual</label>
+                            <input type="number" step="0.01" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-bold"
+                              value={formData.quantity ?? ''} onChange={e => setFormData({ ...formData, quantity: e.target.value })} />
+                          </div>
+                        ) : (
+                          <div className="md:col-span-4">
+                            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Disponibilidade</label>
+                            <input type="text" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
+                              value={formData.availability || 'Imediata'} onChange={e => setFormData({ ...formData, availability: e.target.value })} placeholder="Ex: Imediata / Sob Agendamento" />
+                          </div>
+                        )}
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Estoque Atual</label>
-                          <input type="number" step="0.01" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-bold"
-                            value={formData.quantity ?? ''} onChange={e => setFormData({ ...formData, quantity: e.target.value })} />
-                        </div>
-                        <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Unidade de Medida</label>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Unidade de Medida / Cobrança</label>
                           <select className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                            value={formData.unit || 'un'} onChange={e => setFormData({ ...formData, unit: e.target.value })}>
-                            <option value="un">Unidade (un)</option>
-                            <option value="kg">Quilo (kg)</option>
-                            <option value="ton">Tonelada (ton)</option>
-                            <option value="m">Metro (m)</option>
-                            <option value="m2">Metro² (m²)</option>
-                            <option value="m3">Metro³ (m³)</option>
-                            <option value="sc">Saco (sc)</option>
-                            <option value="l">Litro (l)</option>
+                            value={formData.unit || (activeTab === 'services' ? 'h' : 'ton')} onChange={e => setFormData({ ...formData, unit: e.target.value })}>
+                            {activeTab === 'services' ? (
+                              <>
+                                <option value="h">Hora (h)</option>
+                                <option value="m2">Metro² (m²)</option>
+                                <option value="m3">Metro³ (m³)</option>
+                                <option value="un">Unidade / Laudo (un)</option>
+                                <option value="dia">Diária (dia)</option>
+                                <option value="mes">Mensal (mês)</option>
+                                <option value="serv">Serviço Global (serv)</option>
+                                <option value="ton">Por Tonelada (ton)</option>
+                              </>
+                            ) : (
+                              <>
+                                <option value="ton">Tonelada (ton)</option>
+                                <option value="m3">Metro³ (m³)</option>
+                                <option value="un">Unidade (un)</option>
+                                <option value="kg">Quilo (kg)</option>
+                                <option value="m">Metro (m)</option>
+                                <option value="m2">Metro² (m²)</option>
+                                <option value="sc">Saco (sc)</option>
+                                <option value="l">Litro (l)</option>
+                              </>
+                            )}
                           </select>
                         </div>
+                        {activeTab === 'products' && (
+                          <>
+                            <div className="md:col-span-4">
+                              <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Estoque Mínimo (Alerta)</label>
+                              <input type="number" step="0.01" min="0" className="w-full bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 rounded-xl p-3 text-sm font-bold text-rose-600"
+                                value={formData.minStock ?? ''} onChange={e => setFormData({ ...formData, minStock: e.target.value })} />
+                            </div>
+                            <div className="md:col-span-4">
+                              <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Peso Unitário (kg)</label>
+                              <input type="number" step="0.001" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
+                                value={formData.weight ?? ''} onChange={e => setFormData({ ...formData, weight: parseFloat(e.target.value) || 0 })} />
+                            </div>
+                          </>
+                        )}
                         <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Estoque Mínimo (Alerta)</label>
-                          <input type="number" step="0.01" min="0" className="w-full bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 rounded-xl p-3 text-sm font-bold text-rose-600"
-                            value={formData.minStock ?? ''} onChange={e => setFormData({ ...formData, minStock: e.target.value })} />
-                        </div>
-                        <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Peso Unitário (kg)</label>
-                          <input type="number" step="0.001" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                            value={formData.weight ?? ''} onChange={e => setFormData({ ...formData, weight: parseFloat(e.target.value) || 0 })} />
-                        </div>
-                        <div className="md:col-span-4">
-                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Localização (Rua/Box)</label>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                            {activeTab === 'services' ? 'Local / Base de Execução' : 'Localização (Rua/Box/Pátio)'}
+                          </label>
                           <input type="text" className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 text-sm font-medium"
-                            value={formData.location || ''} onChange={e => setFormData({ ...formData, location: e.target.value })} placeholder="Ex: Box A-02" />
+                            value={formData.location || ''} onChange={e => setFormData({ ...formData, location: e.target.value })}
+                            placeholder={activeTab === 'services' ? 'Ex: Frentes de Obras, Canteiro' : 'Ex: Box A-02, Silo 01'} />
                         </div>
                       </>
                     )}
@@ -1262,11 +2161,13 @@ const Clients = () => {
           <p className="text-[10px] font-black text-cyan-600 uppercase tracking-[0.3em] mb-1">Cadastros Centrais</p>
           <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">Gestão Operacional</h2>
         </div>
-        {canManage(activeTab) && (
-          <button onClick={() => handleOpenModal()} className="px-6 py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3 shadow-xl hover:scale-105 transition-all">
-            <Plus size={20} /> Adicionar Novo
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {canManage(activeTab) && (
+            <button onClick={() => handleOpenModal()} className="px-6 py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3 shadow-xl hover:scale-105 transition-all">
+              <Plus size={20} /> Adicionar Novo
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="border-b border-slate-100 dark:border-slate-700">
@@ -1274,7 +2175,8 @@ const Clients = () => {
           <TabButton id="clients" icon={User} label="Clientes" count={(clients || []).length} />
           <TabButton id="suppliers" icon={Warehouse} label="Fornecedores" count={(suppliers || []).length} />
           <TabButton id="employees" icon={Badge} label="Colaboradores" count={(employees || []).length} />
-          <TabButton id="products" icon={Package} label="Produtos" count={(inventory || []).length} />
+          <TabButton id="products" icon={Package} label="Produtos" count={(inventory || []).filter(p => !isServiceItem(p)).length} />
+          <TabButton id="services" icon={Wrench} label="Serviços" count={(inventory || []).filter(p => isServiceItem(p)).length} />
           <TabButton id="vehicles" icon={Truck} label="Veículos" count={(fleet || []).length} />
         </div>
       </div>
@@ -1367,19 +2269,50 @@ const Clients = () => {
                         <p className="text-[10px] font-bold text-slate-400 uppercase tabular-nums">
                           {item.document || item.plate || (item.barcode ? `EAN: ${item.barcode}` : 'REF-' + (item.id || '').slice(-4))}
                         </p>
-                        {activeTab === 'clients' && item.email && (
-                          <p className="text-[10px] text-slate-400 font-medium">{item.email} {item.phone ? `• ${item.phone}` : ''}</p>
+                        {activeTab === 'clients' && (item.tradeName || item.email || item.phone) && (
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            {item.tradeName ? <span className="text-cyan-600 font-bold mr-1">[{item.tradeName}]</span> : null}
+                            {item.email || ''}{item.email && item.phone ? ' • ' : ''}{item.phone || ''}
+                          </p>
                         )}
-                        {activeTab === 'suppliers' && (item.tradeName || item.email) && (
-                          <p className="text-[10px] text-slate-400 font-medium">{item.tradeName ? `Fantasia: ${item.tradeName}` : item.email}</p>
+                        {activeTab === 'suppliers' && (item.tradeName || item.email || item.phone) && (
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            {item.tradeName ? <span className="text-cyan-600 font-bold mr-1">[{item.tradeName}]</span> : null}
+                            {item.email || ''}{item.email && item.phone ? ' • ' : ''}{item.phone || ''}
+                          </p>
                         )}
                         {activeTab === 'employees' && item.role && (
                           <p className="text-[10px] text-slate-400 font-medium">{item.role} {item.department ? `• Depto: ${item.department}` : ''}</p>
                         )}
                         {activeTab === 'products' && (
-                          <p className="text-[10px] text-cyan-600 font-bold">
-                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price || 0)} • Estoque: {item.quantity || 0} {item.unit || 'un'}
-                          </p>
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] text-cyan-600 font-bold">
+                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price || 0)} • Estoque: {item.quantity || 0} {item.unit || 'un'}
+                              
+                            </p>
+                            {(item.location || item.brand) && (
+                              <p className="text-[9px] text-slate-400 font-medium">
+                                {item.location ? `Loc: ${item.location}` : ''}
+                                {item.location && item.brand ? ' • ' : ''}
+                                {item.brand ? `Marca: ${item.brand}` : ''}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {activeTab === 'services' && (
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] text-cyan-600 font-bold">
+                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price || 0)} / {item.unit || 'h'}
+                              
+                            </p>
+                            {(item.location || item.brand) && (
+                              <p className="text-[9px] text-slate-400 font-medium">
+                                {item.location ? `Base/Frente: ${item.location}` : ''}
+                                {item.location && item.brand ? ' • ' : ''}
+                                {item.brand ? `Equipe: ${item.brand}` : ''}
+                              </p>
+                            )}
+                          </div>
                         )}
                         {activeTab === 'vehicles' && (
                           <p className="text-[10px] text-slate-400 font-medium">{item.type || 'Veículo'} • {item.brand || ''} {item.year ? `(${item.year})` : ''}</p>
@@ -1404,7 +2337,7 @@ const Clients = () => {
                   </td>
                   <td className="px-8 py-6 text-right">
                     <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {activeTab === 'products' && canManage('products') && (
+                      {(activeTab === 'products' || activeTab === 'services') && canManage(activeTab) && (
                         <button onClick={() => handleDuplicate(item)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all" title="Duplicar"><Copy size={18} /></button>
                       )}
                       {canManage(activeTab) && (
