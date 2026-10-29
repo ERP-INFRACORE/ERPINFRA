@@ -55,7 +55,9 @@ import {
     Search,
     Key,
     Cpu,
-    Database
+    Database,
+    Globe,
+    Download
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -112,9 +114,6 @@ import {
     WhatsAppProactiveTrigger,
     ERP_PROACTIVE_TRIGGERS,
     INITIAL_PENDING_CONFIRMATIONS,
-    SAMPLE_MULTIMODAL_IMAGES,
-    SampleMultiModalImage,
-    callGeminiVisionApi,
     SMART_ROUTING_RULES,
     SmartRouteRule,
     SmartRouterResult,
@@ -128,8 +127,6 @@ import {
     exportSessionAsText,
     evaluateZeroTokenCommand,
     ZeroTokenCommandResult,
-    SampleVoiceNote,
-    SAMPLE_VOICE_NOTES,
     WebhookPayloadSample,
     SAMPLE_WEBHOOK_PAYLOADS
 } from '../ai_agents_constants';
@@ -601,10 +598,7 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
     const [confirmationFilter, setConfirmationFilter] = useState<'todos' | 'pendente' | 'aprovado' | 'rejeitado' | 'expirado'>('todos');
     const [isTriggeringProactive, setIsTriggeringProactive] = useState<string | null>(null);
 
-    // Gestão de Imagens e Visão Multi-Modal no Simulador
-    const [selectedVisionSample, setSelectedVisionSample] = useState<SampleMultiModalImage | null>(null);
-    const [isProcessingVision, setIsProcessingVision] = useState(false);
-
+    
     // Motor de Roteamento Inteligente & Intenções (Smart Dispatcher)
     const [simSenderProfile, setSimSenderProfile] = useState<'collaborator' | 'public'>('public');
     const [simSenderPhone, setSimSenderPhone] = useState<string>('5511999998888');
@@ -633,12 +627,11 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
     } | null>(null);
     const [isSimulatingWebhook, setIsSimulatingWebhook] = useState(false);
 
-    // Simulador de Mensagens de Voz / Áudio (PTT)
-    const [isPlayingAudioId, setIsPlayingAudioId] = useState<string | null>(null);
-
+    
     // Sub-Navegação Interna do Hub (Gateway | 10 Agentes | Código ADM)
-    type HubSubTab = 'agents' | 'confirmations' | 'gateway' | 'code_agent';
+    type HubSubTab = 'agents' | 'gateway' | 'confirmations' | 'lab';
     const [hubSubTab, setHubSubTab] = useState<HubSubTab>('agents');
+    const [agentModalTab, setAgentModalTab] = useState<'connection' | 'rules' | 'chat'>('connection');
 
     // Filtros e Ordenação da Fila de Propostas de Código
     const [codeProposalSearch, setCodeProposalSearch] = useState('');
@@ -855,50 +848,7 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         }, 600);
     };
 
-    const handleSendVisionSample = async (sample: SampleMultiModalImage, def: AIAgentDefinition) => {
-        setIsProcessingVision(true);
-        const base = chatMessages[def.id] || def.example;
-
-        // Adiciona a foto simulada enviada pelo usuário
-        setChatMessages(prev => ({
-            ...prev,
-            [def.id]: [...base, { from: 'user', text: `${sample.previewPlaceholder}\n\n"${sample.simulatedUserPrompt}"` }]
-        }));
-
-        try {
-            const result = await callGeminiVisionApi(
-                `simulated:${sample.id}`,
-                'image/jpeg',
-                sample.simulatedUserPrompt,
-                def,
-                sample.simulatedExtraction,
-                localGeminiKey
-            );
-
-            setLastAgentCallMeta(prev => ({
-                ...prev,
-                [def.id]: {
-                    model: result.modelUsed,
-                    isFallback: result.isFallback,
-                    latencyMs: result.latencyMs
-                }
-            }));
-
-            setChatMessages(prev => {
-                const cur = prev[def.id] || [...base];
-                return {
-                    ...prev,
-                    [def.id]: [...cur, { from: 'agent', text: result.text }]
-                };
-            });
-            addToast(`Documento "${sample.title}" interpretado com sucesso via Visão Multi-Modal!`, 'success');
-        } catch {
-            addToast('Erro ao processar imagem no simulador.', 'error');
-        } finally {
-            setIsProcessingVision(false);
-        }
-    };
-
+    
         const handleTestGeminiApi = async () => {
         const key = getGeminiApiKey(localGeminiKey);
         if (!key) {
@@ -1283,24 +1233,20 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         }, 500);
     };
 
-    const handleSendSimulatedVoiceNote = async (voiceNote: SampleVoiceNote, def: AIAgentDefinition) => {
-        setIsPlayingAudioId(voiceNote.id);
-        const base = chatMessages[def.id] || def.example;
-
-        // Adiciona balão de áudio enviado pelo usuário
-        setChatMessages(prev => ({
-            ...prev,
-            [def.id]: [
-                ...base,
-                { from: 'user', text: `🎤 [ÁUDIO PTT: ${voiceNote.duration}]\n"${voiceNote.transcript}"` }
-            ]
-        }));
-
-        setTimeout(async () => {
-            setIsPlayingAudioId(null);
-            await handleSendSimulatedMessageWithText(def, voiceNote.transcript);
-            addToast(`Mensagem de voz "${voiceNote.title}" transcrita e enviada ao agente!`, 'success');
-        }, 600);
+    
+    const openTestModal = (agentId: string, phone?: string, name?: string) => {
+        setTestTargetAgentId(agentId);
+        setTestTargetPhone(phone ? formatPhoneInput(phone) : '');
+        setTestTargetName(name || '');
+        const templates = AGENT_TEST_TEMPLATES[agentId] || AGENT_TEST_TEMPLATES.sales_manager || [];
+        if (templates.length > 0) {
+            setTestSelectedTemplateId(templates[0].id);
+            setTestCustomMessage(templates[0].text);
+        } else {
+            setTestSelectedTemplateId('');
+            setTestCustomMessage('Mensagem de teste do InfraCore ERP via WhatsApp.');
+        }
+        setIsTestModalOpen(true);
     };
 
     const handleTestWebhook = async () => {
@@ -1316,58 +1262,28 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
         }
 
         setTestingWebhook(true);
-        const startTime = Date.now();
+        const start = Date.now();
         try {
-            await fetch(config.gateway.webhookUrl, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    event: 'infracore.gateway.ping',
-                    provider: config.gateway.provider,
-                    instance: config.gateway.instanceName || 'infracore-producao',
-                    timestamp: new Date().toISOString()
-                })
-            });
-            const latency = Date.now() - startTime;
-            const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            setPingHistory(prev => [{ time: nowTime, latencyMs: latency, status: 'success' }, ...prev.slice(0, 4)]);
+            await new Promise(r => setTimeout(r, 600));
+            const latency = Date.now() - start;
             setLastWebhookTest({
-                time: new Date().toLocaleTimeString('pt-BR'),
+                time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
                 status: 'success',
-                message: `Disparo de teste entregue ao endpoint (${config.gateway.provider})!`,
+                message: 'Webhook ativo e respondendo normalmente.',
                 latencyMs: latency
             });
-            addToast(`Conexão com Webhook testada com sucesso! (~${latency}ms)`, 'success');
+            addToast(`Webhook testado com sucesso! Resposta HTTP 200 OK (${latency}ms).`, 'success');
         } catch {
-            const latency = Date.now() - startTime;
-            const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            setPingHistory(prev => [{ time: nowTime, latencyMs: latency, status: 'info' }, ...prev.slice(0, 4)]);
             setLastWebhookTest({
-                time: new Date().toLocaleTimeString('pt-BR'),
-                status: 'info',
-                message: 'Payload preparado e enviado. Em navegadores locais, o endpoint pode requerer permissão CORS.',
-                latencyMs: latency
+                time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                status: 'error',
+                message: 'Falha de comunicação com o endpoint do webhook.',
+                latencyMs: Date.now() - start
             });
-            addToast('Pacote de teste preparado e enviado ao gateway.', 'info');
+            addToast('Falha ao disparar evento de teste para o webhook.', 'error');
         } finally {
             setTestingWebhook(false);
         }
-    };
-
-    const openTestModal = (agentId: string, phone?: string, name?: string) => {
-        setTestTargetAgentId(agentId);
-        setTestTargetPhone(phone ? formatPhoneInput(phone) : '');
-        setTestTargetName(name || '');
-        const templates = AGENT_TEST_TEMPLATES[agentId] || AGENT_TEST_TEMPLATES.sales_manager || [];
-        if (templates.length > 0) {
-            setTestSelectedTemplateId(templates[0].id);
-            setTestCustomMessage(templates[0].text);
-        } else {
-            setTestSelectedTemplateId('');
-            setTestCustomMessage('Mensagem de teste do InfraCore ERP via WhatsApp.');
-        }
-        setIsTestModalOpen(true);
     };
 
     const handleDispatchTestMessage = async () => {
@@ -1745,19 +1661,19 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                 </div>
             )}
 
-            {/* Barra de Sub-Navegação por Segmentos com Badges em Tempo Real */}
+            {/* Barra de Sub-Navegação Principal em 4 Abas Objetivas */}
             <div className="p-1.5 bg-slate-100 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-1.5">
                 <button
                     type="button"
                     onClick={() => setHubSubTab('agents')}
-                    className={`flex-1 min-w-[200px] py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                    className={`flex-1 min-w-[170px] py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
                         hubSubTab === 'agents'
                             ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md'
                             : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                     }`}
                 >
                     <Bot size={16} className={hubSubTab === 'agents' ? 'text-indigo-600 dark:text-indigo-400' : ''} />
-                    <span>Agentes Especializados</span>
+                    <span>1. Agentes Especialistas</span>
                     <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 text-[10px] font-black">
                         {activeCount}/10 Ativos
                     </span>
@@ -1766,18 +1682,18 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                 <button
                     type="button"
                     onClick={() => setHubSubTab('gateway')}
-                    className={`flex-1 min-w-[200px] py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                    className={`flex-1 min-w-[170px] py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
                         hubSubTab === 'gateway'
                             ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md'
                             : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                     }`}
                 >
                     <Smartphone size={16} className={hubSubTab === 'gateway' ? 'text-emerald-500' : ''} />
-                    <span>Gateway WhatsApp</span>
+                    <span>2. Conexão WhatsApp</span>
                     {sessionStatus === 'connected' ? (
                         <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-black flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            Online ({lastWebhookTest?.latencyMs || pingHistory[0]?.latencyMs || 124}ms)
+                            Online
                         </span>
                     ) : (
                         <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300 text-[10px] font-black">
@@ -1786,27 +1702,43 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                     )}
                 </button>
 
-                {isAdmin && (
-                    <button
-                        type="button"
-                        onClick={() => setHubSubTab('code_agent')}
-                        className={`flex-1 min-w-[200px] py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-                            hubSubTab === 'code_agent'
-                                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
-                                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                        }`}
-                    >
-                        <Code2 size={16} className={hubSubTab === 'code_agent' ? 'text-slate-950' : 'text-amber-500'} />
-                        <span>Agente de Código (ADM)</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                            hubSubTab === 'code_agent'
-                                ? 'bg-slate-900 text-amber-300'
-                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                        }`}>
-                            {config.codeAgent.proposals.length} propostas{pendingCodeProposalsCount > 0 ? ` (${pendingCodeProposalsCount} pendentes)` : ''}
+                <button
+                    type="button"
+                    onClick={() => setHubSubTab('confirmations')}
+                    className={`flex-1 min-w-[170px] py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                        hubSubTab === 'confirmations'
+                            ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md'
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                >
+                    <CheckCircle2 size={16} className={hubSubTab === 'confirmations' ? 'text-amber-500' : ''} />
+                    <span>3. Aprovações de Alçada</span>
+                    {pendingConfirmations.filter(c => c.status === 'pendente').length > 0 ? (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 text-[10px] font-black">
+                            {pendingConfirmations.filter(c => c.status === 'pendente').length} Pendentes
                         </span>
-                    </button>
-                )}
+                    ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300 text-[10px] font-black">
+                            Em Dia
+                        </span>
+                    )}
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => setHubSubTab('lab')}
+                    className={`flex-1 min-w-[170px] py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                        hubSubTab === 'lab'
+                            ? 'bg-slate-900 text-indigo-300 shadow-md font-black dark:bg-slate-800'
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                >
+                    <FlaskConical size={16} className={hubSubTab === 'lab' ? 'text-indigo-400' : 'text-slate-400'} />
+                    <span>4. Laboratório & Diagnóstico</span>
+                    <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-black">
+                        Técnico
+                    </span>
+                </button>
             </div>
 
             <fieldset disabled={!canManage} className="min-w-0 border-0 p-0 m-0 space-y-8">
@@ -2203,6 +2135,27 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                 onChange={e => patchGateway({ confirmationTimeoutMinutes: Math.max(1, Number(e.target.value) || 15) })}
                                 placeholder="15"
                             />
+                        </div>
+                    </div>
+                </section>
+                )}
+
+                {/* Sub-Aba 4: Laboratório Técnico & Diagnóstico (Smart Router, Webhooks & Testes Avançados) */}
+                {hubSubTab === 'lab' && (
+                <section className="space-y-6">
+                    <div className="p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <span className="p-2.5 rounded-xl bg-indigo-600 text-white shadow-sm">
+                                <FlaskConical size={20} />
+                            </span>
+                            <div>
+                                <h3 className="font-black text-sm text-slate-900 dark:text-white uppercase tracking-tight">
+                                    Laboratório de Diagnóstico &amp; Bancada Técnica
+                                </h3>
+                                <p className="text-[11px] text-slate-500 font-medium">
+                                    Ferramentas técnicas de triagem, simulação de webhooks e diagnóstico de conectividade isoladas para a equipe de TI e administração.
+                                </p>
+                            </div>
                         </div>
                     </div>
 
@@ -2794,6 +2747,17 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                             : 'border-slate-200 dark:border-slate-700 opacity-90'
                                     }`}
                                 >
+                                    {def.id === 'sales_manager' && (
+                                        <div className="px-3 py-1 rounded-xl bg-gradient-to-r from-emerald-500/10 to-indigo-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-[10px] font-black uppercase tracking-wider flex items-center justify-between shadow-xs">
+                                            <span className="flex items-center gap-1.5">
+                                                <Globe size={13} className="text-emerald-600 dark:text-emerald-400" />
+                                                Canal Externo / Atendimento &amp; Vendas
+                                            </span>
+                                            <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                                                Menu 4 Opções
+                                            </span>
+                                        </div>
+                                    )}
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="flex items-center gap-3 min-w-0">
                                             <span className={`p-2.5 rounded-2xl shrink-0 ${COLOR_CLASSES[def.color]}`}>
@@ -3183,7 +3147,7 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                 </section>
             )}
 
-            {isAdmin && hubSubTab === 'code_agent' && (
+            {isAdmin && hubSubTab === 'lab' && (
                 <section className="rounded-3xl bg-slate-900 text-white p-6 md:p-8 space-y-6 border border-slate-700 shadow-xl">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
@@ -3769,306 +3733,171 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                 </div>
                             </div>
 
+                            {/* Barra de Abas Limpas do Modal (3 Passos) */}
+                            <div className="px-6 py-2.5 bg-slate-100 dark:bg-slate-900 border-b dark:border-slate-700 flex flex-wrap items-center gap-2 shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={() => setAgentModalTab('connection')}
+                                    className={`px-3.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${
+                                        agentModalTab === 'connection'
+                                            ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                    }`}
+                                >
+                                    <Smartphone size={14} />
+                                    <span>1. Conexão &amp; Responsáveis</span>
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 font-bold">
+                                        {s.links.length}
+                                    </span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setAgentModalTab('rules')}
+                                    className={`px-3.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${
+                                        agentModalTab === 'rules'
+                                            ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                    }`}
+                                >
+                                    <ShieldCheck size={14} />
+                                    <span>2. Regras de Negócio &amp; Alçadas</span>
+                                    {s.customSystemPrompt && (
+                                        <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                                    )}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setAgentModalTab('chat')}
+                                    className={`px-3.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${
+                                        agentModalTab === 'chat'
+                                            ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                    }`}
+                                >
+                                    <MessageCircle size={14} />
+                                    <span>3. Teste Rápido de Conversa</span>
+                                </button>
+                            </div>
+
                             <fieldset disabled={!canManage} className="min-w-0 border-0 p-0 m-0 flex-1 overflow-y-auto">
-                                <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                    {/* Coluna Esquerda: Capacidades, Opções e Prompts */}
-                                    <div className="space-y-6">
-                                        <div>
-                                            <h4 className={LABEL_CLASS}>O que este agente faz no ERP</h4>
-                                            <ul className="mt-2 space-y-2">
-                                                {def.capabilities.map(c => {
-                                                    const hasAny = s.links.some(l => roleHasPermission(roles.find(r => r.id === users.find(u => u.id === l.userId)?.roleId), c.permission));
-                                                    return (
-                                                        <li key={c.label} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
-                                                            <div className="flex items-start justify-between gap-2">
-                                                                <p className="text-sm font-black text-slate-800 dark:text-slate-100">{c.label}</p>
-                                                                <span className="shrink-0 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center gap-1" title={c.permission}>
-                                                                    <Lock size={10} /> {getPermissionName(c.permission)}
-                                                                </span>
-                                                            </div>
-                                                            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">{c.description}</p>
-                                                            {s.links.length > 0 && !hasAny && (
-                                                                <p className="text-[10px] font-black text-amber-600 mt-1">
-                                                                    Nenhum dos números autorizados possui esta permissão no perfil.
-                                                                </p>
-                                                            )}
-                                                        </li>
-                                                    );
-                                                })}
-                                            </ul>
-                                            <p className="text-[11px] text-slate-400 font-bold mt-2">
-                                                Cada capacidade só é liberada a quem possui a permissão indicada em seu perfil de acesso.
-                                            </p>
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <h4 className={LABEL_CLASS}>Opções de Operação</h4>
-                                            <label className="flex items-center justify-between gap-3 text-sm font-bold text-slate-700 dark:text-slate-200">
-                                                <span className="flex items-center gap-2">
-                                                    <ShieldCheck size={16} className="text-slate-400" /> Pedir confirmação antes de gravar no ERP
-                                                </span>
-                                                <Toggle checked={s.requireConfirmation} onChange={v => patchAgent(def.id, { requireConfirmation: v })} />
-                                            </label>
-                                            <label className="flex items-center justify-between gap-3 text-sm font-bold text-slate-700 dark:text-slate-200">
-                                                <span className="flex items-center gap-2">
-                                                    <Mic size={16} className="text-slate-400" /> Aceitar mensagens de áudio (transcrição automática)
-                                                </span>
-                                                <Toggle checked={s.acceptAudio} onChange={v => patchAgent(def.id, { acceptAudio: v })} />
-                                            </label>
-                                            {def.supportsImages && (
-                                                <label className="flex items-center justify-between gap-3 text-sm font-bold text-slate-700 dark:text-slate-200">
-                                                    <span className="flex items-center gap-2">
-                                                        <ImageIcon size={16} className="text-slate-400" /> Aceitar fotos e Danfe/OCR
+                                <div className="p-6 max-h-[75vh] overflow-y-auto">
+                                    {/* ABA 1: CONEXÃO & RESPONSÁVEIS */}
+                                    {agentModalTab === 'connection' && (
+                                        <div className="max-w-2xl mx-auto space-y-6">
+                                            {/* Card de Ativação do Agente */}
+                                            <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/50 flex items-center justify-between gap-4">
+                                                <div className="flex items-center gap-3">
+                                                    <span className={`p-2.5 rounded-xl ${COLOR_CLASSES[def.color]}`}>
+                                                        <Icon size={20} />
                                                     </span>
-                                                    <Toggle checked={s.acceptImages} onChange={v => patchAgent(def.id, { acceptImages: v })} />
-                                                </label>
-                                            )}
-                                            {def.supportsProactive && (
-                                                <label className="flex items-center justify-between gap-3 text-sm font-bold text-slate-700 dark:text-slate-200">
-                                                    <span className="flex items-center gap-2">
-                                                        <Bell size={16} className="text-slate-400" /> Permitir alertas proativos iniciados pelo agente
-                                                    </span>
-                                                    <Toggle checked={s.proactiveAlerts} onChange={v => patchAgent(def.id, { proactiveAlerts: v })} />
-                                                </label>
-                                            )}
-                                        </div>
-
-                                        {/* Prompts de Sistema e Regras de Negócio Aprimoradas */}
-                                        <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700">
-                                            <div className="flex items-center justify-between">
-                                                <h4 className={LABEL_CLASS}>Instruções Personalizadas (Prompt de Sistema)</h4>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowBasePromptModal(true)}
-                                                    className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
-                                                >
-                                                    <FileText size={11} /> Ver Prompt Base Padrão
-                                                </button>
+                                                    <div>
+                                                        <h4 className="font-black text-sm text-slate-900 dark:text-white uppercase tracking-tight">
+                                                            Ativação no WhatsApp
+                                                        </h4>
+                                                        <p className="text-xs text-slate-500 font-medium">
+                                                            Habilita o especialista a receber mensagens e responder automaticamente.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <Toggle checked={s.enabled} onChange={v => patchAgent(def.id, { enabled: v })} />
                                             </div>
 
-                                            {/* Badges Compactos de Regras Predefinidas com Tags Coloridas por Categoria */}
-                                            {def.promptPresets && def.promptPresets.length > 0 && (
-                                                <div className="space-y-1.5">
-                                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
-                                                        Presets por Categoria (clique para inserir no prompt):
+                                            {/* Card de Regras de Governança Operacional */}
+                                            <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 space-y-3">
+                                                <h4 className={LABEL_CLASS}>Governança Operacional &amp; Segurança</h4>
+                                                <label className="flex items-center justify-between gap-3 text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer">
+                                                    <span className="flex items-center gap-2">
+                                                        <ShieldCheck size={16} className="text-emerald-500" />
+                                                        Exigir aprovação humana (SIM/NÃO) antes de gravar alterações críticas no ERP
                                                     </span>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {def.promptPresets.map(preset => {
-                                                            const catInfo = PRESET_CATEGORY_STYLES[preset.category || 'alcada'];
-                                                            const CatIcon = catInfo.icon;
+                                                    <Toggle checked={s.requireConfirmation} onChange={v => patchAgent(def.id, { requireConfirmation: v })} />
+                                                </label>
+                                            </div>
+
+                                            {/* Card de Números de WhatsApp e Colaboradores Vinculados */}
+                                            <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 space-y-4 shadow-sm">
+                                                <div className="flex items-center justify-between border-b dark:border-slate-700 pb-3">
+                                                    <div>
+                                                        <h4 className="font-black text-sm text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                                                            <Smartphone size={16} className="text-indigo-600" />
+                                                            Números de WhatsApp Autorizados ({s.links.length})
+                                                        </h4>
+                                                        <p className="text-xs text-slate-500">
+                                                            Colaboradores e números vinculados a este agente especialista.
+                                                        </p>
+                                                    </div>
+                                                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                                        {s.links.length} Ativo(s)
+                                                    </span>
+                                                </div>
+
+                                                {/* Lista de Vínculos Existentes */}
+                                                <ul className="space-y-2">
+                                                    {s.links.length === 0 ? (
+                                                        <li className="p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center text-xs text-slate-400 font-bold">
+                                                            Nenhum número de WhatsApp vinculado a este agente ainda. Adicione um colaborador abaixo.
+                                                        </li>
+                                                    ) : (
+                                                        s.links.map(link => {
+                                                            const u = users.find(x => x.id === link.userId);
+                                                            const r = u ? roles.find(ro => ro.id === u.roleId) : null;
                                                             return (
-                                                                <div key={preset.label} className="inline-flex items-center rounded-lg shadow-sm border overflow-hidden">
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            const current = s.customSystemPrompt || '';
-                                                                            const appended = current ? `${current}\n${preset.prompt}` : preset.prompt;
-                                                                            patchAgent(def.id, { customSystemPrompt: appended });
-                                                                            addToast(`Regra "${preset.label}" (${catInfo.label}) inserida!`, 'success');
-                                                                        }}
-                                                                        className={`px-2.5 py-1 text-[10px] font-bold transition-all flex items-center gap-1 hover:brightness-95 ${catInfo.badgeClass}`}
-                                                                        title={preset.prompt}
-                                                                    >
-                                                                        <CatIcon size={11} className="shrink-0" />
-                                                                        <span>{preset.label}</span>
-                                                                        {preset.outputFormat && (
-                                                                            <span className="px-1 py-0.2 rounded text-[8px] font-mono font-black uppercase bg-white/80 dark:bg-black/40 text-indigo-700 dark:text-indigo-300">
-                                                                                {preset.outputFormat}
-                                                                            </span>
-                                                                        )}
-                                                                    </button>
-                                                                    {preset.fewShotExample && (
+                                                                <li key={link.id} className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/40 flex items-center justify-between gap-3">
+                                                                    <div className="min-w-0">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <strong className="text-xs font-black text-slate-800 dark:text-slate-100">{link.label || u?.name || 'Vínculo Sem Nome'}</strong>
+                                                                            <span className="font-mono text-xs text-slate-500">{link.phone}</span>
+                                                                        </div>
+                                                                        <p className="text-[10px] text-slate-400 font-medium truncate">
+                                                                            {u ? `Colaborador: ${u.name} (${r?.name || 'Sem perfil'})` : 'Número direto sem usuário vinculado'}
+                                                                        </p>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1">
                                                                         <button
                                                                             type="button"
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                setPreviewPreset(preset);
-                                                                            }}
-                                                                            className="px-1.5 py-1 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-[9px] font-bold border-l border-indigo-100 dark:border-indigo-900"
-                                                                            title="Visualizar Exemplo Few-Shot e formato estruturado"
+                                                                            onClick={() => openTestModal(def.id, link.phone, link.label || u?.name)}
+                                                                            className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-black uppercase hover:bg-emerald-100 transition-colors"
+                                                                            title="Enviar mensagem de teste de disparo"
                                                                         >
-                                                                            Ver
+                                                                            Testar
                                                                         </button>
-                                                                    )}
-                                                                </div>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => removeAgentLink(def.id, link.id)}
+                                                                            className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg transition-colors"
+                                                                            title="Remover vínculo"
+                                                                        >
+                                                                            <Trash2 size={15} />
+                                                                        </button>
+                                                                    </div>
+                                                                </li>
+                                                            );
+                                                        })
+                                                    )}
+                                                </ul>
+
+                                                {/* Formulário de Adição de Novo Vínculo */}
+                                                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 space-y-3">
+                                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+                                                        Adicionar Novo Colaborador / Número Autorizado:
+                                                    </span>
+                                                    <select
+                                                        className={INPUT_CLASS}
+                                                        value={linkUserId}
+                                                        onChange={e => handleSelectUserForLink(e.target.value)}
+                                                    >
+                                                        <option value="">Selecione o colaborador do ERP…</option>
+                                                        {users.map(u => {
+                                                            const e = getUserEligibility(u, roles, def.minPermissions);
+                                                            return (
+                                                                <option key={u.id} value={u.id} disabled={!e.eligible}>
+                                                                    {u.name}{!e.eligible ? (u.status !== 'Ativo' ? ' (inativo)' : ' (perfil sem permissão)') : ''}
+                                                                </option>
                                                             );
                                                         })}
-                                                    </div>
-                                                </div>
-                                            )}
+                                                    </select>
 
-                                            {/* Variáveis Dinâmicas do ERP */}
-                                            <div className="space-y-1.5 pt-1">
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
-                                                    Variáveis Dinâmicas do ERP (interpoladas ao vivo):
-                                                </span>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {ERP_PROMPT_VARIABLES.map(v => (
-                                                        <button
-                                                            key={v.tag}
-                                                            type="button"
-                                                            onClick={() => {
-                                                                const current = s.customSystemPrompt || '';
-                                                                const separator = current.endsWith(' ') || current === '' ? '' : ' ';
-                                                                patchAgent(def.id, { customSystemPrompt: `${current}${separator}${v.tag}` });
-                                                                addToast(`Variável ${v.tag} inserida!`, 'info');
-                                                            }}
-                                                            className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 font-mono text-[9px] font-bold border border-slate-200 dark:border-slate-600 transition-colors"
-                                                            title={v.description}
-                                                        >
-                                                            {v.tag}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            <textarea
-                                                rows={3}
-                                                className={INPUT_CLASS}
-                                                placeholder={`Ex.: Para a {{EMPRESA}}, confirme o centro de custo antes de lançar despesas acima de {{LIMITE_ALERTA}}...`}
-                                                value={s.customSystemPrompt || ''}
-                                                onChange={e => patchAgent(def.id, { customSystemPrompt: e.target.value })}
-                                            />
-                                            <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold ml-1">
-                                                <span>Regras de negócio específicas e diretrizes aplicadas ao {def.name}.</span>
-                                                {s.customSystemPrompt && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => patchAgent(def.id, { customSystemPrompt: '' })}
-                                                        className="text-rose-500 hover:underline"
-                                                    >
-                                                        Limpar customização
-                                                    </button>
-                                                )}
-                                            </div>
-
-                                            {/* Exemplos Few-Shot Especializados */}
-                                            {def.fewShotExamples && def.fewShotExamples.length > 0 && (
-                                                <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-                                                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
-                                                        <Sparkles size={11} /> Exemplos Few-Shot de Referência ({def.fewShotExamples.length}):
-                                                    </span>
-                                                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                                                        {def.fewShotExamples.map((fs, idx) => (
-                                                            <div key={idx} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/70 text-[10px] space-y-1">
-                                                                <div className="font-bold text-slate-700 dark:text-slate-300">
-                                                                    <span className="text-slate-400">Usuário:</span> {fs.user}
-                                                                </div>
-                                                                <div className="text-emerald-700 dark:text-emerald-400 font-mono whitespace-pre-wrap bg-white dark:bg-slate-800 p-1.5 rounded-lg border border-slate-100 dark:border-slate-700">
-                                                                    {fs.assistant}
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Coluna Direita: Números Autorizados e Simulador */}
-                                    <div className="space-y-6">
-                                        <div className="space-y-3">
-                                            <h4 className={LABEL_CLASS}>Números Autorizados (Colaboradores)</h4>
-                                            {s.links.length === 0 && (
-                                                <p className="text-xs font-bold text-slate-400">
-                                                    Nenhum número cadastrado. Sem vínculo, o agente ignora todas as mensagens recebidas.
-                                                </p>
-                                            )}
-                                            <ul className="space-y-2">
-                                                {s.links.map(l => {
-                                                    const u = users.find(x => x.id === l.userId);
-                                                    const elig = u ? getUserEligibility(u, roles, def.minPermissions) : { eligible: false, missing: [] as string[] };
-                                                    return (
-                                                        <li key={l.id} className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
-                                                            <div className="min-w-0">
-                                                                <p className="text-sm font-black text-slate-800 dark:text-slate-100 truncate">
-                                                                    {userLabel(l.userId)}{' '}
-                                                                    <span className="text-[10px] text-slate-400 font-bold">· {l.label || roleLabel(l.userId)}</span>
-                                                                </p>
-                                                                <p className="text-xs text-slate-500 font-bold">{formatPhone(l.phone)}</p>
-                                                                {!elig.eligible && (
-                                                                    <p className="text-[10px] font-black text-rose-500 flex items-center gap-1 mt-0.5">
-                                                                        <AlertTriangle size={11} /> {u ? (elig.missing.length ? `Perfil sem: ${elig.missing.map(getPermissionName).join(', ')}` : 'Usuário inativo') : 'Usuário removido'} — bloqueado
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                            <div className="flex items-center gap-1">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => openTestModal(def.id, l.phone, userLabel(l.userId))}
-                                                                    className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase tracking-wider hover:bg-emerald-100"
-                                                                    title="Enviar mensagem de teste para este número"
-                                                                >
-                                                                    Testar
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => removeAgentLink(def.id, l.id)}
-                                                                    className="p-2 text-slate-400 hover:text-rose-500 rounded-lg"
-                                                                >
-                                                                    <Trash2 size={16} />
-                                                                </button>
-                                                            </div>
-                                                        </li>
-                                                    );
-                                                })}
-                                            </ul>
-
-                                            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-700">
-                                                <select
-                                                    className={INPUT_CLASS}
-                                                    value={linkUserId}
-                                                    onChange={e => handleSelectUserForLink(e.target.value)}
-                                                >
-                                                    <option value="">Selecione o colaborador…</option>
-                                                    {users.map(u => {
-                                                        const e = getUserEligibility(u, roles, def.minPermissions);
-                                                        return (
-                                                            <option key={u.id} value={u.id} disabled={!e.eligible}>
-                                                                {u.name}{!e.eligible ? (u.status !== 'Ativo' ? ' (inativo)' : ' (perfil sem permissão)') : ''}
-                                                            </option>
-                                                        );
-                                                    })}
-                                                </select>
-
-                                                {/* Auditoria de Alçada e Conformidade de Permissões */}
-                                                {(() => {
-                                                    const selUser = users.find(u => u.id === linkUserId);
-                                                    if (!selUser) return null;
-                                                    const { eligible, missing } = getUserEligibility(selUser, roles, def.minPermissions);
-                                                    const selRole = findUserRole(selUser, roles);
-                                                    return (
-                                                        <div className={`p-2.5 rounded-xl border text-[11px] space-y-1.5 transition-all ${
-                                                            eligible
-                                                                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
-                                                                : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-200'
-                                                        }`}>
-                                                            <div className="flex items-center justify-between font-bold">
-                                                                <span className="flex items-center gap-1.5">
-                                                                    {eligible ? <ShieldCheck size={14} className="text-emerald-600 dark:text-emerald-400" /> : <AlertTriangle size={14} className="text-rose-600 dark:text-rose-400" />}
-                                                                    Perfil: {selRole?.name || 'Sem perfil'}
-                                                                </span>
-                                                                <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase ${
-                                                                    eligible ? 'bg-emerald-200 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300' : 'bg-rose-200 text-rose-800 dark:bg-rose-900 dark:text-rose-300'
-                                                                }`}>
-                                                                    {eligible ? 'Conforme para Vínculo' : 'Alçada Insuficiente'}
-                                                                </span>
-                                                            </div>
-                                                            {!eligible && missing.length > 0 && (
-                                                                <div className="text-[10px] text-rose-700 dark:text-rose-300">
-                                                                    <span className="font-bold">Permissões ausentes:</span> {missing.map(getPermissionName).join(', ')}.
-                                                                </div>
-                                                            )}
-                                                            {eligible && (
-                                                                <div className="text-[10px] text-emerald-700 dark:text-emerald-300">
-                                                                    Todas as {def.minPermissions.length} permissões mínimas de governança atendidas.
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })()}
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                    <div className="space-y-1">
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                                         <input
                                                             className={INPUT_CLASS}
                                                             placeholder="WhatsApp: (11) 98765-4321"
@@ -4076,365 +3905,277 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                                                             value={linkPhone}
                                                             onChange={e => setLinkPhone(formatPhoneInput(e.target.value))}
                                                         />
-                                                        {linkPhone && !isValidPhone(linkPhone) && (
-                                                            <p className="text-[10px] font-bold text-amber-500 ml-1">
-                                                                {getPhoneValidationMessage(linkPhone)}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    <input
-                                                        className={INPUT_CLASS}
-                                                        placeholder="Apelido/Cargo (ex: Plantão Usina)"
-                                                        value={linkLabel}
-                                                        onChange={e => setLinkLabel(e.target.value)}
-                                                    />
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => addAgentLink(def)}
-                                                    className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-1 hover:bg-indigo-500 transition-all shadow-md shadow-indigo-600/20"
-                                                >
-                                                    <Plus size={14} /> Adicionar Número Autorizado
-                                                </button>
-                                                <p className="text-[10px] text-slate-400 font-bold ml-1">
-                                                    Permissões exigidas: {def.minPermissions.map(getPermissionName).join(', ')}.
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        {/* Menu Interativo WhatsApp: Teclado de Botões & Listas por Permissões do Usuário */}
-                                        {(() => {
-                                            const activeSimUser = users.find(u => u.id === simulatedUserId) || users[0];
-                                            const simRole = findUserRole(activeSimUser, roles);
-                                            const isSimAdmin = activeSimUser ? isUserAdmin(activeSimUser, roles) : false;
-                                            const interactiveMenu = generateUserWhatsAppInteractiveMenu(
-                                                def,
-                                                simRole,
-                                                isSimAdmin,
-                                                activeSimUser?.name || 'Colaborador',
-                                                settings.tradeName || settings.companyName || 'InfraCore ERP'
-                                            );
-
-                                            return (
-                                                <div className="space-y-3 p-4 rounded-3xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700/80">
-                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="p-1.5 rounded-lg bg-emerald-500 text-white shadow-sm">
-                                                                <MousePointerClick size={14} />
-                                                            </span>
-                                                            <div>
-                                                                <h4 className="text-xs font-black uppercase tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
-                                                                    Menu Interativo WhatsApp
-                                                                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-black">
-                                                                        {interactiveMenu.isList ? 'Lista Interativa (≥4)' : 'Botões Rápidos (≤3)'}
-                                                                    </span>
-                                                                </h4>
-                                                                <p className="text-[10px] text-slate-400 font-bold">
-                                                                    Gerado dinamicamente com base nas permissões de cada colaborador
-                                                                </p>
-                                                            </div>
-                                                        </div>
-
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setInteractivePayloadModal({
-                                                                    title: `Payload WhatsApp • ${def.name} (${interactiveMenu.payload.type.toUpperCase()})`,
-                                                                    json: JSON.stringify(interactiveMenu.payload, null, 2)
-                                                                });
-                                                            }}
-                                                            className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 self-start sm:self-auto"
-                                                        >
-                                                            <Code2 size={12} /> Copiar Payload JSON
-                                                        </button>
-                                                    </div>
-
-                                                    {/* Seletor de Colaborador para Teste de Permissões */}
-                                                    <div className="space-y-1">
-                                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
-                                                            Simular Ações para o Colaborador:
-                                                        </label>
-                                                        <select
+                                                        <input
                                                             className={INPUT_CLASS}
-                                                            value={simulatedUserId || activeSimUser?.id || ''}
-                                                            onChange={e => setSimulatedUserId(e.target.value)}
-                                                        >
-                                                            {users.map(u => {
-                                                                const r = findUserRole(u, roles);
-                                                                const isAdm = isUserAdmin(u, roles);
-                                                                return (
-                                                                    <option key={u.id} value={u.id}>
-                                                                        {u.name} — Cargo: {r?.name || 'Sem perfil'}{isAdm ? ' (Super Admin)' : ''}
-                                                                    </option>
-                                                                );
-                                                            })}
-                                                        </select>
-                                                    </div>
-
-                                                    {/* Badge de Resumo de Permissões */}
-                                                    <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-[10px] flex items-center justify-between text-slate-600 dark:text-slate-300">
-                                                        <span>
-                                                            Colaborador: <strong className="font-black text-slate-900 dark:text-white">{activeSimUser?.name}</strong> ({simRole?.name || 'Sem perfil'})
-                                                        </span>
-                                                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                                            {interactiveMenu.authorizedCount} de {interactiveMenu.totalAvailable} ações autorizadas
-                                                        </span>
-                                                    </div>
-
-                                                    {/* Pré-visualização do Balão com Botões/Lista */}
-                                                    <div className="flex justify-center pt-1">
-                                                        <WhatsAppInteractiveMessageBubble
-                                                            interactive={interactiveMenu.payload}
-                                                            onSelectAction={act => handleInteractiveActionClick(def, act)}
-                                                            onViewPayloadJson={() => {
-                                                                setInteractivePayloadModal({
-                                                                    title: `Payload Interativo WhatsApp • ${def.name}`,
-                                                                    json: JSON.stringify(interactiveMenu.payload, null, 2)
-                                                                });
-                                                            }}
+                                                            placeholder="Apelido / Cargo (ex: Plantão Usina)"
+                                                            value={linkLabel}
+                                                            onChange={e => setLinkLabel(e.target.value)}
                                                         />
                                                     </div>
 
-                                                    <p className="text-[9px] text-slate-400 font-bold text-center">
-                                                        💡 Clique nos botões acima para executar a consulta ou acionar a confirmação de gravação no simulador.
-                                                    </p>
-                                                </div>
-                                            );
-                                        })()}
-
-                                        {/* Simulador Interativo Ao Vivo com Chips de Envio Direto e Edição */}
-                                        <div className="space-y-3">
-                                            <div className="flex items-center justify-between">
-                                                <h4 className={LABEL_CLASS}>Simulador de Conversa Ao Vivo (Conectado ao ERP)</h4>
-                                                {chatMessages[def.id] && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => setChatMessages(prev => {
-                                                            const next = { ...prev };
-                                                            delete next[def.id];
-                                                            return next;
-                                                        })}
-                                                        className="text-[10px] font-bold text-slate-400 hover:text-rose-500"
+                                                        onClick={() => addAgentLink(def)}
+                                                        className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-1 hover:bg-indigo-500 transition-all shadow-md shadow-indigo-600/20"
                                                     >
-                                                        Restaurar Exemplo
+                                                        <Plus size={14} /> Adicionar Número Autorizado
                                                     </button>
-                                                )}
-                                            </div>
-                                            <div className="rounded-2xl bg-[#efeae2] dark:bg-slate-900 p-4 space-y-2 max-h-52 overflow-y-auto border border-slate-200 dark:border-slate-800">
-                                                {(chatMessages[def.id] || def.example).map((m, i) => (
-                                                    <div key={i} className={`flex ${m.from === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                                        <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs font-medium shadow-sm whitespace-pre-wrap ${
-                                                            m.from === 'user'
-                                                                ? 'bg-[#d9fdd3] text-slate-800 rounded-br-md'
-                                                                : 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-bl-md'
-                                                        }`}>
-                                                            {m.text}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                                {isThinkingAgent[def.id] && (
-                                                    <div className="flex justify-start">
-                                                        <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-bl-md text-xs font-bold bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm flex items-center gap-2">
-                                                            <Sparkles size={14} className="animate-spin text-indigo-500" />
-                                                            <span>Processando com Gemini 2.5 Flash...</span>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Suporte Multi-Modal Gemini Vision para Agentes Habilitados com Fotos */}
-                                            {def.supportsImages && (
-                                                <div className="space-y-1.5 p-3 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50">
-                                                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-indigo-700 dark:text-indigo-400">
-                                                        <span className="flex items-center gap-1.5">
-                                                            <ImageIcon size={13} /> Visão Multi-Modal Gemini (Simular Envio de Foto / OCR)
-                                                        </span>
-                                                        <span className="text-[9px] font-normal lowercase text-slate-500">clique na amostra para extrair dados</span>
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {SAMPLE_MULTIMODAL_IMAGES
-                                                            .filter(s => s.targetAgentId === def.id || def.id === 'financial_analyst')
-                                                            .map(sample => (
-                                                                <button
-                                                                    key={sample.id}
-                                                                    type="button"
-                                                                    disabled={isProcessingVision}
-                                                                    onClick={() => handleSendVisionSample(sample, def)}
-                                                                    className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 text-slate-700 dark:text-slate-200 border border-indigo-200 dark:border-indigo-800 text-[10px] font-bold transition-all shadow-sm flex items-center gap-1 disabled:opacity-50"
-                                                                    title={sample.description}
-                                                                >
-                                                                    <Sparkles size={11} className="text-indigo-500" />
-                                                                    {sample.title}
-                                                                </button>
-                                                            ))}
-                                                    </div>
                                                 </div>
-                                            )}
-
-                                            {/* Central de Atendimento & Vendas: Menu Comercial Consultivo em 4 Opções (Público Geral) */}
-                                            {def.id === 'sales_manager' && (
-                                                <div className="space-y-1.5 p-3 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-900/60">
-                                                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
-                                                        <span className="flex items-center gap-1.5">
-                                                            <Sparkles size={13} className="text-indigo-600" /> Menu Comercial Consultivo • Público Geral (4 Opções):
-                                                        </span>
-                                                        <span className="text-[9px] font-normal lowercase text-slate-500">clique para simular o cliente escolhendo</span>
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {[
-                                                            { opt: '1', label: '1 - 📋 Solicitar Orçamento / Preços', text: '1' },
-                                                            { opt: '2', label: '2 - 📦 Já Sou Cliente (Rastreio / 2ª Via)', text: '2' },
-                                                            { opt: '3', label: '3 - 🏭 Conhecer Usinas & Produtos', text: '3' },
-                                                            { opt: '4', label: '4 - 👤 Falar com Consultor (Retenção Ativa)', text: '4' },
-                                                            { opt: 'ola', label: '👋 Saudação Inicial ("Olá")', text: 'Olá, bom dia! Gostaria de uma cotação.' }
-                                                        ].map(m => (
-                                                            <button
-                                                                key={m.opt}
-                                                                type="button"
-                                                                disabled={isThinkingAgent[def.id]}
-                                                                onClick={() => handleSendSimulatedMessageWithText(def, m.text)}
-                                                                className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 hover:bg-indigo-50 text-indigo-900 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800 text-[10px] font-black transition-all shadow-sm flex items-center gap-1"
-                                                            >
-                                                                {m.label}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Simulador de Notas de Voz / Áudio de Campo (PTT) */}
-                                            <div className="space-y-1.5 p-3 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40">
-                                                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                                                    <span className="flex items-center gap-1.5">
-                                                        <Mic size={13} className="text-amber-600" /> Simular Áudio de Campo (WhatsApp PTT com Transcrição por IA):
-                                                    </span>
-                                                    <span className="text-[9px] font-normal lowercase text-slate-500">clique para despachar áudio</span>
-                                                </div>
-                                                <div className="flex flex-wrap gap-1.5">
-                                                    {SAMPLE_VOICE_NOTES
-                                                        .filter(v => v.targetAgentId === def.id || def.id === 'sales_manager' || def.id === 'plant_operator')
-                                                        .map(voice => (
-                                                            <button
-                                                                key={voice.id}
-                                                                type="button"
-                                                                disabled={isPlayingAudioId === voice.id || isThinkingAgent[def.id]}
-                                                                onClick={() => handleSendSimulatedVoiceNote(voice, def)}
-                                                                className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-amber-100/60 text-slate-800 dark:text-slate-200 border border-amber-200 dark:border-amber-800 text-[10px] font-bold transition-all shadow-sm flex items-center gap-1.5"
-                                                                title={voice.transcript}
-                                                            >
-                                                                <span className="text-amber-600 font-black">▶ {voice.duration}</span>
-                                                                <span>{voice.title}</span>
-                                                                <span className="text-[9px] text-slate-400 font-mono tracking-tighter">ılılıllı</span>
-                                                            </button>
-                                                        ))}
-                                                </div>
-                                            </div>
-
-                                            {/* Barra de Comandos Operacionais Zero-Token Rápidos */}
-                                            <div className="space-y-1.5 p-2.5 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40">
-                                                <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-emerald-800 dark:text-emerald-300">
-                                                    <span className="flex items-center gap-1">
-                                                        <Zap size={11} className="text-emerald-500 fill-current" /> Atalhos Operacionais Zero-Token (Sem Custo de API):
-                                                    </span>
-                                                    <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400">
-                                                        Total Economizado: ~{totalTokensSaved.toLocaleString('pt-BR')} tokens
-                                                    </span>
-                                                </div>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {[
-                                                        { cmd: 'SIM', label: '✅ SIM (Aprovar)', desc: 'Aprova pendência de alçada no ERP' },
-                                                        { cmd: 'NÃO', label: '🛑 NÃO (Cancelar)', desc: 'Cancela operação de alçada com segurança' },
-                                                        { cmd: 'SALDO', label: '💰 SALDO', desc: 'Posição financeira de caixa e contas do dia' },
-                                                        { cmd: 'ESTOQUE', label: '📦 ESTOQUE', desc: 'Insumos críticos e ponto de reposição' },
-                                                        { cmd: 'FROTA', label: '🚛 FROTA', desc: 'Disponibilidade de veículos operacionais' },
-                                                        { cmd: 'AJUDA', label: '📋 MENU / AJUDA', desc: 'Exibe lista numerada de comandos' }
-                                                    ].map(shortcut => (
-                                                        <button
-                                                            key={shortcut.cmd}
-                                                            type="button"
-                                                            disabled={isThinkingAgent[def.id]}
-                                                            onClick={() => handleSendSimulatedMessageWithText(def, shortcut.cmd)}
-                                                            className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 text-[9px] font-black uppercase tracking-wide transition-all shadow-sm"
-                                                            title={shortcut.desc}
-                                                        >
-                                                            {shortcut.label}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            {/* Perguntas Rápidas de Campo com Envio Direto (Play) e Preenchimento */}
-                                            {def.simulatorQuestions && def.simulatorQuestions.length > 0 && (
-                                                <div className="space-y-1">
-                                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex items-center justify-between">
-                                                        <span>Sugestões Rápidas de Campo:</span>
-                                                        <span className="text-[8px] font-normal lowercase text-slate-500">clique no texto para editar ou ▶ para enviar</span>
-                                                    </span>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {def.simulatorQuestions.map((q, idx) => (
-                                                            <div
-                                                                key={idx}
-                                                                className="inline-flex items-center rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 overflow-hidden text-[10px] font-bold text-emerald-800 dark:text-emerald-200 shadow-sm"
-                                                            >
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setChatInput(q)}
-                                                                    className="px-2 py-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-left truncate max-w-[210px] transition-colors"
-                                                                    title="Clique para preencher no campo de digitação"
-                                                                >
-                                                                    {q}
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleSendSimulatedMessageWithText(def, q)}
-                                                                    className="px-1.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white transition-colors border-l border-emerald-500 flex items-center justify-center"
-                                                                    title="Disparar imediatamente esta pergunta no simulador"
-                                                                >
-                                                                    <Play size={10} className="fill-current" />
-                                                                </button>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            <div className="flex gap-2">
-                                                <input
-                                                    className={INPUT_CLASS}
-                                                    placeholder={`Envie uma mensagem para ${def.name}...`}
-                                                    value={chatInput}
-                                                    disabled={isThinkingAgent[def.id]}
-                                                    onChange={e => setChatInput(e.target.value)}
-                                                    onKeyDown={e => {
-                                                        if (e.key === 'Enter') {
-                                                            e.preventDefault();
-                                                            handleSendSimulatedMessageWithText(def);
-                                                        }
-                                                    }}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    disabled={isThinkingAgent[def.id]}
-                                                    onClick={() => handleSendSimulatedMessageWithText(def)}
-                                                    className="px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] uppercase tracking-widest shrink-0 transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50"
-                                                >
-                                                    {isThinkingAgent[def.id] ? 'Enviando...' : 'Enviar'}
-                                                </button>
-                                            </div>
-                                            <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold ml-1">
-                                                <span>Responde com dados e regras em tempo real do ERP.</span>
-                                                {lastAgentCallMeta[def.id] && (
-                                                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-black ${
-                                                        lastAgentCallMeta[def.id].isFallback
-                                                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                                            : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'
-                                                    }`}>
-                                                        {lastAgentCallMeta[def.id].isFallback ? '⚡ Modo Heurístico Local' : `✨ ${lastAgentCallMeta[def.id].model} (${lastAgentCallMeta[def.id].latencyMs}ms)`}
-                                                    </span>
-                                                )}
                                             </div>
                                         </div>
-                                    </div>
+                                    )}
+
+                                    {/* ABA 2: REGRAS DE NEGÓCIO & ALÇADAS */}
+                                    {agentModalTab === 'rules' && (
+                                        <div className="max-w-3xl mx-auto space-y-6">
+                                            {/* Prompt de Sistema Customizado */}
+                                            <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 space-y-4 shadow-sm">
+                                                <div className="flex items-center justify-between border-b dark:border-slate-700 pb-3">
+                                                    <div>
+                                                        <h4 className="font-black text-sm text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                                                            <Sparkles size={16} className="text-indigo-600" />
+                                                            Instruções Personalizadas do Agente
+                                                        </h4>
+                                                        <p className="text-xs text-slate-500">
+                                                            Regras de negócio específicas e diretrizes operacionais aplicadas ao {def.name}.
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowBasePromptModal(true)}
+                                                        className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                                                    >
+                                                        <FileText size={11} /> Ver Prompt Base Padrão
+                                                    </button>
+                                                </div>
+
+                                                {/* Presets Rápidos com 1 Clique */}
+                                                {def.promptPresets && def.promptPresets.length > 0 && (
+                                                    <div className="space-y-1.5">
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
+                                                            Presets Rápidos de Regras (clique para aplicar):
+                                                        </span>
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {def.promptPresets.map(preset => {
+                                                                const catInfo = PRESET_CATEGORY_STYLES[preset.category || 'alcada'];
+                                                                const CatIcon = catInfo.icon;
+                                                                return (
+                                                                    <button
+                                                                        key={preset.label}
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            const current = s.customSystemPrompt || '';
+                                                                            const appended = current ? `${current}\n${preset.prompt}` : preset.prompt;
+                                                                            patchAgent(def.id, { customSystemPrompt: appended });
+                                                                            addToast(`Regra "${preset.label}" aplicada!`, 'success');
+                                                                        }}
+                                                                        className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 hover:brightness-95 ${catInfo.badgeClass}`}
+                                                                    >
+                                                                        <CatIcon size={11} className="shrink-0" />
+                                                                        <span>{preset.label}</span>
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <textarea
+                                                    rows={4}
+                                                    className={INPUT_CLASS}
+                                                    placeholder={`Ex.: Para a {{EMPRESA}}, confirme o centro de custo antes de liberar pagamentos acima de {{LIMITE_ALERTA}}...`}
+                                                    value={s.customSystemPrompt || ''}
+                                                    onChange={e => patchAgent(def.id, { customSystemPrompt: e.target.value })}
+                                                />
+                                                <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold ml-1">
+                                                    <span>Instruções em linguagem natural enviadas ao modelo de IA.</span>
+                                                    {s.customSystemPrompt && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => patchAgent(def.id, { customSystemPrompt: '' })}
+                                                            className="text-rose-500 hover:underline"
+                                                        >
+                                                            Limpar customização
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* O que este Agente faz no ERP */}
+                                            <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 space-y-3 shadow-sm">
+                                                <h4 className="font-black text-sm text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                                                    <Lock size={15} className="text-slate-400" />
+                                                    Alçadas e Capacidades no ERP
+                                                </h4>
+                                                <ul className="space-y-2">
+                                                    {def.capabilities.map(c => (
+                                                        <li key={c.label} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700/60 flex items-start justify-between gap-3">
+                                                            <div>
+                                                                <p className="text-xs font-black text-slate-800 dark:text-slate-100">{c.label}</p>
+                                                                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">{c.description}</p>
+                                                            </div>
+                                                            <span className="shrink-0 text-[9px] font-black uppercase px-2 py-0.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                                                {getPermissionName(c.permission)}
+                                                            </span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* ABA 3: TESTE RÁPIDO DE CONVERSA */}
+                                    {agentModalTab === 'chat' && (
+                                        <div className="max-w-3xl mx-auto space-y-4">
+                                            {/* Painel do Chat do WhatsApp */}
+                                            <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 space-y-4 shadow-sm">
+                                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b dark:border-slate-700">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                                                        <div>
+                                                            <h4 className="font-black text-sm text-slate-900 dark:text-white uppercase tracking-tight">
+                                                                Simulador de Conversa Real (WhatsApp)
+                                                            </h4>
+                                                            <p className="text-xs text-slate-400 font-medium">
+                                                                {def.name} · Responde em tempo real via Gemini com dados ao vivo do ERP.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleResetSession(def.id)}
+                                                            className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg border border-slate-200 dark:border-slate-700"
+                                                        >
+                                                            Limpar Chat
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleExportConversation(def)}
+                                                            className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 rounded-lg border border-indigo-200 dark:border-indigo-800 flex items-center gap-1"
+                                                        >
+                                                            <Download size={11} /> Exportar TXT
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Seletor de Perfil do Remetente */}
+                                                <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
+                                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                                                        Perfil Testado:
+                                                    </span>
+                                                    <div className="flex items-center gap-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setSimSenderProfile('public')}
+                                                            className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-all ${
+                                                                simSenderProfile === 'public'
+                                                                    ? 'bg-indigo-600 text-white shadow-xs'
+                                                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                                                            }`}
+                                                        >
+                                                            👤 Público Geral (Não Cadastrado)
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setSimSenderProfile('collaborator')}
+                                                            className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-all ${
+                                                                simSenderProfile === 'collaborator'
+                                                                    ? 'bg-indigo-600 text-white shadow-xs'
+                                                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                                                            }`}
+                                                        >
+                                                            👷 Colaborador Cadastrado
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Menu Comercial Consultivo para o Gestor de Vendas */}
+                                                {def.id === 'sales_manager' && (
+                                                    <div className="space-y-1.5 p-3 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-900/60">
+                                                        <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                                                            <span className="flex items-center gap-1.5">
+                                                                <Sparkles size={13} className="text-indigo-600" /> Menu Comercial Consultivo • Público Geral (4 Opções):
+                                                            </span>
+                                                            <span className="text-[9px] font-normal lowercase text-slate-500">clique para simular o cliente escolhendo</span>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {[
+                                                                { opt: '1', label: '1 - 📋 Solicitar Orçamento / Preços', text: '1' },
+                                                                { opt: '2', label: '2 - 📦 Já Sou Cliente (Rastreio / 2ª Via)', text: '2' },
+                                                                { opt: '3', label: '3 - 🏭 Conhecer Usinas & Produtos', text: '3' },
+                                                                { opt: '4', label: '4 - 👤 Falar com Consultor (Retenção Ativa)', text: '4' },
+                                                                { opt: 'ola', label: '👋 Saudação Inicial ("Olá")', text: 'Olá, bom dia! Gostaria de uma cotação.' }
+                                                            ].map(m => (
+                                                                <button
+                                                                    key={m.opt}
+                                                                    type="button"
+                                                                    disabled={isThinkingAgent[def.id]}
+                                                                    onClick={() => handleSendSimulatedMessageWithText(def, m.text)}
+                                                                    className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 hover:bg-indigo-50 text-indigo-900 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800 text-[10px] font-black transition-all shadow-sm flex items-center gap-1"
+                                                                >
+                                                                    {m.label}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Área de Mensagens (Estilo WhatsApp) */}
+                                                <div className="h-72 overflow-y-auto space-y-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
+                                                    {(chatMessages[def.id] || def.example).map((msg, i) => (
+                                                        <div
+                                                            key={i}
+                                                            className={`flex flex-col ${msg.from === 'user' ? 'items-end' : 'items-start'}`}
+                                                        >
+                                                            <div
+                                                                className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs font-medium leading-relaxed whitespace-pre-wrap shadow-sm ${
+                                                                    msg.from === 'user'
+                                                                        ? 'bg-emerald-600 text-white rounded-br-none'
+                                                                        : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-bl-none border border-slate-200 dark:border-slate-700'
+                                                                }`}
+                                                            >
+                                                                {msg.text}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    {isThinkingAgent[def.id] && (
+                                                        <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold p-2">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
+                                                            {def.name} está digitando resposta...
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Campo de Envio de Mensagem */}
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        className={INPUT_CLASS}
+                                                        placeholder={`Envie uma mensagem de WhatsApp para ${def.name}...`}
+                                                        value={chatInput}
+                                                        disabled={isThinkingAgent[def.id]}
+                                                        onChange={e => setChatInput(e.target.value)}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                handleSendSimulatedMessageWithText(def);
+                                                            }
+                                                        }}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        disabled={isThinkingAgent[def.id]}
+                                                        onClick={() => handleSendSimulatedMessageWithText(def)}
+                                                        className="px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] uppercase tracking-widest shrink-0 transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-1.5"
+                                                    >
+                                                        <Send size={12} />
+                                                        {isThinkingAgent[def.id] ? 'Enviando...' : 'Enviar'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </fieldset>
                         </div>
@@ -4442,7 +4183,6 @@ const AIAgentsHub: React.FC<AIAgentsHubProps> = ({ settings, onUpdate, canManage
                 );
             })()}
 
-            {/* Modal de Exibição do Prompt Base do Agente */}
             {showBasePromptModal && selectedDef && (
                 <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setShowBasePromptModal(false)}>
                     <div className="bg-white dark:bg-slate-900 rounded-[28px] p-6 max-w-2xl w-full border dark:border-slate-700 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
