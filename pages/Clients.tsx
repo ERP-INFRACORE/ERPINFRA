@@ -794,6 +794,38 @@ const Clients = () => {
     }
   };
 
+  const [apiConfig, setApiConfig] = useState<any>(() => {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('infracore_fleet_api_config');
+        if (saved) return JSON.parse(saved);
+        const legacyToken = localStorage.getItem('infracore_apibrasil_token') || '';
+        return { provider: 'auto', apiBrasilToken: legacyToken, wdapiToken: '', fipeApiToken: '' };
+      } catch {
+        return { provider: 'auto', apiBrasilToken: '', wdapiToken: '', fipeApiToken: '' };
+      }
+    }
+    return { provider: 'auto', apiBrasilToken: '', wdapiToken: '', fipeApiToken: '' };
+  });
+
+  const [tempApiConfig, setTempApiConfig] = useState<any>(apiConfig);
+
+  const handleSaveApiConfig = () => {
+    try {
+      localStorage.setItem('infracore_fleet_api_config', JSON.stringify(tempApiConfig));
+      const cleanToken = (tempApiConfig.apiBrasilToken || '').trim();
+      if (cleanToken) {
+        localStorage.setItem('infracore_apibrasil_token', cleanToken);
+        setApiBrasilToken(cleanToken);
+      }
+      setApiConfig(tempApiConfig);
+      addToast('Configurações salvas com sucesso!', 'success');
+      setIsApiTokenModalOpen(false);
+    } catch {
+      addToast('Erro ao salvar as configurações no navegador.', 'error');
+    }
+  };
+
   const toInputDate = (dateStr?: string) => {
     if (!dateStr) return '';
     try {
@@ -952,7 +984,7 @@ const Clients = () => {
       return;
     }
 
-    const token = (apiBrasilToken || localStorage.getItem('infracore_apibrasil_token') || '').trim();
+    const token = (apiBrasilToken || apiConfig?.apiBrasilToken || localStorage.getItem('infracore_apibrasil_token') || '').trim();
     if (!token) {
       addToast('Configure o token da APIBrasil no botão de engrenagem ao lado da placa.', 'warning', 6000);
       return;
@@ -1968,6 +2000,7 @@ const Clients = () => {
                               <button
                                 type="button"
                                 onClick={() => {
+                                  setTempApiConfig(apiConfig);
                                   setTempApiToken(apiBrasilToken);
                                   setIsApiTokenModalOpen(true);
                                 }}
@@ -2433,7 +2466,7 @@ const Clients = () => {
                   value={tempApiConfig.provider || 'auto'}
                   onChange={e => setTempApiConfig({ ...tempApiConfig, provider: e.target.value })}
                 >
-                  <option value="auto">⚡ Modo Cascata Inteligente (Grátis Primeiro -> Chaves)</option>
+                  <option value="auto">⚡ Modo Cascata Inteligente (Grátis Primeiro → Chaves)</option>
                   <option value="fipe_api">🟢 Fipe.api.br (500 consultas/dia 100% Grátis)</option>
                   <option value="fipex">🟢 FipeX / Tabela Fipe Livre (100% Grátis & Aberta)</option>
                   <option value="senatran_geo">🟢 SENATRAN Faixas Geográficas (100% Grátis & Offline)</option>
