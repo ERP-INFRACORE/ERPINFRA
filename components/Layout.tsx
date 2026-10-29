@@ -56,6 +56,7 @@ import LayoutDesignerDrawer, {
   AccentTheme,
   ThemeMode,
   RadiusMode,
+  ButtonStyleMode,
   FontMode,
   TextScaleMode,
   CardShadowMode
@@ -178,6 +179,18 @@ const Layout = () => {
     else if (prefs.borderRadius === 'pill') root.classList.add('radius-pill');
     else root.classList.add('radius-rounded');
 
+    // Button Style Dynamic Classes (Inspirados nos maiores ERPs mundiais)
+    root.classList.remove('btn-style-fiori', 'btn-style-redwood', 'btn-style-industrial', 'btn-style-modern');
+    if (prefs.buttonStyle === 'redwood-solid') {
+      root.classList.add('btn-style-redwood');
+    } else if (prefs.buttonStyle === 'industrial-sharp') {
+      root.classList.add('btn-style-industrial');
+    } else if (prefs.buttonStyle === 'modern-soft') {
+      root.classList.add('btn-style-modern');
+    } else {
+      root.classList.add('btn-style-fiori');
+    }
+
     // Shadow Classes
     root.classList.remove('shadow-none-mode', 'shadow-strong-mode');
     if (prefs.cardShadow === 'none') root.classList.add('shadow-none-mode');
@@ -192,16 +205,21 @@ const Layout = () => {
       root.style.fontSize = '100%';
     }
 
-    // Font Family
+    // Font Family & Tabular Numerals (Inter, Jakarta, Plex, Roboto, JetBrains Mono)
+    root.style.fontFeatureSettings = '"tnum" 1, "cv02" 1, "cv03" 1, "cv04" 1';
     if (prefs.fontFamily === 'mono') {
-      root.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+      root.style.fontFamily = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
     } else if (prefs.fontFamily === 'inter') {
-      root.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      root.style.fontFamily = '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    } else if (prefs.fontFamily === 'jakarta') {
+      root.style.fontFamily = '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    } else if (prefs.fontFamily === 'plex') {
+      root.style.fontFamily = '"IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     } else {
-      root.style.fontFamily = '"Roboto", sans-serif';
+      root.style.fontFamily = '"Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     }
 
-    // Dynamic Style Tag Injection for OLED & Special Overrides
+    // Dynamic Style Tag Injection for OLED, Button Formats & Special Overrides
     let styleTag = document.getElementById('infracore-dynamic-theme-css');
     if (!styleTag) {
       styleTag = document.createElement('style');
@@ -227,6 +245,24 @@ const Layout = () => {
       }
       .shadow-none-mode .shadow-sm, .shadow-none-mode .shadow-md, .shadow-none-mode .shadow-xl, .shadow-none-mode .shadow-soft {
         box-shadow: none !important;
+      }
+
+      /* Regras de Estilos de Botão Inspiradas em ERPs Globais */
+      .btn-style-fiori button:not([class*="rounded-full"]):not([class*="p-1"]):not([class*="w-"]):not([class*="h-"]) {
+        border-radius: 4px;
+        letter-spacing: -0.01em;
+      }
+      .btn-style-redwood button:not([class*="rounded-full"]):not([class*="p-1"]):not([class*="w-"]):not([class*="h-"]) {
+        border-radius: 8px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .btn-style-industrial button, .btn-style-industrial input, .btn-style-industrial select {
+        border-radius: 0px !important;
+      }
+      .btn-style-modern button:not([class*="rounded-full"]):not([class*="p-1"]):not([class*="w-"]):not([class*="h-"]) {
+        border-radius: 12px;
+        letter-spacing: 0.01em;
       }
     `;
   }, [prefs]);
@@ -467,7 +503,7 @@ const Layout = () => {
     if (prefs.theme === 'high-contrast') return 'bg-white dark:bg-black text-black dark:text-white';
     if (prefs.visualStyle === 'scada') return 'bg-slate-950 text-slate-100';
     if (prefs.visualStyle === 'bento-glass') {
-      return 'bg-gradient-to-br from-slate-50 via-cyan-50/30 to-indigo-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/30 text-slate-900 dark:text-white';
+      return 'bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white';
     }
     if (prefs.visualStyle === 'minimal-flat') return 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white';
     if (prefs.visualStyle === 'soft-neumorphic') return 'bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-white';
@@ -513,17 +549,17 @@ const Layout = () => {
         <div className="bg-slate-900 text-slate-200 border-b border-slate-800 z-[60] text-xs transition-all">
           <div className={`${containerClass} mx-auto py-2 flex flex-wrap items-center justify-between gap-2`}>
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded-md bg-gradient-to-r from-cyan-500 to-indigo-500 text-white font-black text-[10px] uppercase tracking-wider flex items-center gap-1 shadow-sm">
-                <Sliders size={11} /> Barra de Personalização
+              <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 font-bold text-[10px] uppercase tracking-wider flex items-center gap-1 border border-slate-700">
+                <Sliders size={11} /> Personalização
               </span>
               <button
                 type="button"
                 onClick={() => setIsDesignerOpen(true)}
-                className="px-2.5 py-0.5 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[10px] uppercase tracking-wider flex items-center gap-1 shadow-xs transition-colors"
-                title="Abrir Studio de Designer Completo com todas as opções visuais"
+                className="px-2.5 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-[10px] uppercase tracking-wider flex items-center gap-1 transition-colors"
+                title="Abrir Studio de Designer Completo"
               >
                 <Palette size={11} />
-                <span>Studio Completo</span>
+                <span>Studio</span>
               </button>
             </div>
 
@@ -543,7 +579,7 @@ const Layout = () => {
                     onClick={() => updatePref('navMode', mode.id as NavMode)}
                     className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all ${
                       prefs.navMode === mode.id
-                        ? 'bg-cyan-600 text-white shadow-sm'
+                        ? 'bg-slate-100 text-slate-900 shadow-xs'
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -557,8 +593,7 @@ const Layout = () => {
                 <span className="text-[10px] font-bold text-slate-400 px-2 hidden md:inline">Visual:</span>
                 {[
                   { id: 'original', label: 'Original' },
-                  { id: 'scada', label: 'Industrial' },
-                  { id: 'bento-glass', label: 'Bento Glass' },
+                  { id: 'scada', label: 'Técnico' },
                   { id: 'minimal-flat', label: 'Flat' }
                 ].map(st => (
                   <button
@@ -567,7 +602,7 @@ const Layout = () => {
                     onClick={() => updatePref('visualStyle', st.id as VisualStyle)}
                     className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all ${
                       prefs.visualStyle === st.id
-                        ? 'bg-indigo-600 text-white shadow-sm'
+                        ? 'bg-slate-100 text-slate-900 shadow-xs'
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -590,7 +625,7 @@ const Layout = () => {
                     onClick={() => updatePref('density', d.id as DensityMode)}
                     className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all ${
                       prefs.density === d.id
-                        ? 'bg-emerald-600 text-white shadow-sm'
+                        ? 'bg-slate-100 text-slate-900 shadow-xs'
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -792,14 +827,14 @@ const Layout = () => {
                 onClick={() => setIsNotificationsOpen(prev => !prev)}
                 className={`relative p-2 rounded-xl border transition-all flex items-center justify-center ${
                   isNotificationsOpen
-                    ? 'bg-rose-50 dark:bg-rose-950/50 border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-300'
-                    : 'bg-slate-100 dark:bg-slate-700/70 border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600'
+                    : 'bg-slate-100 dark:bg-slate-700/70 border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                 }`}
-                title="Abrir Janela Completa de Notificações"
+                title="Abrir Central de Notificações"
               >
                 <Bell size={18} />
                 {systemNotifications.length > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-black flex items-center justify-center shadow-sm">
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center shadow-xs">
                     {systemNotifications.length}
                   </span>
                 )}
@@ -1049,18 +1084,18 @@ const Layout = () => {
             {/* Header da Janela de Notificações */}
             <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                <div className="p-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-300">
                   <Bell size={18} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-black uppercase tracking-wider">Central de Notificações</h3>
-                    <span className="px-2 py-0.5 text-[10px] font-black rounded-full bg-rose-600 text-white">
-                      {systemNotifications.length}
+                    <h3 className="text-sm font-bold uppercase tracking-wider">Central de Alertas</h3>
+                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 border border-slate-700 text-slate-300">
+                      {systemNotifications.length} pendências
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400">
-                    Alertas operacionais, estoque, financeiro e frota em tempo real
+                    Monitoramento operacional, financeiro e insumos
                   </p>
                 </div>
               </div>
@@ -1107,8 +1142,8 @@ const Layout = () => {
                   onClick={() => setNotifFilter(tab.id as any)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
                     notifFilter === tab.id
-                      ? 'bg-slate-900 dark:bg-cyan-600 text-white shadow-xs'
-                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-cyan-400'
+                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-400'
                   }`}
                 >
                   {tab.label}
@@ -1120,9 +1155,9 @@ const Layout = () => {
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {filteredNotifications.length === 0 ? (
                 <div className="py-12 text-center space-y-2">
-                  <CheckCircle2 size={40} className="text-emerald-500 mx-auto" />
+                  <CheckCircle2 size={36} className="text-slate-400 mx-auto" />
                   <p className="text-sm font-bold text-slate-800 dark:text-white">
-                    Nenhuma pendência nesta categoria!
+                    Nenhuma pendência nesta categoria
                   </p>
                   <p className="text-xs text-slate-500">
                     Todos os indicadores monitorados estão dentro dos parâmetros normais.
@@ -1136,37 +1171,34 @@ const Layout = () => {
                       navigate(item.path);
                       setIsNotificationsOpen(false);
                     }}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer hover:shadow-md flex flex-col gap-2 ${
-                      item.severity === 'high'
-                        ? 'bg-rose-50/70 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/60 hover:border-rose-400'
-                        : item.severity === 'medium'
-                        ? 'bg-amber-50/70 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60 hover:border-amber-400'
-                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-cyan-400'
-                    }`}
+                    className="p-4 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/90 hover:border-slate-300 dark:hover:border-slate-600 transition-all cursor-pointer shadow-2xs hover:shadow-xs flex flex-col gap-2.5"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <span
-                        className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
-                          item.severity === 'high'
-                            ? 'bg-rose-600 text-white'
-                            : item.severity === 'medium'
-                            ? 'bg-amber-500 text-slate-950'
-                            : 'bg-cyan-600 text-white'
-                        }`}
-                      >
-                        {item.badge}
-                      </span>
-                      <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400 flex items-center gap-1 shrink-0">
-                        Abrir aba <ArrowRight size={13} />
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-2 h-2 rounded-full shrink-0 ${
+                            item.severity === 'high'
+                              ? 'bg-rose-500'
+                              : item.severity === 'medium'
+                              ? 'bg-amber-500'
+                              : 'bg-slate-400'
+                          }`}
+                        />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          {item.badge}
+                        </span>
+                      </div>
+                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 shrink-0">
+                        Abrir <ArrowRight size={12} />
                       </span>
                     </div>
-                    <h4 className="text-sm font-black text-slate-900 dark:text-white leading-snug">
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white leading-snug">
                       {item.title}
                     </h4>
                     <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                       {item.description}
                     </p>
-                    <div className="text-xs font-mono font-bold text-slate-700 dark:text-slate-200 bg-white/80 dark:bg-slate-900/70 px-3 py-2 rounded-xl border border-slate-200/70 dark:border-slate-700/70 break-words">
+                    <div className="text-xs font-mono text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-200/70 dark:border-slate-700/60 break-words">
                       {item.detail}
                     </div>
                   </div>
@@ -1205,14 +1237,14 @@ const Layout = () => {
         <div className="fixed inset-0 z-[160] bg-black/60 backdrop-blur-xs flex items-start justify-center pt-16 sm:pt-24 p-4">
           <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in zoom-in-95 duration-150">
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
-              <Search size={18} className="text-cyan-600 shrink-0" />
+              <Search size={18} className="text-slate-400 shrink-0" />
               <input
                 type="text"
                 autoFocus
                 value={globalSearchQuery}
                 onChange={e => setGlobalSearchQuery(e.target.value)}
                 placeholder="Buscar módulo, cliente, placa de veículo ou insumo..."
-                className="w-full bg-transparent text-sm font-bold text-slate-900 dark:text-white outline-none"
+                className="w-full bg-transparent text-sm font-medium text-slate-900 dark:text-white outline-none"
               />
               <button
                 type="button"
@@ -1262,7 +1294,7 @@ const Layout = () => {
                     className="w-full px-3 py-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between text-left transition-colors"
                   >
                     <div>
-                      <span className="px-2 py-0.5 rounded bg-cyan-50 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 text-[10px] font-black uppercase mr-2">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-bold uppercase mr-2 border border-slate-200 dark:border-slate-700">
                         {r.type}
                       </span>
                       <span className="text-xs font-bold text-slate-900 dark:text-white">{r.label}</span>

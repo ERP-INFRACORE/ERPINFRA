@@ -90,7 +90,7 @@ const ToastItem = ({
                             action.onClick();
                             handleClose();
                         }}
-                        className="px-4 py-1.5 bg-indigo-600 text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-indigo-500 transition-colors shadow-sm"
+                        className="px-3.5 py-1.5 bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-bold rounded-lg hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors shadow-2xs"
                     >
                         {action.label}
                     </button>
