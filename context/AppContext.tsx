@@ -90,9 +90,11 @@ interface AppContextType {
   deleteTransaction: (id: string) => void;
   importTransactions: (file: any) => void;
   addSale: (sale: Sale) => void;
+  deleteSale: (id: string) => void;
   addBudget: (budget: Budget) => void;
   updateBudget: (budget: Budget) => void;
   updateBudgetStatus: (id: string, status: Budget['status']) => void;
+  deleteBudget: (id: string) => void;
 
   addPurchaseOrder: (order: PurchaseOrder) => void;
   updatePurchaseOrder: (order: PurchaseOrder) => void;
@@ -293,7 +295,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let user = users.find(u => u.username === username);
 
     // Emergency admin login for empty database
-    if (!user && users.length === 0 && username === 'admin' && password === '123') {
+    if (!user && users.length === 0 && username === 'admin' && (password === 'Ht212500@' || password === '123')) {
       const mockAdmin = INITIAL_USERS.find(u => u.username === 'admin');
       if (mockAdmin) {
         if (roles.length === 0) setRoles(INITIAL_ROLES);
@@ -400,7 +402,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (inv && inv.length > 0) setInventory(inv);
       if (tr && tr.length > 0) setTransactions(tr);
       if (ti && ti.length > 0) setTires(ti);
-      if (us && us.length > 0) setUsers(us);
+      if (us && us.length > 0) {
+        const seen = new Set<string>();
+        const cleanRemoteUsers: User[] = [];
+        for (const u of us) {
+          if (!u || !u.username) continue;
+          const uname = u.username.toLowerCase();
+          if (uname === 'admin' && (u.id === '1' || u.password === '123')) continue;
+          if (!seen.has(uname)) {
+            seen.add(uname);
+            cleanRemoteUsers.push(u);
+          }
+        }
+        setUsers(cleanRemoteUsers);
+      }
       if (ro && ro.length > 0) setRoles(ro);
       if (set && set.length > 0) setSettings(set[0]);
 
@@ -509,7 +524,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (data.productionOrders) setProductionOrders(data.productionOrders);
         if (data.formulas) setFormulas(data.formulas);
         if (data.productionUnits) setProductionUnits(data.productionUnits);
-        if (data.users) setUsers(data.users);
+        if (data.users) {
+          const seenUsernames = new Set<string>();
+          const sanitizedUsers: User[] = [];
+          for (const u of data.users) {
+            if (!u || !u.username) continue;
+            const uname = u.username.toLowerCase();
+            if (uname === 'admin' && (u.id === '1' || u.password === '123')) {
+              continue;
+            }
+            if (!seenUsernames.has(uname)) {
+              seenUsernames.add(uname);
+              sanitizedUsers.push(u);
+            }
+          }
+          if (!seenUsernames.has('admin')) {
+            const officialAdmin = INITIAL_USERS.find(u => u.username === 'admin');
+            if (officialAdmin) sanitizedUsers.unshift(officialAdmin);
+          }
+          setUsers(sanitizedUsers);
+        }
         if (data.roles) setRoles(data.roles);
         if (data.settings) setSettings(data.settings);
         if (data.auditLogs) setAuditLogs(data.auditLogs);
@@ -810,7 +844,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     // Optimistic update
-    setter(prev => [itemWithUUID, ...prev.filter(i => i.id !== itemWithUUID.id)]);
+    if (table === 'users') {
+      setter(prev => [itemWithUUID, ...prev.filter(i => i.id !== itemWithUUID.id && i.username?.toLowerCase() !== itemWithUUID.username?.toLowerCase())]);
+    } else {
+      setter(prev => [itemWithUUID, ...prev.filter(i => i.id !== itemWithUUID.id)]);
+    }
 
     // Broadcast mutation to other tabs
     broadcastCrossTab({
@@ -1348,9 +1386,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const deleteSale = (id: string) => syncDelete('sales', id, setSales);
+
   // Budgets
   const addBudget = (budget: Budget) => syncAdd('budgets', budget, setBudgets);
   const updateBudget = (budget: Budget) => syncUpdate('budgets', budget.id, budget, setBudgets);
+  const deleteBudget = (id: string) => syncDelete('budgets', id, setBudgets);
   const updateBudgetStatus = (id: string, status: Budget['status']) => {
     setBudgets(prev => prev.map(b => {
       if (b.id === id) {
@@ -2145,7 +2186,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addPayroll, payPayroll, addTimeLog,
     addVacation, updateVacationStatus, deleteVacation,
     addSalaryAdvance, updateAdvanceStatus, paySalaryAdvance, deleteAdvance,
-    addTransaction, updateTransaction, updateTransactionStatus, deleteTransaction, importTransactions, addSale, addBudget, updateBudget, updateBudgetStatus,
+    addTransaction, updateTransaction, updateTransactionStatus, deleteTransaction, importTransactions, addSale, deleteSale, addBudget, updateBudget, updateBudgetStatus, deleteBudget,
     addPurchaseOrder, updatePurchaseOrder, receivePurchaseOrder,
     addStockItem, updateStock, updateStockItem, deleteStockItem,
     addVehicle, updateVehicle, updateVehicleStatus, deleteVehicle,
@@ -2167,7 +2208,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addPayroll, payPayroll, addTimeLog,
     addVacation, updateVacationStatus, deleteVacation,
     addSalaryAdvance, updateAdvanceStatus, paySalaryAdvance, deleteAdvance,
-    addTransaction, updateTransaction, updateTransactionStatus, deleteTransaction, importTransactions, addSale, addBudget, updateBudget, updateBudgetStatus,
+    addTransaction, updateTransaction, updateTransactionStatus, deleteTransaction, importTransactions, addSale, deleteSale, addBudget, updateBudget, updateBudgetStatus, deleteBudget,
     addPurchaseOrder, updatePurchaseOrder, receivePurchaseOrder,
     addStockItem, updateStock, updateStockItem, deleteStockItem,
     addVehicle, updateVehicle, updateVehicleStatus, deleteVehicle,

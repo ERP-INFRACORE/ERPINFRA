@@ -28,6 +28,8 @@ import {
   Scale,
   X,
   Eye,
+  Edit,
+  Edit3,
   AlertTriangle,
   Calendar,
   ArrowLeft,
@@ -244,18 +246,27 @@ const Sales = () => {
     clients,
     addClient,
     addSale,
+    deleteSale,
     inventory,
     budgets,
     addBudget,
     updateBudget,
+    deleteBudget,
     fleet,
     updateBudgetStatus,
     addTransaction,
     accounts,
     settings,
-    updateSettings
+    updateSettings,
+    currentUser
   } = useApp();
   const { addToast } = useToast();
+
+  // Verifica se o usuário atual possui privilégios de administrador
+  const isAdmin = useMemo(() => {
+    if (!currentUser) return false;
+    return currentUser.roleId === 'admin' || currentUser.username?.toLowerCase() === 'admin';
+  }, [currentUser]);
 
   useEffect(() => {
     if (settings?.config?.salesTargets && typeof settings.config.salesTargets.minimum === 'number') {
@@ -805,39 +816,57 @@ const Sales = () => {
     });
   }, [sales, historySearchTerm, historyDate, historyStatusFilter, historyPaymentFilter]);
 
+  // Helper para gerenciar a semente inicial de 5 dígitos para pedidos/orçamentos
+  const getBudgetSeed = (): number => {
+    try {
+      const stored = localStorage.getItem('infracore_budget_seq_seed');
+      if (stored && /^\d{5}$/.test(stored)) {
+        return parseInt(stored, 10);
+      }
+      // Gera semente inicial aleatória de 5 dígitos (ex: 48312) entre 10000 e 89999
+      const newSeed = Math.floor(10000 + Math.random() * 80000);
+      localStorage.setItem('infracore_budget_seq_seed', String(newSeed));
+      return newSeed;
+    } catch {
+      return 54321;
+    }
+  };
+
   // Helper to extract or generate purely numeric sequential ID for budgets
   const getBudgetNumericId = (b?: Budget | null): number => {
     if (!b) return 0;
-    if ((b as any).budgetNumber && Number((b as any).budgetNumber) > 0) {
+    const seed = getBudgetSeed();
+    if ((b as any).budgetNumber && Number((b as any).budgetNumber) >= 10000) {
       return Number((b as any).budgetNumber);
     }
     const cleanId = String(b.id || '').trim();
-    if (/^\d+$/.test(cleanId)) {
+    if (/^\d{5,}$/.test(cleanId)) {
       return parseInt(cleanId, 10);
     }
-    const digitsOnly = cleanId.replace(/\D/g, '');
-    if (digitsOnly && digitsOnly.length <= 8 && parseInt(digitsOnly, 10) > 0) {
-      return parseInt(digitsOnly, 10);
+    // Para orçamentos legados (ex: id '1', '2' ou strings), atribui sequência contínua a partir da semente
+    if (Array.isArray(budgets)) {
+      const sorted = [...budgets].sort((x, y) => {
+        const dateDiff = (x.date || '').localeCompare(y.date || '');
+        if (dateDiff !== 0) return dateDiff;
+        return (x.id || '').localeCompare(y.id || '');
+      });
+      const idx = sorted.findIndex(item => item.id === b.id);
+      if (idx >= 0) return seed + idx;
     }
-    return 0;
+    return seed;
   };
 
   const getBudgetDisplayId = (b?: Budget | null): string => {
     if (!b) return '';
     const num = getBudgetNumericId(b);
-    if (num > 0) return String(num);
-    if (Array.isArray(budgets)) {
-      const sorted = [...budgets].sort((x, y) => (x.date || '').localeCompare(y.date || ''));
-      const idx = sorted.findIndex(item => item.id === b.id);
-      if (idx >= 0) return String(idx + 1);
-    }
-    return '1';
+    return String(num);
   };
 
   const getNextBudgetNumber = (): string => {
-    if (!Array.isArray(budgets) || budgets.length === 0) return '1';
-    const numbers = budgets.map(b => getBudgetNumericId(b)).filter(n => n > 0);
-    if (numbers.length === 0) return '1';
+    const seed = getBudgetSeed();
+    if (!Array.isArray(budgets) || budgets.length === 0) return String(seed);
+    const numbers = budgets.map(b => getBudgetNumericId(b)).filter(n => n >= 10000);
+    if (numbers.length === 0) return String(seed);
     const maxNumber = Math.max(...numbers);
     return String(maxNumber + 1);
   };
@@ -1319,7 +1348,37 @@ const Sales = () => {
   };
 
   // ==========================================
-  // SALVAR ORÇAMENTO COM VALIDAÇÃO
+  // CARREGAR ORÇAMENTO / PEDIDO PARA EDIÇÃO NO PDV
+  // ==========================================
+  const handleEditBudget = (budget: Budget) => {
+    setEditingBudgetId(budget.id);
+    setCart([...(budget.items || [])]);
+    setSelectedClient(budget.clientId || '');
+    setDiscount(String(budget.discount || 0));
+    setPaymentMethod(budget.paymentMethod || 'money');
+    const budgetExtended = budget as any;
+    if (budgetExtended.installments) setInstallments(Number(budgetExtended.installments));
+    if (budgetExtended.freightType) setFreightType(budgetExtended.freightType);
+    if (budgetExtended.deliveryDays !== undefined) setDeliveryDays(Number(budgetExtended.deliveryDays));
+    if (budgetExtended.commercialNotes) setCommercialNotes(budgetExtended.commercialNotes);
+    if (budget.tareWeight) setTareWeight(budget.tareWeight);
+    if (budget.grossWeight) setGrossWeight(budget.grossWeight);
+    if (budget.weightNotes) setWeightNotes(budget.weightNotes);
+    if (budget.tareWeight || budget.grossWeight) setRequiresWeighing(true);
+
+    setSelectedBudget(null);
+    setActiveTab('new');
+    setMobileTab('checkout');
+    addToast(`Carregando Pedido #${getBudgetDisplayId(budget)} para edição no PDV.`, 'info');
+  };
+
+  const handleCancelEditBudget = () => {
+    clearForm();
+    addToast("Edição do pedido cancelada.", 'info');
+  };
+
+  // ==========================================
+  // SALVAR ORÇAMENTO / PEDIDO COM VALIDAÇÃO
   // ==========================================
   const handleSaveBudget = () => {
     if (cart.length === 0) {
@@ -1375,20 +1434,21 @@ const Sales = () => {
 
       const isEditing = Boolean(editingBudgetId);
       const nextNumStr = getNextBudgetNumber();
+      const existingBudget = isEditing ? (budgets || []).find(b => b.id === editingBudgetId) : null;
       const budgetIdToUse = isEditing ? editingBudgetId! : nextNumStr;
-      const budgetNumToUse = Number(budgetIdToUse.replace(/\D/g, '')) || Number(nextNumStr);
+      const budgetNumToUse = existingBudget ? getBudgetNumericId(existingBudget) : Number(nextNumStr);
 
       const newBudget: Budget = {
         id: budgetIdToUse,
         clientId: selectedClient,
         clientName: client?.name || 'Cliente Avulso',
-        date: new Date().toLocaleDateString('pt-BR'),
+        date: existingBudget?.date || new Date().toLocaleDateString('pt-BR'),
         items: finalItems,
         subtotal: finalSubtotal,
         discount: discountVal,
         total: finalAmount,
-        status: 'Aberto',
-        expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR'),
+        status: existingBudget?.status || 'Aberto',
+        expiryDate: existingBudget?.expiryDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR'),
         tareWeight: requiresWeighing ? tareWeight : undefined,
         grossWeight: requiresWeighing ? grossWeight : undefined,
         netWeight: calculatedNetWeight,
@@ -1403,10 +1463,10 @@ const Sales = () => {
 
       if (editingBudgetId) {
         updateBudget(newBudget);
-        addToast("Orçamento atualizado com sucesso!", 'success');
+        addToast(`Pedido #${budgetNumToUse} atualizado com sucesso!`, 'success');
       } else {
         addBudget(newBudget);
-        addToast("Orçamento (Pré-Venda) salvo com sucesso!", 'success');
+        addToast(`Pedido #${budgetNumToUse} salvo com sucesso!`, 'success');
       }
       clearForm();
       setActiveTab('budgets');
@@ -1498,6 +1558,7 @@ const Sales = () => {
       updateBudgetStatus(budgetId, newStatus);
       const msg = newStatus === 'Aprovado' ? 'Orçamento aprovado com sucesso!' :
         newStatus === 'Rejeitado' ? 'Orçamento rejeitado.' :
+        newStatus === 'Cancelado' ? 'Orçamento cancelado.' :
         newStatus === 'Aberto' ? 'Orçamento reaberto.' :
         'Status do orçamento atualizado.';
       addToast(msg, newStatus === 'Aprovado' ? 'success' : 'info');
@@ -1505,6 +1566,83 @@ const Sales = () => {
       console.error(err);
       addToast('Erro ao atualizar status do orçamento.', 'error');
     }
+  };
+
+  // Cancelamento de orçamento (nunca exclui, preserva histórico com status Cancelado)
+  const handleCancelBudget = (budget: Budget) => {
+    const displayNum = getBudgetDisplayId(budget);
+    if (budget.status === 'Convertido') {
+      addToast(`O orçamento #${displayNum} já foi convertido em venda e não pode ser cancelado.`, 'warning');
+      return;
+    }
+    if (budget.status === 'Cancelado') {
+      addToast(`O orçamento #${displayNum} já se encontra cancelado.`, 'info');
+      return;
+    }
+
+    addToast(`Deseja realmente cancelar o orçamento #${displayNum}?`, 'warning', 8000, {
+      label: 'CONFIRMAR CANCELAMENTO',
+      onClick: () => {
+        try {
+          updateBudgetStatus(budget.id, 'Cancelado');
+          addToast(`Orçamento #${displayNum} cancelado com sucesso.`, 'info');
+          if (selectedBudget?.id === budget.id) {
+            setSelectedBudget(prev => prev ? { ...prev, status: 'Cancelado' } : null);
+          }
+        } catch (err) {
+          console.error("Erro ao cancelar orçamento:", err);
+          addToast("Erro ao cancelar orçamento.", 'error');
+        }
+      }
+    });
+  };
+
+  // Exclusão definitiva de orçamento (apenas Admin)
+  const handleDeleteBudget = (budget: Budget) => {
+    if (!isAdmin) {
+      addToast("Apenas o administrador possui permissão para excluir orçamentos.", 'error');
+      return;
+    }
+    const displayNum = getBudgetDisplayId(budget);
+    addToast(`Tem certeza que deseja EXCLUIR DEFINITIVAMENTE o orçamento #${displayNum}? Esta ação não pode ser desfeita.`, 'error', 9000, {
+      label: 'EXCLUIR DEFINITIVAMENTE',
+      onClick: () => {
+        try {
+          deleteBudget(budget.id);
+          addToast(`Orçamento #${displayNum} excluído com sucesso.`, 'info');
+          if (selectedBudget?.id === budget.id) {
+            setSelectedBudget(null);
+          }
+        } catch (err) {
+          console.error("Erro ao excluir orçamento:", err);
+          addToast("Erro ao excluir orçamento.", 'error');
+        }
+      }
+    });
+  };
+
+  // Exclusão definitiva de venda (apenas Admin)
+  const handleDeleteSale = (sale: Sale) => {
+    if (!isAdmin) {
+      addToast("Apenas o administrador possui permissão para excluir vendas.", 'error');
+      return;
+    }
+    const saleNum = sale.documentNumber || sale.id.slice(0, 8);
+    addToast(`Tem certeza que deseja EXCLUIR DEFINITIVAMENTE a venda #${saleNum}? Esta ação não pode ser desfeita.`, 'error', 9000, {
+      label: 'EXCLUIR DEFINITIVAMENTE',
+      onClick: () => {
+        try {
+          deleteSale(sale.id);
+          addToast(`Venda #${saleNum} excluída com sucesso.`, 'info');
+          if (selectedSale?.id === sale.id) {
+            setSelectedSale(null);
+          }
+        } catch (err) {
+          console.error("Erro ao excluir venda:", err);
+          addToast("Erro ao excluir venda.", 'error');
+        }
+      }
+    });
   };
 
   // ==========================================
@@ -1697,13 +1835,13 @@ const Sales = () => {
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <title>Proposta Comercial #${getBudgetDisplayId(budget)} - ${budget.clientName}</title>
+  <title>PEDIDO #${getBudgetDisplayId(budget)} - ${budget.clientName}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
     
     @page {
       size: A4 portrait;
-      margin: 10mm 12mm 12mm 12mm;
+      margin: 8mm 10mm 10mm 10mm;
     }
     
     * {
@@ -2059,7 +2197,7 @@ const Sales = () => {
         </td>
         <td style="vertical-align: top; text-align: right; width: 220px;">
           <div class="doc-badge-container">
-            <span class="doc-type-pill">Proposta Comercial</span>
+            <span class="doc-type-pill">PEDIDO</span>
             <div class="doc-id">Nº ${getBudgetDisplayId(budget)}</div>
             <div class="doc-date">Emissão: <strong>${budget.date}</strong></div>
             <div class="doc-date">Validade: <strong>${budget.expiryDate}</strong></div>
@@ -2189,7 +2327,7 @@ const Sales = () => {
     <div class="terms-card-clean">
       <h4>Termos Gerais de Fornecimento</h4>
       <ol>
-        <li><strong>Validade:</strong> Proposta válida impreterivelmente até <strong>${budget.expiryDate}</strong>, sujeita à confirmação de estoque e crédito.</li>
+        <li><strong>Validade:</strong> Pedido válido impreterivelmente até <strong>${budget.expiryDate}</strong>, sujeito à confirmação de estoque e crédito.</li>
         <li><strong>Logística:</strong> Conforme modalidade <strong>${freight}</strong>, a descarga é de responsabilidade do comprador, ressalvado acordo formal.</li>
         <li><strong>Pagamento:</strong> Faturamento conforme condições aprovadas (${paymentLabel}). Vencimentos sujeitos a juros legais após prazo.</li>
         <li><strong>Garantia:</strong> Materiais fornecidos com garantia legal de qualidade e conformidade técnica.</li>
@@ -2221,7 +2359,7 @@ const Sales = () => {
 </body>
 </html>`;
 
-    printDocument(`Proposta_Comercial_${getBudgetDisplayId(budget)}_${budget.clientName.replace(/\s+/g, '_')}`, html);
+    printDocument(`Pedido_${getBudgetDisplayId(budget)}_${budget.clientName.replace(/\s+/g, '_')}`, html);
   };
 
   // Impressão do Recibo Executivo da Venda
@@ -2808,7 +2946,7 @@ const Sales = () => {
                 </div>
               </div>
 
-              <div className="flex gap-4 pt-4">
+              <div className="flex flex-wrap gap-3 pt-4">
                 <button
                   type="button"
                   onClick={() => handlePrintSale(selectedSale)}
@@ -2826,6 +2964,16 @@ const Sales = () => {
                 >
                   <FileDown size={18} /> Exportar NF-e
                 </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSale(selectedSale)}
+                    className="py-3 px-4 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors border border-rose-200 dark:border-rose-900 cursor-pointer"
+                    title="Apenas Administrador: Exclusão permanente"
+                  >
+                    <Trash2 size={16} /> Excluir Venda (Admin)
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -2840,7 +2988,7 @@ const Sales = () => {
               <div>
                 <h3 className="text-xl font-bold text-orange-900 dark:text-orange-400 flex items-center gap-2">
                   <Save className="text-orange-600" />
-                  Orçamento #{getBudgetDisplayId(selectedBudget)}
+                  Pedido #{getBudgetDisplayId(selectedBudget)}
                 </h3>
                 <p className="text-xs text-orange-700/60 mt-1 uppercase font-bold tracking-wider">Válido até: {selectedBudget.expiryDate}</p>
               </div>
@@ -2859,7 +3007,7 @@ const Sales = () => {
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] font-bold text-slate-400 uppercase">Status</p>
-                  <p className={`text-sm font-black ${selectedBudget.status === 'Convertido' ? 'text-green-600' : selectedBudget.status === 'Rejeitado' ? 'text-rose-600' : 'text-orange-600'}`}>
+                  <p className={`text-sm font-black ${selectedBudget.status === 'Convertido' ? 'text-green-600' : selectedBudget.status === 'Cancelado' ? 'text-slate-500' : selectedBudget.status === 'Rejeitado' ? 'text-rose-600' : 'text-orange-600'}`}>
                     {selectedBudget.status.toUpperCase()}
                   </p>
                 </div>
@@ -2918,22 +3066,48 @@ const Sales = () => {
                 )}
               </div>
 
-              <div className="flex flex-wrap gap-3 pt-2">
+              <div className="flex flex-wrap gap-2.5 pt-2">
                 <button
                   onClick={() => handlePrintBudget(selectedBudget)}
-                  className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-md shadow-cyan-600/20 transition-all text-xs"
+                  className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-cyan-600/20 transition-all text-xs cursor-pointer"
                 >
-                  <Printer size={16} /> Imprimir Proposta Executiva A4
+                  <Printer size={16} /> Imprimir Pedido A4
                 </button>
-                {selectedBudget.status !== 'Convertido' && (
+                {selectedBudget.status !== 'Convertido' && selectedBudget.status !== 'Cancelado' && (
+                  <button
+                    onClick={() => handleEditBudget(selectedBudget)}
+                    className="py-3 px-3.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 transition-all text-xs cursor-pointer"
+                  >
+                    <Edit3 size={16} /> Editar Pedido
+                  </button>
+                )}
+                {selectedBudget.status !== 'Convertido' && selectedBudget.status !== 'Cancelado' && (
+                  <button
+                    onClick={() => handleCancelBudget(selectedBudget)}
+                    className="py-3 px-3.5 bg-slate-100 hover:bg-slate-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-slate-700 dark:text-slate-200 font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all text-xs cursor-pointer border border-slate-300 dark:border-gray-600"
+                    title="Cancelar este orçamento mantendo o histórico"
+                  >
+                    <XCircle size={16} className="text-rose-500" /> Cancelar Orçamento
+                  </button>
+                )}
+                {selectedBudget.status !== 'Convertido' && selectedBudget.status !== 'Cancelado' && (
                   <button
                     onClick={() => {
                       handleConvertBudgetToSale(selectedBudget);
                       setSelectedBudget(null);
                     }}
-                    className="flex-[1.5] py-3 bg-green-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-green-700 shadow-lg shadow-green-600/20 transition-all uppercase tracking-wide text-xs"
+                    className="py-3 px-4 bg-green-600 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 hover:bg-green-700 shadow-lg shadow-green-600/20 transition-all uppercase tracking-wide text-xs cursor-pointer"
                   >
                     <CheckCircle size={16} /> Converter em Venda
+                  </button>
+                )}
+                {isAdmin && (
+                  <button
+                    onClick={() => handleDeleteBudget(selectedBudget)}
+                    className="py-3 px-3.5 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all text-xs cursor-pointer border border-rose-200 dark:border-rose-900"
+                    title="Apenas Administrador: Exclusão permanente"
+                  >
+                    <Trash2 size={16} /> Excluir (Admin)
                   </button>
                 )}
               </div>
@@ -3747,6 +3921,23 @@ const Sales = () => {
         </div>
       ) : activeTab === 'new' ? (
         <div className="flex flex-col h-full overflow-hidden">
+          {/* Banner Informativo quando em Edição de Orçamento/Pedido */}
+          {editingBudgetId && (
+            <div className="mb-3 px-4 py-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl flex items-center justify-between gap-3 text-amber-900 dark:text-amber-200 shrink-0 shadow-sm animate-in fade-in duration-200">
+              <div className="flex items-center gap-2.5 text-xs font-bold">
+                <div className="p-1.5 bg-amber-500 text-white rounded-lg"><Edit3 size={14} /></div>
+                <span>Você está editando o <strong>Pedido #{getBudgetDisplayId((budgets || []).find(b => b.id === editingBudgetId))}</strong></span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCancelEditBudget}
+                className="text-xs font-bold text-amber-700 dark:text-amber-300 hover:text-amber-950 dark:hover:text-amber-100 bg-white dark:bg-gray-800 px-3 py-1.5 rounded-xl border border-amber-200 dark:border-amber-700 transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <X size={14} /> Cancelar Edição
+              </button>
+            </div>
+          )}
+
           {/* Mobile Tab Switcher */}
           <div className="lg:hidden grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-700/50 rounded-xl mb-4 shrink-0 mx-1">
             <button
@@ -4431,9 +4622,9 @@ const Sales = () => {
                       <div className="grid grid-cols-2 gap-2 sm:gap-3 shrink-0 pt-3 pb-2 sm:pb-0 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-gray-800">
                         <button
                           onClick={handleSaveBudget}
-                          className="py-3.5 sm:py-4 px-2 bg-slate-50 hover:bg-slate-100 dark:bg-gray-700 dark:hover:bg-gray-600 text-slate-800 dark:text-white font-black rounded-xl sm:rounded-2xl border border-slate-200 dark:border-gray-600 text-[11px] sm:text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                          className={`py-3.5 sm:py-4 px-2 font-black rounded-xl sm:rounded-2xl border text-[11px] sm:text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98 ${editingBudgetId ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-amber-500/20' : 'bg-slate-50 hover:bg-slate-100 dark:bg-gray-700 dark:hover:bg-gray-600 text-slate-800 dark:text-white border-slate-200 dark:border-gray-600'}`}
                         >
-                          <Save size={15} /> <span>SALVAR ORÇAMENTO</span>
+                          <Save size={15} /> <span>{editingBudgetId ? 'ATUALIZAR PEDIDO' : 'SALVAR ORÇAMENTO'}</span>
                         </button>
                         <button
                           onClick={handleFinalizeOrder}
@@ -4482,6 +4673,7 @@ const Sales = () => {
                 <option value="all">Status: Todos</option>
                 <option value="Aberto">Em Aberto</option>
                 <option value="Convertido">Convertido em Venda</option>
+                <option value="Cancelado">Cancelados</option>
               </select>
               <div className="relative">
                 <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -4547,8 +4739,20 @@ const Sales = () => {
                       <td className="px-6 py-5 font-black text-slate-900 dark:text-white">{b.clientName}</td>
                       <td className="px-6 py-5 text-right font-black text-lg text-orange-600">{formatMoney(b.total)}</td>
                       <td className="px-6 py-5 text-center">
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase ${b.status === 'Aberto' ? 'bg-orange-100 text-orange-700' : b.status === 'Aprovado' ? 'bg-emerald-100 text-emerald-700' : b.status === 'Rejeitado' ? 'bg-rose-100 text-rose-700' : 'bg-green-100 text-green-700'}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${b.status === 'Aberto' ? 'bg-orange-600' : b.status === 'Aprovado' ? 'bg-emerald-600' : b.status === 'Rejeitado' ? 'bg-rose-600' : 'bg-green-600'}`}></span>
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+                          b.status === 'Aberto' ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300' :
+                          b.status === 'Aprovado' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' :
+                          b.status === 'Cancelado' ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-600' :
+                          b.status === 'Rejeitado' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' :
+                          'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            b.status === 'Aberto' ? 'bg-orange-600' :
+                            b.status === 'Aprovado' ? 'bg-emerald-600' :
+                            b.status === 'Cancelado' ? 'bg-slate-500' :
+                            b.status === 'Rejeitado' ? 'bg-rose-600' :
+                            'bg-green-600'
+                          }`}></span>
                           {b.status}
                         </span>
                       </td>
@@ -4556,8 +4760,20 @@ const Sales = () => {
                       <td className="px-6 py-5 text-right">
                         <div className="flex items-center justify-end gap-1.5 opacity-20 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => setSelectedBudget(b)} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all" title="Ver Detalhes"><Eye size={18} /></button>
-                          <button onClick={() => handlePrintBudget(b)} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all" title="Imprimir Orçamento"><Printer size={18} /></button>
-                          {b.status !== 'Convertido' && (
+                          {b.status !== 'Convertido' && b.status !== 'Cancelado' && (
+                            <button onClick={() => handleEditBudget(b)} className="p-2 text-slate-400 hover:text-amber-600 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all" title="Editar Pedido"><Edit3 size={18} /></button>
+                          )}
+                          <button onClick={() => handlePrintBudget(b)} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all" title="Imprimir Pedido A4"><Printer size={18} /></button>
+                          {b.status !== 'Convertido' && b.status !== 'Cancelado' && (
+                            <button
+                              onClick={() => handleCancelBudget(b)}
+                              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all"
+                              title="Cancelar Orçamento"
+                            >
+                              <XCircle size={18} />
+                            </button>
+                          )}
+                          {b.status !== 'Convertido' && b.status !== 'Cancelado' && (
                             <button
                               onClick={() => handleConvertBudgetToSale(b)}
                               className="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 rounded-lg hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-1 font-bold text-xs"
@@ -4565,6 +4781,15 @@ const Sales = () => {
                             >
                               <ShoppingCart size={16} />
                               <span className="hidden sm:inline">Converter Venda</span>
+                            </button>
+                          )}
+                          {isAdmin && (
+                            <button
+                              onClick={() => handleDeleteBudget(b)}
+                              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-all"
+                              title="Excluir Definitivamente (Admin)"
+                            >
+                              <Trash2 size={18} />
                             </button>
                           )}
                         </div>
@@ -4699,6 +4924,15 @@ const Sales = () => {
                           <button onClick={() => setSelectedSale(sale)} className="p-2.5 bg-white dark:bg-gray-700 rounded-xl shadow-sm border dark:border-gray-600 text-slate-400 hover:text-cyan-600 transition-all" title="Ver Detalhes"><Eye size={18} /></button>
                           <button onClick={() => setShowNFE({ type: 'sale', data: sale })} className="p-2.5 bg-white dark:bg-gray-700 rounded-xl shadow-sm border dark:border-gray-600 text-slate-400 hover:text-cyan-600 transition-all" title="Gerar DANFE"><FileSearch size={18} /></button>
                           <button onClick={() => handlePrintSale(sale)} className="p-2.5 bg-white dark:bg-gray-700 rounded-xl shadow-sm border dark:border-gray-600 text-slate-400 hover:text-cyan-600 transition-all" title="Imprimir Recibo"><Printer size={18} /></button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => handleDeleteSale(sale)}
+                              className="p-2.5 bg-white dark:bg-gray-700 rounded-xl shadow-sm border dark:border-gray-600 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all"
+                              title="Excluir Venda (Admin)"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
