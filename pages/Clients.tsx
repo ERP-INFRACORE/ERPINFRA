@@ -877,7 +877,7 @@ const Clients = () => {
   // ==========================================
 // DECODIFICADOR DETERMINÍSTICO DE FROTAS DA BASE NACIONAL (SENATRAN/SINESP)
 // ==========================================
-export const mapVehicleType = (modelo: string = '', marca: string = ''): 'Caminhão' | 'Carro' | 'Van' | 'Motocicleta' | 'Máquina' | 'Toco' | 'Truck' | 'Carreta LS' | 'Utilitário' => {
+const mapVehicleType = (modelo: string = '', marca: string = ''): 'Caminhão' | 'Carro' | 'Van' | 'Motocicleta' | 'Máquina' | 'Toco' | 'Truck' | 'Carreta LS' | 'Utilitário' => {
   const t = `${modelo} ${marca}`.toLowerCase();
   if (t.includes('carreta') || t.includes('cavalinho') || t.includes('fh') || t.includes('scania r') || t.includes('actros') || t.includes('meteor') || t.includes('6x4')) return 'Carreta LS';
   if (t.includes('truck') || t.includes('constellation') || t.includes('tector') || t.includes('cargo') || t.includes('vm') || t.includes('6x2')) return 'Truck';
@@ -890,7 +890,7 @@ export const mapVehicleType = (modelo: string = '', marca: string = ''): 'Caminh
   return 'Caminhão';
 };
 
-export const decodeNationalPlateProfile = (cleanPlate: string) => {
+const decodeNationalPlateProfile = (cleanPlate: string) => {
   // Lista de perfis reais de frotas pesadas e comerciais comuns no setor de infraestrutura
   const FLEET_PROFILES = [
     {
@@ -1078,7 +1078,7 @@ export const decodeNationalPlateProfile = (cleanPlate: string) => {
               year: ano > 1900 ? ano : new Date().getFullYear(),
               colorName: cor,
               colorHex: '#ffffff',
-              chassis,
+              chassis: chassi,
               renavam,
               fuelType: combustivel.toLowerCase().includes('diesel') ? 'Diesel' : combustivel.toLowerCase().includes('flex') ? 'Flex' : 'Diesel',
               type: mapVehicleType(modelo, marca)
