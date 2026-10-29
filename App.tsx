@@ -17,6 +17,7 @@ import Fleet from './pages/Fleet';
 import Settings from './pages/Settings';
 
 import { useApp } from './context/AppContext';
+import { getInitialRouteForUser } from './permission_constants';
 import Login from './pages/Login';
 
 const ProtectedRoute = ({ children }: { children: React.ReactElement }) => {
@@ -26,6 +27,15 @@ const ProtectedRoute = ({ children }: { children: React.ReactElement }) => {
     return <Navigate to="/login" replace />;
   }
   return children;
+};
+
+const RootIndexRoute = () => {
+  const { currentUser, roles } = useApp();
+  const landingRoute = getInitialRouteForUser(currentUser, roles);
+  if (landingRoute !== '/') {
+    return <Navigate to={landingRoute} replace />;
+  }
+  return <Dashboard />;
 };
 
 const App = () => {
@@ -41,7 +51,7 @@ const App = () => {
                 <Layout />
               </ProtectedRoute>
             }>
-              <Route index element={<Dashboard />} />
+              <Route index element={<RootIndexRoute />} />
               <Route path="sales" element={<Sales />} />
               <Route path="purchases" element={<Purchases />} />
               <Route path="clients" element={<Clients />} />

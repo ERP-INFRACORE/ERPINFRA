@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
+import { getInitialRouteForUser } from '../permission_constants';
 import { Construction, Lock, User, ArrowRight, AlertCircle } from 'lucide-react';
 
 const Login = () => {
@@ -10,7 +11,7 @@ const Login = () => {
     const [rememberMe, setRememberMe] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-    const { login } = useApp();
+    const { login, users, roles } = useApp();
     const { addToast } = useToast();
     const navigate = useNavigate();
 
@@ -24,7 +25,9 @@ const Login = () => {
         try {
             const result = await login(username, password, rememberMe);
             if (result.success) {
-                navigate('/');
+                const targetUser = users.find(u => u.username.toLowerCase() === username.toLowerCase().trim());
+                const landingRoute = getInitialRouteForUser(targetUser || null, roles);
+                navigate(landingRoute);
             } else {
                 setError(result.message || 'Erro desconhecido ao tentar logar.');
                 setIsLoading(false);

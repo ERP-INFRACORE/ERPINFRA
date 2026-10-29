@@ -1,3 +1,4 @@
+import * as api from '../src/services/api';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
     Factory,
@@ -3190,6 +3191,22 @@ const Production = () => {
         return INITIAL_DNIT_LAB_TESTS;
     });
 
+    // Sincronização inicial com Supabase (laboratory_tests) com fallback para localStorage
+    useEffect(() => {
+        let isMounted = true;
+        api.fetchData<DNITLabTest>('laboratory_tests')
+            .then(remote => {
+                if (isMounted && Array.isArray(remote) && remote.length > 0) {
+                    setLabTests(remote);
+                    try {
+                        localStorage.setItem('infracore_lab_dnit_tests_v2', JSON.stringify(remote));
+                    } catch {}
+                }
+            })
+            .catch(() => {});
+        return () => { isMounted = false; };
+    }, []);
+
     useEffect(() => {
         try {
             localStorage.setItem('infracore_lab_dnit_tests_v2', JSON.stringify(labTests));
@@ -3326,6 +3343,7 @@ const Production = () => {
 
         // Salva no repositório de testes do laboratório (independente ou vinculado)
         setLabTests(prev => [newLabTestRecord, ...prev]);
+        api.createItem('laboratory_tests', newLabTestRecord).catch(() => {});
 
         // Se o usuário optou por vincular a uma O.P. existente, alimenta também o qualityTests da ordem no AppContext
         if (dnitForm.orderId) {
@@ -3347,6 +3365,7 @@ const Production = () => {
     const handleDeleteLabTest = (testId: string) => {
         if (window.confirm("Confirma a exclusão deste registro técnico de ensaio do laboratório?")) {
             setLabTests(prev => prev.filter(t => t.id !== testId));
+            api.deleteItem('laboratory_tests', testId).catch(() => {});
             addToast("Ensaio removido do registro laboratorial.", 'info');
         }
     };

@@ -159,9 +159,52 @@ export const PERMISSION_ALIAS_MAP: Record<string, string[]> = {
     'finance.admin': ['finance.dashboard', 'finance.view_transactions', 'finance.add_revenue', 'finance.add_expense', 'finance.edit_transaction', 'finance.approve', 'finance.manage_accounts', 'finance.manage_plan', 'finance.reports', 'finance.delete_transaction']
 };
 
+export const CANONICAL_ROLE_IDS: Record<string, string> = {
+    admin: 'e881e024-16e0-4014-b1b4-edebafdd1dd2',
+    manager_com: '956f087e-459c-4771-a7f5-5a111117a18d',
+    analista_com_fin: '11ed5b7b-996e-4330-85a2-6e68d0127168',
+    salesperson: '79cc1542-13a8-4bce-8607-c37308a00e40',
+    vendedor2: '414da3d5-0000-4000-8000-0000414da3d5',
+    manager_stock: 'b2a64923-ab83-4e23-81df-61b547959349',
+    buyer_asst: '0798a51f-0000-4000-8000-00000798a51f',
+    warehouseman: '3768cfb7-0000-4000-8000-00003768cfb7',
+    manager_fin: '57acab58-d7b0-4d01-8040-d9de24c8e0f3',
+    financial: 'f44d7b06-b15a-4966-819d-6fcbc0e0724c',
+    operator: '76beebef-2996-4037-8510-454a01193705',
+    fleet_manager: '53b585bc-0000-4000-8000-000053b585bc',
+    hr_analyst: '62a599b3-0000-4000-8000-000062a599b3'
+};
+
+export const toCanonicalRoleId = (roleIdOrAlias: string): string => {
+    if (!roleIdOrAlias) return roleIdOrAlias;
+    const clean = roleIdOrAlias.toLowerCase().trim();
+    return CANONICAL_ROLE_IDS[clean] || roleIdOrAlias;
+};
+
 export const getPermissionLabel = (id: string): string => PERMISSION_MAP[id]?.name || id;
 
 export const isValidPermission = (id: string): boolean => {
     if (id === 'all' || id === '*') return true;
     return id in PERMISSION_MAP || id in PERMISSION_ALIAS_MAP;
+};
+
+export const getInitialRouteForUser = (
+    user: { roleId?: string; username?: string } | null,
+    roles: { id: string; name?: string }[]
+): string => {
+    if (!user) return '/';
+    const userRole = roles.find(r => r.id === user.roleId || r.id === toCanonicalRoleId(user.roleId || ''));
+    const roleName = userRole?.name?.toLowerCase().trim() || '';
+    const roleId = (userRole?.id || user.roleId || '').toLowerCase().trim();
+
+    const isPurchasesLanding =
+        roleId === 'manager_com' ||
+        roleId === 'analista_com_fin' ||
+        roleId === CANONICAL_ROLE_IDS.manager_com ||
+        roleId === CANONICAL_ROLE_IDS.analista_com_fin ||
+        roleName === 'gerente comercial' ||
+        roleName === 'analista comercial e financeiro' ||
+        (roleName.includes('comercial') && roleName.includes('financeiro'));
+
+    return isPurchasesLanding ? '/purchases' : '/';
 };

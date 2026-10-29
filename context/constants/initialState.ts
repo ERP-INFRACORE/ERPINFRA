@@ -48,55 +48,135 @@ export const INITIAL_ROLES: AppRole[] = [
   {
     id: 'manager_com',
     name: 'Gerente Comercial',
-    description: 'Gestão completa de vendas, clientes e equipe comercial.',
+    description: 'Gestão completa de vendas, metas, orçamentos, aprovações, clientes e custos/despesas.',
     permissions: [
       'dashboard.view',
       'sales.view', 'sales.create', 'sales.edit', 'sales.approve', 'sales.cancel',
-      'clients.view', 'clients.create', 'clients.edit', 'clients.delete', 'clients.financial'
+      'clients.view', 'clients.create', 'clients.edit', 'clients.delete', 'clients.financial',
+      'purchases.view',
+      'reports.view_basic', 'reports.view_advanced'
+    ]
+  },
+  {
+    id: 'analista_com_fin',
+    name: 'Analista Comercial e Financeiro',
+    description: 'Acompanhamento integrado de vendas, faturamento, custos/despesas e conciliação financeira.',
+    permissions: [
+      'dashboard.view',
+      'sales.view', 'sales.create', 'sales.edit',
+      'clients.view', 'clients.financial',
+      'purchases.view',
+      'finance.dashboard', 'finance.view_transactions', 'finance.reports',
+      'reports.view_basic'
     ]
   },
   {
     id: 'salesperson',
     name: 'Vendedor',
-    description: 'Acesso padrão para força de vendas.',
+    description: 'Força de vendas externa e atendimento comercial padrão.',
     permissions: [
-      'sales.view', 'sales.create', 'clients.view', 'clients.create', 'clients.edit'
+      'sales.view', 'sales.create', 'sales.edit',
+      'clients.view', 'clients.create', 'clients.edit'
+    ]
+  },
+  {
+    id: 'vendedor2',
+    name: 'Vendedor Balcão / PDV',
+    description: 'Operação exclusiva de PDV balcão e emissão rápida de vendas diretas.',
+    permissions: [
+      'sales.view', 'sales.create', 'sales.pdv'
     ]
   },
   {
     id: 'manager_stock',
-    name: 'Gestor de Estoque',
-    description: 'Controle total de inventário e compras.',
+    name: 'Gestor de Suprimentos',
+    description: 'Controle estratégico de compras, inventários e fornecedores.',
     permissions: [
       'dashboard.view',
-      'inventory.view', 'inventory.create', 'inventory.edit', 'inventory.adjust', 'inventory.history',
-      'purchases.view', 'purchases.create', 'purchases.approve', 'purchases.receive',
-      'suppliers.view', 'suppliers.manage'
+      'purchases.view', 'purchases.create', 'purchases.edit', 'purchases.approve', 'purchases.receive',
+      'suppliers.view', 'suppliers.manage',
+      'inventory.view', 'inventory.create', 'inventory.edit', 'inventory.adjust', 'inventory.history', 'inventory.manage',
+      'reports.view_basic'
     ]
   },
   {
-    id: 'operator',
-    name: 'Operador de Campo',
-    description: 'Focado em execução de ordens e manutenção.',
+    id: 'buyer_asst',
+    name: 'Auxiliar de Compras',
+    description: 'Lançamento e consulta de ordens de compra e cotações com fornecedores.',
     permissions: [
-      'production.execute', 'fleet.view', 'fleet.maintenance', 'fleet.fuel'
+      'purchases.view', 'purchases.create', 'suppliers.view'
+    ]
+  },
+  {
+    id: 'warehouseman',
+    name: 'Almoxarife / Estoquista',
+    description: 'Controle de saldo físico, movimentação manual e recebimento de ordens de compra.',
+    permissions: [
+      'inventory.view', 'inventory.adjust', 'inventory.history', 'purchases.receive'
+    ]
+  },
+  {
+    id: 'manager_fin',
+    name: 'Gerente Financeiro',
+    description: 'Gestão completa de tesouraria, fluxo de caixa, contas e plano de contas.',
+    permissions: [
+      'dashboard.view',
+      'finance.dashboard', 'finance.view_transactions', 'finance.add_revenue', 'finance.add_expense',
+      'finance.edit_transaction', 'finance.approve', 'finance.manage_accounts', 'finance.manage_plan',
+      'finance.reports', 'finance.delete_transaction', 'finance.admin',
+      'reports.view_advanced', 'audit.view'
     ]
   },
   {
     id: 'financial',
     name: 'Analista Financeiro',
-    description: 'Contas a pagar/receber e fluxo de caixa.',
+    description: 'Lançamento de despesas/receitas e conciliações bancárias operacionais.',
     permissions: [
       'dashboard.view',
       'finance.dashboard', 'finance.view_transactions', 'finance.add_revenue', 'finance.add_expense',
-      'finance.edit_transaction', 'finance.approve', 'finance.manage_accounts', 'finance.manage_plan', 'finance.reports'
+      'finance.edit_transaction', 'finance.approve', 'finance.reports'
+    ]
+  },
+  {
+    id: 'operator',
+    name: 'Operador Industrial',
+    description: 'Execução e apontamento de ordens de produção em chão de fábrica.',
+    permissions: [
+      'production.view', 'production.execute'
+    ]
+  },
+  {
+    id: 'fleet_manager',
+    name: 'Gestor de Frota',
+    description: 'Controle operacional de veículos, manutenções, pneus e abastecimentos.',
+    permissions: [
+      'fleet.view', 'fleet.manage', 'fleet.maintenance', 'fleet.fuel', 'fleet.tires', 'reports.view_basic'
+    ]
+  },
+  {
+    id: 'hr_analyst',
+    name: 'Analista de RH',
+    description: 'Administração de pessoal, admissões, ponto, folha e férias.',
+    permissions: [
+      'hr.view', 'hr.manage', 'hr.payroll', 'hr.time', 'hr.vacations', 'hr.advances', 'hr.manage_employees'
     ]
   }
 ];
 
 export const INITIAL_USERS: User[] = [
-  { id: '1', name: 'Admin InfraCore', username: 'admin', password: '123', email: 'admin@infracore.com', roleId: 'admin', status: 'Ativo', registeredAt: '01/01/2023' },
-  { id: '2', name: 'Gerência Vendas', username: 'vendas', password: '123', email: 'vendas@infracore.com', roleId: 'manager_com', status: 'Ativo', registeredAt: '15/05/2023' },
+  { id: '1', name: 'Admin InfraCore', username: 'admin', password: '123', email: 'admin@infracore.com', roleId: 'admin', status: 'Ativo', registeredAt: '01/01/2026' },
+  { id: '2', name: 'Roberto Comercial', username: 'gerente_com', password: '123', email: 'roberto.vendas@infracore.com', roleId: 'manager_com', status: 'Ativo', registeredAt: '01/01/2026' },
+  { id: '3', name: 'Julio Analista Com/Fin', username: 'analista_cf', password: '123', email: 'analista.comfin@infracore.com', roleId: 'analista_com_fin', status: 'Ativo', registeredAt: '01/01/2026' },
+  { id: '4', name: 'Lucas Vendedor', username: 'vendedor', password: '123', email: 'lucas.vendas@infracore.com', roleId: 'salesperson', status: 'Ativo', registeredAt: '01/01/2026' },
+  { id: '5', name: 'Operador PDV Caixa', username: 'vendedor2', password: '123', email: 'balcao.pdv@infracore.com', roleId: 'vendedor2', status: 'Ativo', registeredAt: '01/01/2026' },
+  { id: '6', name: 'Marcos Suprimentos', username: 'suprimentos', password: '123', email: 'marcos.compras@infracore.com', roleId: 'manager_stock', status: 'Ativo', registeredAt: '01/01/2026' },
+  { id: '7', name: 'Juliana Auxiliar Compras', username: 'compras_aux', password: '123', email: 'juliana.compras@infracore.com', roleId: 'buyer_asst', status: 'Ativo', registeredAt: '01/01/2026' },
+  { id: '8', name: 'Tiago Almoxarife', username: 'almoxarife', password: '123', email: 'tiago.estoque@infracore.com', roleId: 'warehouseman', status: 'Ativo', registeredAt: '01/01/2026' },
+  { id: '9', name: 'Beatriz Controladoria', username: 'gerente_fin', password: '123', email: 'beatriz.financeiro@infracore.com', roleId: 'manager_fin', status: 'Ativo', registeredAt: '01/01/2026' },
+  { id: '10', name: 'Gabriel Analista Financeiro', username: 'fin_analista', password: '123', email: 'gabriel.financeiro@infracore.com', roleId: 'financial', status: 'Ativo', registeredAt: '01/01/2026' },
+  { id: '11', name: 'Carlos Operador Usina', username: 'operador_ind', password: '123', email: 'carlos.producao@infracore.com', roleId: 'operator', status: 'Ativo', registeredAt: '01/01/2026' },
+  { id: '12', name: 'Fernando Gestor Frota', username: 'frotista', password: '123', email: 'fernando.frota@infracore.com', roleId: 'fleet_manager', status: 'Ativo', registeredAt: '01/01/2026' },
+  { id: '13', name: 'Renata Recursos Humanos', username: 'rh_analista', password: '123', email: 'renata.rh@infracore.com', roleId: 'hr_analyst', status: 'Ativo', registeredAt: '01/01/2026' }
 ];
 
 export const INITIAL_SETTINGS: AppSettings = {
@@ -413,7 +493,7 @@ export const PERMISSION_ALIAS_MAP: Record<string, string[]> = {
   'finance.reconcile': ['finance.approve', 'finance.edit_transaction'],
   'finance.transact': ['finance.add_revenue', 'finance.add_expense'],
   'finance.delete': ['finance.manage_accounts', 'finance.edit_transaction', 'finance.approve', 'finance.delete_transaction'],
-  'finance.delete_transaction': ['finance.delete', 'finance.edit_transaction', 'finance.approve', 'finance.manage_accounts'],
+  'finance.delete_transaction': ['finance.delete', 'finance.admin'],
   'finance.admin': [
     'finance.dashboard', 'finance.view_transactions', 'finance.add_revenue', 'finance.add_expense',
     'finance.edit_transaction', 'finance.delete', 'finance.approve', 'finance.manage_accounts',

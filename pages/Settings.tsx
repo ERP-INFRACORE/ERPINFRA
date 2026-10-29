@@ -79,7 +79,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { User, AppRole, AppSettings, AuditLog } from '../types';
-import { APP_PERMISSIONS, ALL_PERMISSIONS_FLAT } from '../permission_constants';
+import { APP_PERMISSIONS, ALL_PERMISSIONS_FLAT, toCanonicalRoleId, CANONICAL_ROLE_IDS } from '../permission_constants';
 import { INITIAL_ROLES, INITIAL_USERS } from '../context/constants/initialState';
 import { generateCameloData } from '../src/utils/seeder';
 import AIAuditAgent from '../components/AIAuditAgent';
@@ -4477,9 +4477,9 @@ const Settings = () => {
                                                     <button
                                                         onClick={handleSyncDefaultRolesAndUsers}
                                                         className="px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-lg shrink-0"
-                                                        title="Sincronizar a grade completa de 12 perfis e 12 usuários genéricos pré-configurados"
+                                                        title="Sincronizar a grade completa de perfis e usuários genéricos pré-configurados"
                                                     >
-                                                        <RefreshCw size={16} /> Grade Padrão (12 Funções)
+                                                        <RefreshCw size={16} /> Grade Padrão
                                                     </button>
                                                 </div>
                                             )}

@@ -570,6 +570,7 @@ export interface AppSettings {
     passwordPolicy: 'basic' | 'medium' | 'strong';
     ipWhitelist?: string[];
   };
+  config?: Record<string, any>;
 }
 
 export interface PayrollRecord {

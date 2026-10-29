@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ShoppingCart,
   RefreshCw,
@@ -252,9 +252,16 @@ const Sales = () => {
     updateBudgetStatus,
     addTransaction,
     accounts,
-    settings
+    settings,
+    updateSettings
   } = useApp();
   const { addToast } = useToast();
+
+  useEffect(() => {
+    if (settings?.config?.salesTargets && typeof settings.config.salesTargets.minimum === 'number') {
+      setCommercialTargets(settings.config.salesTargets);
+    }
+  }, [settings?.config?.salesTargets]);
 
   // Robust data filtering with extreme safety checks
   const validSales = useMemo(() => {
@@ -283,7 +290,14 @@ const Sales = () => {
   // ==========================================
 
   // Metas Segmentadas (Salvas em LocalStorage)
+  // Sincronização de Metas Comerciais com Supabase (settings.config) e fallback LocalStorage
   const [commercialTargets, setCommercialTargets] = useState<{ minimum: number; target: number; super: number }>(() => {
+    try {
+      if (settings?.config?.salesTargets && typeof settings.config.salesTargets.minimum === 'number') {
+        return settings.config.salesTargets;
+      }
+    } catch {}
+
     try {
       const saved = localStorage.getItem('infracore_sales_commercial_targets');
       if (saved) {
@@ -323,6 +337,15 @@ const Sales = () => {
     setCommercialTargets(tempTargets);
     try {
       localStorage.setItem('infracore_sales_commercial_targets', JSON.stringify(tempTargets));
+      if (updateSettings && settings) {
+        updateSettings({
+          ...settings,
+          config: {
+            ...(settings.config || {}),
+            salesTargets: tempTargets
+          }
+        });
+      }
       addToast('Metas comerciais atualizadas com sucesso!', 'success');
       setShowTargetModal(false);
     } catch (e) {
