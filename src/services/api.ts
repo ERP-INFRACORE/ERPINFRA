@@ -439,20 +439,53 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
 
     // 13. Mapeamento canônico para Configurações Gerais (compatível com schema Supabase 'settings')
     if (table === 'settings') {
+        const fullConfig = {
+            companyName: cleaned.companyName || cleaned.company_name,
+            tradeName: cleaned.tradeName || cleaned.trade_name,
+            document: cleaned.document || cleaned.cnpj,
+            email: cleaned.email,
+            phone: cleaned.phone,
+            website: cleaned.website,
+            address: cleaned.address,
+            bankDetails: cleaned.bankDetails || cleaned.bank_details,
+            technical: cleaned.technical,
+            operational: cleaned.operational || cleaned.operationalParams || cleaned.operational_params,
+            documents: cleaned.documents,
+            integrations: cleaned.integrations,
+            performance: cleaned.performance,
+            backup: cleaned.backup,
+            notifications: cleaned.notifications,
+            emailConfig: cleaned.emailConfig,
+            currency: cleaned.currency || 'BRL',
+            language: cleaned.language || 'pt-BR',
+            theme: cleaned.theme || 'light',
+            interfaceDensity: cleaned.interfaceDensity || cleaned.interface_density || 'comfortable',
+            enableAnimations: cleaned.enableAnimations ?? cleaned.enable_animations ?? true,
+            ...(cleaned.config || {})
+        };
+
         const mapped: Record<string, any> = {
             company_name: cleaned.companyName || cleaned.company_name || 'InfraCore BETA',
-            document: cleaned.cnpj || cleaned.document || '',
-            state_reg: cleaned.stateRegistration || cleaned.state_reg || null,
+            trade_name: cleaned.tradeName || cleaned.trade_name || null,
+            document: cleaned.document || cleaned.cnpj || '',
+            state_reg: cleaned.stateRegistration || cleaned.state_reg || cleaned.technical?.stateRegistry || null,
             email: cleaned.email || null,
             phone: cleaned.phone || null,
+            website: cleaned.website || null,
             address: cleaned.address || null,
+            bank_details: cleaned.bankDetails || cleaned.bank_details || null,
             theme: cleaned.theme || 'light',
             currency: cleaned.currency || 'BRL',
+            language: cleaned.language || 'pt-BR',
+            interface_density: cleaned.interfaceDensity || cleaned.interface_density || 'comfortable',
+            enable_animations: cleaned.enableAnimations ?? cleaned.enable_animations ?? true,
+            notifications: cleaned.notifications || {},
+            data_security: cleaned.dataSecurity || cleaned.data_security || {},
+            operational_params: cleaned.operational || cleaned.operationalParams || cleaned.operational_params || {},
+            integrations: cleaned.integrations || {},
+            config: fullConfig,
             updated_at: new Date().toISOString()
         };
-        if (cleaned.config !== undefined) {
-            mapped.config = cleaned.config;
-        }
         if (isCreate && cleaned.id && typeof cleaned.id === 'string' && cleaned.id.length === 36) {
             mapped.id = cleaned.id;
         }
@@ -1135,16 +1168,45 @@ const transformFetchedData = <T>(table: string, data: any[] | null): T[] => {
         } else if (table === 'production_formulas') {
             camelRow.materials = Array.isArray(camelRow.materials) ? camelRow.materials : (camelRow.ingredients || []);
         } else if (table === 'settings') {
-            camelRow.companyName = camelRow.companyName || camelRow.company_name || '';
-            camelRow.tradeName = camelRow.tradeName || camelRow.trade_name || '';
-            camelRow.cnpj = camelRow.cnpj || camelRow.document || '';
-            camelRow.stateRegistration = camelRow.stateRegistration || camelRow.state_reg || '';
-            camelRow.bankDetails = camelRow.bankDetails || camelRow.bank_details || {};
-            camelRow.interfaceDensity = camelRow.interfaceDensity || camelRow.interface_density || 'comfortable';
-            camelRow.enableAnimations = Boolean(camelRow.enableAnimations ?? camelRow.enable_animations ?? true);
-            camelRow.dataSecurity = camelRow.dataSecurity || camelRow.data_security || {};
-            camelRow.operationalParams = camelRow.operationalParams || camelRow.operational_params || {};
-            camelRow.config = camelRow.config || {};
+            const cfg = (camelRow.config && typeof camelRow.config === 'object') ? camelRow.config : {};
+            camelRow.companyName = camelRow.companyName || camelRow.company_name || cfg.companyName || '';
+            camelRow.tradeName = camelRow.tradeName || camelRow.trade_name || cfg.tradeName || '';
+            camelRow.document = camelRow.document || camelRow.cnpj || cfg.document || '';
+            camelRow.cnpj = camelRow.document;
+            camelRow.stateRegistration = camelRow.stateRegistration || camelRow.state_reg || cfg.stateRegistration || cfg.technical?.stateRegistry || '';
+            camelRow.email = camelRow.email || cfg.email || '';
+            camelRow.phone = camelRow.phone || cfg.phone || '';
+            camelRow.website = camelRow.website || cfg.website || '';
+            camelRow.address = camelRow.address || cfg.address || '';
+            camelRow.bankDetails = camelRow.bankDetails || camelRow.bank_details || cfg.bankDetails || {
+                bankName: '',
+                agency: '',
+                account: '',
+                pixKey: '',
+                pixType: 'CNPJ'
+            };
+            camelRow.technical = camelRow.technical || cfg.technical || {
+                taxRegime: 'Simples Nacional',
+                defaultTaxRate: 6.0,
+                financialYearStart: '01/01',
+                dateFormat: 'DD/MM/YYYY',
+                timezone: 'America/Sao_Paulo',
+                stateRegistry: camelRow.stateRegistration || '',
+                cityRegistry: '',
+                cnae: '',
+                nfeSeries: '1',
+                nfeNextNumber: 10001,
+                nfeEnvironment: 'homologacao',
+                fiscalModuleEnabled: true
+            };
+            camelRow.operational = camelRow.operational || camelRow.operationalParams || camelRow.operational_params || cfg.operational || {};
+            camelRow.documents = camelRow.documents || cfg.documents || {};
+            camelRow.integrations = camelRow.integrations || cfg.integrations || {};
+            camelRow.performance = camelRow.performance || cfg.performance || {};
+            camelRow.backup = camelRow.backup || cfg.backup || {};
+            camelRow.notifications = camelRow.notifications || cfg.notifications || {};
+            camelRow.emailConfig = camelRow.emailConfig || cfg.emailConfig || {};
+            camelRow.config = cfg;
         } else if (table === 'inventory') {
             camelRow.costPrice = Number(camelRow.costPrice ?? camelRow.cost_price ?? 0);
             camelRow.unitCost = Number(camelRow.unitCost ?? camelRow.cost_price ?? 0);

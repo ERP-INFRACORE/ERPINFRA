@@ -417,7 +417,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setUsers(cleanRemoteUsers);
       }
       if (ro && ro.length > 0) setRoles(ro);
-      if (set && set.length > 0) setSettings(set[0]);
+      if (set && set.length > 0) {
+        setSettings(prev => ({
+          ...prev,
+          ...set[0],
+          companyName: set[0].companyName || prev.companyName,
+          tradeName: set[0].tradeName || prev.tradeName || '',
+          document: set[0].document || prev.document || '',
+          email: set[0].email || prev.email || '',
+          phone: set[0].phone || prev.phone || '',
+          website: set[0].website || prev.website || '',
+          address: set[0].address || prev.address || '',
+          bankDetails: {
+            ...prev.bankDetails,
+            ...(set[0].bankDetails || {})
+          },
+          technical: {
+            ...prev.technical,
+            ...(set[0].technical || {})
+          },
+          operational: {
+            ...prev.operational,
+            ...(set[0].operational || {})
+          },
+          documents: {
+            ...prev.documents,
+            ...(set[0].documents || {})
+          },
+          integrations: {
+            ...prev.integrations,
+            ...(set[0].integrations || {})
+          },
+          notifications: {
+            ...prev.notifications,
+            ...(set[0].notifications || {})
+          }
+        }));
+      }
 
       if (fl && fl.length > 0) {
         const enrichedFleet = fl.map(v => ({
