@@ -28,6 +28,8 @@ import {
   RotateCcw,
   Loader2,
   Wrench
+,
+  Settings
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -745,6 +747,7 @@ const Clients = () => {
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
   const [isLoadingPlate, setIsLoadingPlate] = useState(false);
   const [isApiTokenModalOpen, setIsApiTokenModalOpen] = useState(false);
+  const [apiBrasilToken, setApiBrasilToken] = useState(() => (typeof localStorage !== 'undefined' ? localStorage.getItem('infracore_apibrasil_token') || '' : ''));
   const [tempApiToken, setTempApiToken] = useState(() => {
     if (typeof localStorage !== 'undefined') {
       return localStorage.getItem('infracore_apibrasil_token') || '';
@@ -754,7 +757,9 @@ const Clients = () => {
 
   const handleSaveApiToken = () => {
     try {
-      localStorage.setItem('infracore_apibrasil_token', tempApiToken.trim());
+      const cleanToken = tempApiToken.trim();
+      localStorage.setItem('infracore_apibrasil_token', cleanToken);
+      setApiBrasilToken(cleanToken);
       addToast('Token APIBrasil salvo com sucesso!', 'success');
       setIsApiTokenModalOpen(false);
     } catch {
