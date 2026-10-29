@@ -132,6 +132,33 @@ export const validatePlate = (plate: string): boolean => {
   return standardPattern.test(clean) || mercosulPattern.test(clean);
 };
 
+export const getSenatranStateFromPlate = (plate: string): { uf: string; state: string; region: string } | null => {
+  const p = (plate || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (p.length < 3) return null;
+  const prefix = p.slice(0, 3);
+
+  if (prefix >= 'AAA' && prefix <= 'BEZ') return { uf: 'PR', state: 'Paraná', region: 'Sul' };
+  if ((prefix >= 'BFA' && prefix <= 'GKI') || (prefix >= 'QSN' && prefix <= 'QSZ')) return { uf: 'SP', state: 'São Paulo', region: 'Sudeste' };
+  if ((prefix >= 'GKM' && prefix <= 'HOK') || (prefix >= 'OPA' && prefix <= 'OZZ') || (prefix >= 'PUA' && prefix <= 'PZZ') || (prefix >= 'QMQ' && prefix <= 'QQZ') || (prefix >= 'QPU' && prefix <= 'QUV') || (prefix >= 'RFA' && prefix <= 'RGD') || (prefix >= 'RMD' && prefix <= 'RND') || (prefix >= 'RTR' && prefix <= 'RUJ')) return { uf: 'MG', state: 'Minas Gerais', region: 'Sudeste' };
+  if ((prefix >= 'KMF' && prefix <= 'LVE') || (prefix >= 'RIK' && prefix <= 'RIN') || (prefix >= 'RIP' && prefix <= 'RKS')) return { uf: 'RJ', state: 'Rio de Janeiro', region: 'Sudeste' };
+  if ((prefix >= 'JNT' && prefix <= 'JZX') || (prefix >= 'OKS' && prefix <= 'OLM') || (prefix >= 'OUF' && prefix <= 'OVD') || (prefix >= 'OZC' && prefix <= 'OZV') || (prefix >= 'PJA' && prefix <= 'PLZ') || (prefix >= 'RDA' && prefix <= 'RDZ') || (prefix >= 'REK' && prefix <= 'RFA')) return { uf: 'BA', state: 'Bahia', region: 'Nordeste' };
+  if ((prefix >= 'IAQ' && prefix <= 'JDO') || (prefix >= 'IVA' && prefix <= 'IVZ') || (prefix >= 'IXA' && prefix <= 'IZZ') || (prefix >= 'JKA' && prefix <= 'JLO') || (prefix >= 'RNE' && prefix <= 'RNZ')) return { uf: 'RS', state: 'Rio Grande do Sul', region: 'Sul' };
+  if ((prefix >= 'LVK' && prefix <= 'LWS') || (prefix >= 'OKD' && prefix <= 'OKH') || (prefix >= 'QHA' && prefix <= 'QJZ') || (prefix >= 'QTJ' && prefix <= 'QTM') || (prefix >= 'RAA' && prefix <= 'RAZ') || (prefix >= 'RDS' && prefix <= 'RDX') || (prefix >= 'RKF' && prefix <= 'RKM')) return { uf: 'SC', state: 'Santa Catarina', region: 'Sul' };
+  if ((prefix >= 'KAV' && prefix <= 'KFC') || (prefix >= 'NFC' && prefix <= 'NGZ') || (prefix >= 'NJX' && prefix <= 'NLU') || (prefix >= 'NVO' && prefix <= 'NWR') || (prefix >= 'OGH' && prefix <= 'OHA') || (prefix >= 'OOG' && prefix <= 'OOU') || (prefix >= 'PQA' && prefix <= 'PRZ') || (prefix >= 'RBK' && prefix <= 'RCM')) return { uf: 'GO', state: 'Goiás', region: 'Centro-Oeste' };
+  if ((prefix >= 'KEA' && prefix <= 'KHF') || (prefix >= 'OYI' && prefix <= 'OZZ') || (prefix >= 'PCA' && prefix <= 'PGZ') || (prefix >= 'QYA' && prefix <= 'QZZ') || (prefix >= 'RDC' && prefix <= 'RDM')) return { uf: 'PE', state: 'Pernambuco', region: 'Nordeste' };
+  if ((prefix >= 'HTX' && prefix <= 'HZA') || (prefix >= 'NQZ' && prefix <= 'NRT') || (prefix >= 'NUM' && prefix <= 'NVF') || (prefix >= 'OCH' && prefix <= 'OCI') || (prefix >= 'OCR' && prefix <= 'OEY') || (prefix >= 'OIA' && prefix <= 'OIQ') || (prefix >= 'PFA' && prefix <= 'PFM') || (prefix >= 'PND' && prefix <= 'PPN') || (prefix >= 'RJA' && prefix <= 'RJO') || (prefix >= 'RRS' && prefix <= 'RSC')) return { uf: 'CE', state: 'Ceará', region: 'Nordeste' };
+  if ((prefix >= 'HMM' && prefix <= 'HNY') || (prefix >= 'NQH' && prefix <= 'NQI') || (prefix >= 'NRP' && prefix <= 'NRO') || (prefix >= 'OQB' && prefix <= 'OQD') || (prefix >= 'PFF' && prefix <= 'PFI') || (prefix >= 'QFE' && prefix <= 'QFQ') || (prefix >= 'ROA' && prefix <= 'ROZ')) return { uf: 'PB', state: 'Paraíba', region: 'Nordeste' };
+  if ((prefix >= 'HQH' && prefix <= 'HTB') || (prefix >= 'NRF' && prefix <= 'NSD') || (prefix >= 'OOG' && prefix <= 'OOU') || (prefix >= 'QAA' && prefix <= 'QAZ') || (prefix >= 'REW' && prefix <= 'REZ')) return { uf: 'MS', state: 'Mato Grosso do Sul', region: 'Centro-Oeste' };
+  if ((prefix >= 'JRI' && prefix <= 'JRY') || (prefix >= 'NJW' && prefix <= 'NJX') || (prefix >= 'NPN' && prefix <= 'NQA') || (prefix >= 'OOD' && prefix <= 'OOG') || (prefix >= 'QBA' && prefix <= 'QCZ') || (prefix >= 'RRA' && prefix <= 'RRJ')) return { uf: 'MT', state: 'Mato Grosso', region: 'Centro-Oeste' };
+  if ((prefix >= 'JTA' && prefix <= 'JWE') || (prefix >= 'NSE' && prefix <= 'NTC') || (prefix >= 'OBT' && prefix <= 'OCA') || (prefix >= 'OFI' && prefix <= 'OFW') || (prefix >= 'OSW' && prefix <= 'OTZ') || (prefix >= 'QDA' && prefix <= 'QEZ') || (prefix >= 'QVA' && prefix <= 'QVZ') || (prefix >= 'RWK' && prefix <= 'RXD')) return { uf: 'PA', state: 'Pará', region: 'Norte' };
+  if ((prefix >= 'MOX' && prefix <= 'MTZ') || (prefix >= 'OCV' && prefix <= 'ODT') || (prefix >= 'OVE' && prefix <= 'OVF') || (prefix >= 'OVH' && prefix <= 'OVL') || (prefix >= 'OYD' && prefix <= 'OYK') || (prefix >= 'PPA' && prefix <= 'PPZ') || (prefix >= 'RBA' && prefix <= 'RBJ') || (prefix >= 'RQE' && prefix <= 'RQP')) return { uf: 'ES', state: 'Espírito Santo', region: 'Sudeste' };
+  if ((prefix >= 'JXY' && prefix <= 'JZZ') || (prefix >= 'NOI' && prefix <= 'NPB') || (prefix >= 'OAA' && prefix <= 'OAO') || (prefix >= 'OXM' && prefix <= 'OXM') || (prefix >= 'PHA' && prefix <= 'PHZ') || (prefix >= 'QTA' && prefix <= 'QTJ') || (prefix >= 'RZA' && prefix <= 'RZZ')) return { uf: 'AM', state: 'Amazonas', region: 'Norte' };
+  if ((prefix >= 'HPL' && prefix <= 'HQI') || (prefix >= 'NHA' && prefix <= 'NHT') || (prefix >= 'NMP' && prefix <= 'NNI') || (prefix >= 'NWS' && prefix <= 'NXQ') || (prefix >= 'OIR' && prefix <= 'OJQ') || (prefix >= 'OXQ' && prefix <= 'OXZ') || (prefix >= 'PSA' && prefix <= 'PZZ') || (prefix >= 'ROH' && prefix <= 'ROM')) return { uf: 'MA', state: 'Maranhão', region: 'Nordeste' };
+  if ((prefix >= 'MXA' && prefix <= 'MZZ') || (prefix >= 'NNJ' && prefix <= 'NOH') || (prefix >= 'OJR' && prefix <= 'OKC') || (prefix >= 'OVZ' && prefix <= 'OWG') || (prefix >= 'QGA' && prefix <= 'QGZ') || (prefix >= 'RGE' && prefix <= 'RGM')) return { uf: 'RN', state: 'Rio Grande do Norte', region: 'Nordeste' };
+
+  return null;
+};
+
 export const formatPlate = (plate: string): string => {
   const clean = (plate || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (clean.length <= 3) return clean;
@@ -2368,18 +2395,18 @@ const Clients = () => {
         </div>
       )}
 
-{/* Modal de Configuração de Chave API (APIBrasil) */}
+{/* Modal de Configuração de APIs Veiculares (Multi-Provedores Gratuitos e Comerciais) */}
       {isApiTokenModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-700 w-full max-w-md overflow-hidden animate-scale-up">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-700 w-full max-w-lg overflow-hidden animate-scale-up">
             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600">
                   <Key size={20} />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-slate-900 dark:text-white">Token APIBrasil</h3>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Base Nacional SENATRAN/SINESP</p>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">APIs de Consulta Veicular</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Base Nacional & Tabela FIPE</p>
                 </div>
               </div>
               <button
@@ -2391,34 +2418,103 @@ const Clients = () => {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
               <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                Informe seu <strong>Token de Acesso (Bearer Token)</strong> fornecido pela <strong>APIBrasil (apibrasil.io)</strong> para consultar dados de frotas diretamente na base nacional.
+                Configure os provedores de consulta por placa. O sistema conta com <strong>APIs gratuitas</strong> e permite adicionar suas próprias chaves para dados aprofundados.
               </p>
 
+              {/* 1. Menu Suspenso: Provedor Preferencial */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                  Token da APIBrasil
+                  Provedor Preferencial de Busca
                 </label>
-                <input
-                  type="password"
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm font-mono text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  placeholder="Cole seu token aqui..."
-                  value={tempApiToken}
-                  onChange={e => setTempApiToken(e.target.value)}
-                />
+                <select
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-bold text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
+                  value={tempApiConfig.provider || 'auto'}
+                  onChange={e => setTempApiConfig({ ...tempApiConfig, provider: e.target.value })}
+                >
+                  <option value="auto">⚡ Modo Cascata Inteligente (Grátis Primeiro -> Chaves)</option>
+                  <option value="fipe_api">🟢 Fipe.api.br (500 consultas/dia 100% Grátis)</option>
+                  <option value="fipex">🟢 FipeX / Tabela Fipe Livre (100% Grátis & Aberta)</option>
+                  <option value="senatran_geo">🟢 SENATRAN Faixas Geográficas (100% Grátis & Offline)</option>
+                  <option value="apibrasil">🔑 APIBrasil (apibrasil.io - SENATRAN Completo)</option>
+                  <option value="wdapi">🔑 WDAPI (wdapi2.com.br - Placas & Chassi)</option>
+                </select>
               </div>
 
-              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
-                <span>Não possui token da APIBrasil?</span>
-                <a
-                  href="https://apibrasil.io"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline inline-flex items-center gap-1"
-                >
-                  Obter no apibrasil.io <ExternalLink size={11} />
-                </a>
+              {/* Box Informativo: Provedores Gratuitos Ativos */}
+              <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 rounded-xl text-xs space-y-1">
+                <p className="font-extrabold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                  <CheckCircle size={14} /> APIs Gratuitas Pré-Configuradas:
+                </p>
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 leading-relaxed">
+                  • <strong>Fipe.api.br</strong>: Cota livre de até 500 consultas diárias.<br />
+                  • <strong>SENATRAN Faixas Oficiais</strong>: Validação e identificação do estado de origem 100% livre e sem custo.<br />
+                  • <strong>Tabela Fipe Aberta</strong>: Mapeamento de marcas e modelos em modo aberto.
+                </p>
+              </div>
+
+              {/* 2. Campo Token APIBrasil */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Token APIBrasil (apibrasil.io)
+                  </label>
+                  <span className="text-[9px] text-slate-400 font-semibold lowercase">opcional com cota grátis</span>
+                </div>
+                <input
+                  type="password"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-mono text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="Bearer Token da APIBrasil (opcional)..."
+                  value={tempApiConfig.apiBrasilToken || ''}
+                  onChange={e => setTempApiConfig({ ...tempApiConfig, apiBrasilToken: e.target.value })}
+                />
+                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                  <span>Plano com créditos gratuitos de teste:</span>
+                  <a href="https://apibrasil.io" target="_blank" rel="noopener noreferrer" className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline inline-flex items-center gap-1">
+                    apibrasil.io <ExternalLink size={10} />
+                  </a>
+                </div>
+              </div>
+
+              {/* 3. Campo Token WDAPI */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Token WDAPI (wdapi2.com.br)
+                  </label>
+                  <span className="text-[9px] text-slate-400 font-semibold lowercase">opcional</span>
+                </div>
+                <input
+                  type="password"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-mono text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="Token WDAPI para dados de chassi..."
+                  value={tempApiConfig.wdapiToken || ''}
+                  onChange={e => setTempApiConfig({ ...tempApiConfig, wdapiToken: e.target.value })}
+                />
+                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                  <span>Chave de homologação / desenvolvedor:</span>
+                  <a href="https://wdapi2.com.br" target="_blank" rel="noopener noreferrer" className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline inline-flex items-center gap-1">
+                    wdapi2.com.br <ExternalLink size={10} />
+                  </a>
+                </div>
+              </div>
+
+              {/* 4. Campo Token Fipe.api.br (Opcional) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Token Fipe.api.br
+                  </label>
+                  <span className="text-[9px] text-slate-400 font-semibold lowercase">expande limite grátis</span>
+                </div>
+                <input
+                  type="password"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-mono text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="Token de cadastro grátis (expande para 1000/dia)..."
+                  value={tempApiConfig.fipeApiToken || ''}
+                  onChange={e => setTempApiConfig({ ...tempApiConfig, fipeApiToken: e.target.value })}
+                />
               </div>
             </div>
 
@@ -2432,10 +2528,10 @@ const Clients = () => {
               </button>
               <button
                 type="button"
-                onClick={handleSaveApiToken}
+                onClick={handleSaveApiConfig}
                 className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg shadow-emerald-600/20 transition-all cursor-pointer flex items-center gap-2"
               >
-                <Save size={14} /> Salvar Token
+                <Save size={14} /> Salvar Configurações
               </button>
             </div>
           </div>
