@@ -346,6 +346,342 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
         return mapped;
     }
 
+    // 8. Mapeamento canônico para Clientes
+    if (table === 'clients') {
+        const mapped: Record<string, any> = {
+            name: cleaned.name || '',
+            trade_name: cleaned.tradeName || cleaned.trade_name || null,
+            document: cleaned.document || '',
+            state_reg: cleaned.stateReg || cleaned.state_reg || null,
+            email: cleaned.email || null,
+            phone: cleaned.phone || null,
+            type: cleaned.type || 'PJ',
+            status: cleaned.status || 'Ativo',
+            address: cleaned.address || null,
+            credit_limit: Number(cleaned.creditLimit ?? cleaned.credit_limit ?? 0),
+            tags: Array.isArray(cleaned.tags) ? cleaned.tags : [],
+            notes: cleaned.notes || null,
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 9. Mapeamento canônico para Fornecedores
+    if (table === 'suppliers') {
+        const mapped: Record<string, any> = {
+            name: cleaned.name || '',
+            trade_name: cleaned.tradeName || cleaned.trade_name || null,
+            document: cleaned.document || '',
+            state_reg: cleaned.stateReg || cleaned.state_reg || null,
+            email: cleaned.email || null,
+            phone: cleaned.phone || null,
+            contact_person: cleaned.contactPerson || cleaned.contact_person || null,
+            category: cleaned.category || 'Geral',
+            status: cleaned.status || 'Ativo',
+            address: cleaned.address || null,
+            payment_terms: cleaned.paymentTerms || cleaned.payment_terms || null,
+            notes: cleaned.notes || null,
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 10. Mapeamento canônico para Ordens de Compra (Suprimentos / Custos)
+    if (table === 'purchase_orders') {
+        const mapped: Record<string, any> = {
+            order_number: cleaned.orderNumber || cleaned.order_number || '',
+            supplier_id: cleaned.supplierId && isValidUUID(cleaned.supplierId) ? cleaned.supplierId : (cleaned.supplier_id && isValidUUID(cleaned.supplier_id) ? cleaned.supplier_id : null),
+            supplier_name: cleaned.supplierName || cleaned.supplier_name || '',
+            date: toIsoDate(cleaned.date) || new Date().toISOString().split('T')[0],
+            delivery_date: toIsoDate(cleaned.deliveryDate || cleaned.delivery_date) || null,
+            items: Array.isArray(cleaned.items) ? cleaned.items : [],
+            total: Number(cleaned.totalAmount ?? cleaned.total ?? 0),
+            status: cleaned.status || 'Pendente',
+            payment_terms: cleaned.paymentTerms || cleaned.payment_terms || null,
+            notes: cleaned.notes || null,
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 11. Mapeamento canônico para Contas Bancárias (Financeiro)
+    if (table === 'financial_accounts') {
+        const mapped: Record<string, any> = {
+            name: cleaned.name || '',
+            bank: cleaned.bank || '',
+            agency: cleaned.agency || null,
+            account_number: cleaned.accountNumber || cleaned.account_number || null,
+            type: cleaned.type || 'Corrente',
+            initial_balance: Number(cleaned.initialBalance ?? cleaned.initial_balance ?? 0),
+            balance: Number(cleaned.balance ?? 0),
+            pix_key: cleaned.pixKey || cleaned.pix_key || null,
+            pix_key_type: cleaned.pixKeyType || cleaned.pix_key_type || cleaned.pixType || null,
+            is_default: Boolean(cleaned.isDefault ?? cleaned.is_default),
+            status: cleaned.status || 'Ativa',
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 12. Mapeamento canônico para Fórmulas / Traços de Produção
+    if (table === 'production_formulas') {
+        const mapped: Record<string, any> = {
+            name: cleaned.name || '',
+            category: cleaned.category || 'Asfalto',
+            type: cleaned.type || 'Composicao',
+            ingredients: Array.isArray(cleaned.materials || cleaned.ingredients) ? (cleaned.materials || cleaned.ingredients) : [],
+            output_product_id: cleaned.outputProductId && isValidUUID(cleaned.outputProductId) ? cleaned.outputProductId : (cleaned.output_product_id && isValidUUID(cleaned.output_product_id) ? cleaned.output_product_id : null),
+            outputs: Array.isArray(cleaned.outputs) ? cleaned.outputs : [],
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 13. Mapeamento canônico para Configurações Gerais (compatível com schema Supabase 'settings')
+    if (table === 'settings') {
+        const mapped: Record<string, any> = {
+            company_name: cleaned.companyName || cleaned.company_name || 'InfraCore BETA',
+            document: cleaned.cnpj || cleaned.document || '',
+            state_reg: cleaned.stateRegistration || cleaned.state_reg || null,
+            email: cleaned.email || null,
+            phone: cleaned.phone || null,
+            address: cleaned.address || null,
+            theme: cleaned.theme || 'light',
+            currency: cleaned.currency || 'BRL',
+            updated_at: new Date().toISOString()
+        };
+        if (cleaned.config !== undefined) {
+            mapped.config = cleaned.config;
+        }
+        if (isCreate && cleaned.id && typeof cleaned.id === 'string' && cleaned.id.length === 36) {
+            mapped.id = cleaned.id;
+        }
+        return mapped;
+    }
+
+    // 14. Mapeamento canônico para Estoque / Almoxarifado (Insumos e Produtos)
+    if (table === 'inventory') {
+        const mapped: Record<string, any> = {
+            name: cleaned.name || '',
+            description: cleaned.description || null,
+            category: cleaned.category || 'Geral',
+            quantity: Number(cleaned.quantity || 0),
+            unit: cleaned.unit || 'UN',
+            price: Number(cleaned.price || 0),
+            cost_price: Number(cleaned.costPrice ?? cleaned.cost_price ?? cleaned.unitCost ?? 0),
+            min_stock: Number(cleaned.minStock ?? cleaned.min_stock ?? 0),
+            max_stock: cleaned.maxStock !== undefined ? Number(cleaned.maxStock) : (cleaned.max_stock !== undefined ? Number(cleaned.max_stock) : null),
+            location: cleaned.location || null,
+            barcode: cleaned.barcode || null,
+            ncm: cleaned.ncm || null,
+            weight: cleaned.weight !== undefined ? Number(cleaned.weight) : null,
+            brand: cleaned.brand || null,
+            supplier_id: cleaned.supplierId && isValidUUID(cleaned.supplierId) ? cleaned.supplierId : (cleaned.supplier_id && isValidUUID(cleaned.supplier_id) ? cleaned.supplier_id : null),
+            color: cleaned.color || null,
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 15. Mapeamento canônico para Pneus (Frota)
+    if (table === 'tires') {
+        const mapped: Record<string, any> = {
+            serial_number: cleaned.serialNumber || cleaned.serial_number || '',
+            brand: cleaned.brand || '',
+            model: cleaned.model || '',
+            size: cleaned.size || '',
+            status: cleaned.status || 'Novo',
+            current_vehicle_id: cleaned.currentVehicleId && isValidUUID(cleaned.currentVehicleId) ? cleaned.currentVehicleId : (cleaned.current_vehicle_id && isValidUUID(cleaned.current_vehicle_id) ? cleaned.current_vehicle_id : null),
+            position: cleaned.position || null,
+            install_km: cleaned.installKm !== undefined ? Number(cleaned.installKm) : (cleaned.install_km !== undefined ? Number(cleaned.install_km) : null),
+            current_km: Number(cleaned.currentKm ?? cleaned.current_km ?? 0),
+            max_km: Number(cleaned.maxKm ?? cleaned.max_km ?? 100000),
+            recap_count: Number(cleaned.recapCount ?? cleaned.recap_count ?? 0),
+            history: Array.isArray(cleaned.history) ? cleaned.history : [],
+            stock_item_id: cleaned.stockItemId && isValidUUID(cleaned.stockItemId) ? cleaned.stockItemId : (cleaned.stock_item_id && isValidUUID(cleaned.stock_item_id) ? cleaned.stock_item_id : null),
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 16. Mapeamento canônico para Unidades de Produção (Usinas e Britagem)
+    if (table === 'production_units') {
+        const mapped: Record<string, any> = {
+            name: cleaned.name || '',
+            type: cleaned.type || 'Usina de Asfalto',
+            capacity: String(cleaned.capacity || '100 ton/h'),
+            location: cleaned.location || null,
+            status: cleaned.status || 'Operacional',
+            operator: cleaned.operator || null,
+            power: cleaned.power || null,
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 17. Mapeamento canônico para Folha de Pagamento (RH)
+    if (table === 'payroll') {
+        const mapped: Record<string, any> = {
+            employee_id: cleaned.employeeId && isValidUUID(cleaned.employeeId) ? cleaned.employeeId : (cleaned.employee_id && isValidUUID(cleaned.employee_id) ? cleaned.employee_id : null),
+            employee_name: cleaned.employeeName || cleaned.employee_name || '',
+            month: cleaned.month || '',
+            base_salary: Number(cleaned.baseSalary ?? cleaned.base_salary ?? 0),
+            benefits: Number(cleaned.benefits || 0),
+            overtime: Number(cleaned.overtime || 0),
+            discounts: Number(cleaned.discounts || 0),
+            total_net: Number(cleaned.totalNet ?? cleaned.total_net ?? 0),
+            status: cleaned.status || 'Pendente',
+            payment_date: toIsoDate(cleaned.paymentDate || cleaned.payment_date) || null,
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 18. Mapeamento canônico para Férias (RH)
+    if (table === 'vacations') {
+        const mapped: Record<string, any> = {
+            employee_id: cleaned.employeeId && isValidUUID(cleaned.employeeId) ? cleaned.employeeId : (cleaned.employee_id && isValidUUID(cleaned.employee_id) ? cleaned.employee_id : null),
+            employee_name: cleaned.employeeName || cleaned.employee_name || '',
+            start_date: toIsoDate(cleaned.startDate || cleaned.start_date) || new Date().toISOString().split('T')[0],
+            end_date: toIsoDate(cleaned.endDate || cleaned.end_date) || new Date().toISOString().split('T')[0],
+            days: Number(cleaned.days || 0),
+            status: cleaned.status || 'Solicitado',
+            requested_at: toIsoDate(cleaned.requestedAt || cleaned.requested_at) || null,
+            approved_by: cleaned.approvedBy || cleaned.approved_by || null,
+            notes: cleaned.notes || null,
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 19. Mapeamento canônico para Adiantamentos Salariais (RH)
+    if (table === 'salary_advances') {
+        const mapped: Record<string, any> = {
+            employee_id: cleaned.employeeId && isValidUUID(cleaned.employeeId) ? cleaned.employeeId : (cleaned.employee_id && isValidUUID(cleaned.employee_id) ? cleaned.employee_id : null),
+            employee_name: cleaned.employeeName || cleaned.employee_name || '',
+            amount: Number(cleaned.amount || 0),
+            reason: cleaned.reason || 'Adiantamento',
+            status: cleaned.status || 'Solicitado',
+            request_date: toIsoDate(cleaned.requestDate || cleaned.request_date) || new Date().toISOString().split('T')[0],
+            deduct_from_month: cleaned.deductFromMonth || cleaned.deduct_from_month || null,
+            notes: cleaned.notes || null,
+            approved_by: cleaned.approvedBy || cleaned.approved_by || null,
+            paid_at: toIsoDate(cleaned.paidAt || cleaned.paid_at) || null,
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 20. Mapeamento canônico para Ponto Eletrônico (RH)
+    if (table === 'time_logs') {
+        const mapped: Record<string, any> = {
+            employee_id: cleaned.employeeId && isValidUUID(cleaned.employeeId) ? cleaned.employeeId : (cleaned.employee_id && isValidUUID(cleaned.employee_id) ? cleaned.employee_id : null),
+            date: toIsoDate(cleaned.date) || new Date().toISOString().split('T')[0],
+            check_in: cleaned.checkIn || cleaned.check_in || '08:00',
+            check_out: cleaned.checkOut || cleaned.check_out || null,
+            lunch_start: cleaned.lunchStart || cleaned.lunch_start || null,
+            lunch_end: cleaned.lunchEnd || cleaned.lunch_end || null,
+            total_hours: Number(cleaned.totalHours ?? cleaned.total_hours ?? 8),
+            status: cleaned.status || 'Regular',
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 21. Mapeamento canônico para Manutenções de Frota
+    if (table === 'maintenance_records') {
+        const mapped: Record<string, any> = {
+            vehicle_id: cleaned.vehicleId && isValidUUID(cleaned.vehicleId) ? cleaned.vehicleId : (cleaned.vehicle_id && isValidUUID(cleaned.vehicle_id) ? cleaned.vehicle_id : null),
+            date: toIsoDate(cleaned.date) || new Date().toISOString().split('T')[0],
+            type: cleaned.type || 'Preventiva',
+            description: cleaned.description || 'Manutenção',
+            cost: Number(cleaned.cost || 0),
+            km: Number(cleaned.km || 0),
+            performed_by: cleaned.performedBy || cleaned.performed_by || cleaned.mechanic || null,
+            notes: cleaned.notes || null,
+            cost_center: cleaned.costCenter || cleaned.cost_center || null,
+            ledger_code: cleaned.ledgerCode || cleaned.ledger_code || null,
+            ledger_name: cleaned.ledgerName || cleaned.ledger_name || null,
+            attachments: Array.isArray(cleaned.attachments) ? cleaned.attachments : [],
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 22. Mapeamento canônico para Abastecimentos de Frota
+    if (table === 'fuel_logs') {
+        const mapped: Record<string, any> = {
+            vehicle_id: cleaned.vehicleId && isValidUUID(cleaned.vehicleId) ? cleaned.vehicleId : (cleaned.vehicle_id && isValidUUID(cleaned.vehicle_id) ? cleaned.vehicle_id : null),
+            date: toIsoDate(cleaned.date) || new Date().toISOString().split('T')[0],
+            fuel_type: cleaned.fuelType || cleaned.fuel_type || 'Diesel S10',
+            liters: Number(cleaned.liters || 0),
+            cost: Number(cleaned.cost || 0),
+            km: Number(cleaned.km || 0),
+            driver_name: cleaned.driverName || cleaned.driver_name || null,
+            gas_station: cleaned.gasStation || cleaned.gas_station || cleaned.stationName || null,
+            cost_center: cleaned.costCenter || cleaned.cost_center || null,
+            ledger_code: cleaned.ledgerCode || cleaned.ledger_code || null,
+            ledger_name: cleaned.ledgerName || cleaned.ledger_name || null,
+            attachments: Array.isArray(cleaned.attachments) ? cleaned.attachments : [],
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 23. Mapeamento canônico para Movimentações de Estoque
+    if (table === 'stock_movements') {
+        const mapped: Record<string, any> = {
+            item_id: cleaned.itemId && isValidUUID(cleaned.itemId) ? cleaned.itemId : (cleaned.item_id && isValidUUID(cleaned.item_id) ? cleaned.item_id : null),
+            item_name: cleaned.itemName || cleaned.item_name || '',
+            type: cleaned.type || 'Entrada',
+            quantity: Number(cleaned.quantity || 0),
+            previous_stock: cleaned.previousStock !== undefined ? Number(cleaned.previousStock) : (cleaned.previous_stock !== undefined ? Number(cleaned.previous_stock) : null),
+            current_stock: cleaned.currentStock !== undefined ? Number(cleaned.currentStock) : (cleaned.current_stock !== undefined ? Number(cleaned.current_stock) : null),
+            unit: cleaned.unit || 'UN',
+            cost_per_unit: cleaned.costPerUnit !== undefined ? Number(cleaned.costPerUnit) : (cleaned.cost_per_unit !== undefined ? Number(cleaned.cost_per_unit) : null),
+            total_cost: cleaned.totalCost !== undefined ? Number(cleaned.totalCost) : (cleaned.total_cost !== undefined ? Number(cleaned.total_cost) : null),
+            reason: cleaned.reason || 'Ajuste Operacional',
+            document_id: cleaned.documentId || cleaned.document_id || null,
+            user_id: cleaned.userId && isValidUUID(cleaned.userId) ? cleaned.userId : (cleaned.user_id && isValidUUID(cleaned.user_id) ? cleaned.user_id : null),
+            user_name: cleaned.userName || cleaned.user_name || null,
+            date: toIsoDate(cleaned.date) || new Date().toISOString().split('T')[0],
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
+    // 24. Mapeamento canônico para Controle Tecnológico e Ensaios Laboratoriais (DNIT)
+    if (table === 'laboratory_tests') {
+        const mapped: Record<string, any> = {
+            module: cleaned.module || 'asfalto',
+            category: cleaned.category || null,
+            test_code: cleaned.testCode || cleaned.test_code || 'DNIT-ENSAIO',
+            test_name: cleaned.testName || cleaned.test_name || 'Ensaio Laboratorial',
+            standard_norm: cleaned.standardNorm || cleaned.standard_norm || 'DNIT/DNER',
+            sample_type: cleaned.sampleType || cleaned.sample_type || null,
+            batch_number: cleaned.batchNumber || cleaned.batch_number || null,
+            order_id: cleaned.orderId && isValidUUID(cleaned.orderId) ? cleaned.orderId : (cleaned.order_id && isValidUUID(cleaned.order_id) ? cleaned.order_id : null),
+            order_number: cleaned.orderNumber || cleaned.order_number || null,
+            product_name: cleaned.productName || cleaned.product_name || null,
+            unit_id: cleaned.unitId && isValidUUID(cleaned.unitId) ? cleaned.unitId : (cleaned.unit_id && isValidUUID(cleaned.unit_id) ? cleaned.unit_id : null),
+            unit_name: cleaned.unitName || cleaned.unit_name || null,
+            location_or_station: cleaned.locationOrStation || cleaned.location_or_station || null,
+            supplier_or_quarry: cleaned.supplierOrQuarry || cleaned.supplier_or_quarry || null,
+            tested_at: cleaned.testedAt || cleaned.tested_at || new Date().toISOString(),
+            tester: cleaned.tester || null,
+            supervisor: cleaned.supervisor || null,
+            nominal_expected: cleaned.nominalExpected || cleaned.nominal_expected || null,
+            result_value: cleaned.resultValue || cleaned.result_value || null,
+            status: cleaned.status || 'Aprovado',
+            conditional_release: Boolean(cleaned.conditionalRelease ?? cleaned.conditional_release ?? false),
+            notes: cleaned.notes || null,
+            bench_data: cleaned.benchData || cleaned.bench_data || {},
+            metrics_calculated: cleaned.metricsCalculated || cleaned.metrics_calculated || {},
+        };
+        if (isCreate) mapped.id = cleaned.id;
+        return mapped;
+    }
+
     // Mapeamento genérico e resiliente para demais tabelas
     const genericMapped: Record<string, any> = {};
     for (const [key, val] of Object.entries(cleaned)) {
@@ -768,6 +1104,138 @@ const transformFetchedData = <T>(table: string, data: any[] | null): T[] => {
             camelRow.clientId = camelRow.clientId || camelRow.client_id;
             camelRow.saleId = camelRow.saleId || camelRow.sale_id;
             camelRow.vehicleId = camelRow.vehicleId || camelRow.vehicle_id;
+        } else if (table === 'clients') {
+            camelRow.tradeName = camelRow.tradeName || camelRow.trade_name || '';
+            camelRow.stateReg = camelRow.stateReg || camelRow.state_reg || '';
+            camelRow.creditLimit = Number(camelRow.creditLimit ?? camelRow.credit_limit ?? 0);
+            camelRow.registeredAt = camelRow.registeredAt || toLocaleDate(camelRow.createdAt || camelRow.created_at) || '01/01/2026';
+            camelRow.initials = camelRow.initials || (camelRow.name ? camelRow.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase() : 'CL');
+            camelRow.colorClass = camelRow.colorClass || 'bg-indigo-600 text-white';
+        } else if (table === 'suppliers') {
+            camelRow.tradeName = camelRow.tradeName || camelRow.trade_name || '';
+            camelRow.contactPerson = camelRow.contactPerson || camelRow.contact_person || '';
+            camelRow.paymentTerms = camelRow.paymentTerms || camelRow.payment_terms || '';
+            camelRow.stateReg = camelRow.stateReg || camelRow.state_reg || '';
+        } else if (table === 'purchase_orders') {
+            camelRow.orderNumber = camelRow.orderNumber || camelRow.order_number || '';
+            camelRow.supplierId = camelRow.supplierId || camelRow.supplier_id || '';
+            camelRow.supplierName = camelRow.supplierName || camelRow.supplier_name || '';
+            camelRow.date = toLocaleDate(camelRow.date);
+            if (camelRow.deliveryDate || camelRow.delivery_date) {
+                camelRow.deliveryDate = toLocaleDate(camelRow.deliveryDate || camelRow.delivery_date);
+            }
+            camelRow.totalAmount = Number(camelRow.totalAmount ?? camelRow.total ?? 0);
+            camelRow.paymentTerms = camelRow.paymentTerms || camelRow.payment_terms || '';
+        } else if (table === 'financial_accounts') {
+            camelRow.accountNumber = camelRow.accountNumber || camelRow.account_number || '';
+            camelRow.initialBalance = Number(camelRow.initialBalance ?? camelRow.initial_balance ?? 0);
+            camelRow.pixKey = camelRow.pixKey || camelRow.pix_key || '';
+            camelRow.pixKeyType = camelRow.pixKeyType || camelRow.pix_key_type || '';
+            camelRow.isDefault = Boolean(camelRow.isDefault ?? camelRow.is_default);
+        } else if (table === 'production_formulas') {
+            camelRow.materials = Array.isArray(camelRow.materials) ? camelRow.materials : (camelRow.ingredients || []);
+        } else if (table === 'settings') {
+            camelRow.companyName = camelRow.companyName || camelRow.company_name || '';
+            camelRow.tradeName = camelRow.tradeName || camelRow.trade_name || '';
+            camelRow.cnpj = camelRow.cnpj || camelRow.document || '';
+            camelRow.stateRegistration = camelRow.stateRegistration || camelRow.state_reg || '';
+            camelRow.bankDetails = camelRow.bankDetails || camelRow.bank_details || {};
+            camelRow.interfaceDensity = camelRow.interfaceDensity || camelRow.interface_density || 'comfortable';
+            camelRow.enableAnimations = Boolean(camelRow.enableAnimations ?? camelRow.enable_animations ?? true);
+            camelRow.dataSecurity = camelRow.dataSecurity || camelRow.data_security || {};
+            camelRow.operationalParams = camelRow.operationalParams || camelRow.operational_params || {};
+            camelRow.config = camelRow.config || {};
+        } else if (table === 'inventory') {
+            camelRow.costPrice = Number(camelRow.costPrice ?? camelRow.cost_price ?? 0);
+            camelRow.unitCost = Number(camelRow.unitCost ?? camelRow.cost_price ?? 0);
+            camelRow.minStock = Number(camelRow.minStock ?? camelRow.min_stock ?? 0);
+            camelRow.maxStock = camelRow.maxStock ?? camelRow.max_stock ?? undefined;
+            camelRow.supplierId = camelRow.supplierId || camelRow.supplier_id || '';
+        } else if (table === 'tires') {
+            camelRow.serialNumber = camelRow.serialNumber || camelRow.serial_number || '';
+            camelRow.currentVehicleId = camelRow.currentVehicleId || camelRow.current_vehicle_id || '';
+            camelRow.installKm = camelRow.installKm ?? camelRow.install_km;
+            camelRow.currentKm = Number(camelRow.currentKm ?? camelRow.current_km ?? 0);
+            camelRow.maxKm = Number(camelRow.maxKm ?? camelRow.max_km ?? 100000);
+            camelRow.recapCount = Number(camelRow.recapCount ?? camelRow.recap_count ?? 0);
+            camelRow.stockItemId = camelRow.stockItemId || camelRow.stock_item_id || '';
+        } else if (table === 'production_units') {
+            camelRow.currentLoad = camelRow.currentLoad ?? 80;
+            camelRow.temp = camelRow.temp ?? 155;
+            camelRow.power = camelRow.power || '120 kW';
+        } else if (table === 'payroll') {
+            camelRow.employeeId = camelRow.employeeId || camelRow.employee_id || '';
+            camelRow.employeeName = camelRow.employeeName || camelRow.employee_name || '';
+            camelRow.baseSalary = Number(camelRow.baseSalary ?? camelRow.base_salary ?? 0);
+            camelRow.totalNet = Number(camelRow.totalNet ?? camelRow.total_net ?? 0);
+            if (camelRow.paymentDate || camelRow.payment_date) {
+                camelRow.paymentDate = toLocaleDate(camelRow.paymentDate || camelRow.payment_date);
+            }
+        } else if (table === 'vacations') {
+            camelRow.employeeId = camelRow.employeeId || camelRow.employee_id || '';
+            camelRow.employeeName = camelRow.employeeName || camelRow.employee_name || '';
+            camelRow.startDate = toLocaleDate(camelRow.startDate || camelRow.start_date);
+            camelRow.endDate = toLocaleDate(camelRow.endDate || camelRow.end_date);
+            if (camelRow.requestedAt || camelRow.requested_at) {
+                camelRow.requestedAt = toLocaleDate(camelRow.requestedAt || camelRow.requested_at);
+            }
+        } else if (table === 'salary_advances') {
+            camelRow.employeeId = camelRow.employeeId || camelRow.employee_id || '';
+            camelRow.employeeName = camelRow.employeeName || camelRow.employee_name || '';
+            camelRow.requestDate = toLocaleDate(camelRow.requestDate || camelRow.request_date);
+            camelRow.deductFromMonth = camelRow.deductFromMonth || camelRow.deduct_from_month || '';
+            if (camelRow.paidAt || camelRow.paid_at) {
+                camelRow.paidAt = toLocaleDate(camelRow.paidAt || camelRow.paid_at);
+            }
+        } else if (table === 'time_logs') {
+            camelRow.employeeId = camelRow.employeeId || camelRow.employee_id || '';
+            camelRow.date = toLocaleDate(camelRow.date);
+            camelRow.checkIn = camelRow.checkIn || camelRow.check_in || '';
+            camelRow.checkOut = camelRow.checkOut || camelRow.check_out || '';
+            camelRow.lunchStart = camelRow.lunchStart || camelRow.lunch_start || '';
+            camelRow.lunchEnd = camelRow.lunchEnd || camelRow.lunch_end || '';
+            camelRow.totalHours = Number(camelRow.totalHours ?? camelRow.total_hours ?? 8);
+        } else if (table === 'maintenance_records') {
+            camelRow.vehicleId = camelRow.vehicleId || camelRow.vehicle_id || '';
+            camelRow.date = toLocaleDate(camelRow.date);
+            camelRow.performedBy = camelRow.performedBy || camelRow.performed_by || camelRow.mechanic || '';
+            camelRow.mechanic = camelRow.mechanic || camelRow.performedBy;
+        } else if (table === 'fuel_logs') {
+            camelRow.vehicleId = camelRow.vehicleId || camelRow.vehicle_id || '';
+            camelRow.date = toLocaleDate(camelRow.date);
+            camelRow.fuelType = camelRow.fuelType || camelRow.fuel_type || 'Diesel S10';
+            camelRow.gasStation = camelRow.gasStation || camelRow.gas_station || camelRow.stationName || '';
+            camelRow.stationName = camelRow.stationName || camelRow.gasStation;
+        } else if (table === 'stock_movements') {
+            camelRow.itemId = camelRow.itemId || camelRow.item_id || '';
+            camelRow.itemName = camelRow.itemName || camelRow.item_name || '';
+            camelRow.previousStock = camelRow.previousStock ?? camelRow.previous_stock;
+            camelRow.currentStock = camelRow.currentStock ?? camelRow.current_stock;
+            camelRow.costPerUnit = camelRow.costPerUnit ?? camelRow.cost_per_unit;
+            camelRow.totalCost = camelRow.totalCost ?? camelRow.total_cost;
+            camelRow.documentId = camelRow.documentId || camelRow.document_id || '';
+            camelRow.userId = camelRow.userId || camelRow.user_id || '';
+            camelRow.userName = camelRow.userName || camelRow.user_name || '';
+            camelRow.date = toLocaleDate(camelRow.date);
+        } else if (table === 'laboratory_tests') {
+            camelRow.testCode = camelRow.testCode || camelRow.test_code || '';
+            camelRow.testName = camelRow.testName || camelRow.test_name || '';
+            camelRow.standardNorm = camelRow.standardNorm || camelRow.standard_norm || '';
+            camelRow.sampleType = camelRow.sampleType || camelRow.sample_type || '';
+            camelRow.batchNumber = camelRow.batchNumber || camelRow.batch_number || '';
+            camelRow.orderId = camelRow.orderId || camelRow.order_id || '';
+            camelRow.orderNumber = camelRow.orderNumber || camelRow.order_number || '';
+            camelRow.productName = camelRow.productName || camelRow.product_name || '';
+            camelRow.unitId = camelRow.unitId || camelRow.unit_id || '';
+            camelRow.unitName = camelRow.unitName || camelRow.unit_name || '';
+            camelRow.locationOrStation = camelRow.locationOrStation || camelRow.location_or_station || '';
+            camelRow.supplierOrQuarry = camelRow.supplierOrQuarry || camelRow.supplier_or_quarry || '';
+            camelRow.testedAt = camelRow.testedAt || camelRow.tested_at || '';
+            camelRow.nominalExpected = camelRow.nominalExpected || camelRow.nominal_expected || '';
+            camelRow.resultValue = camelRow.resultValue || camelRow.result_value || '';
+            camelRow.conditionalRelease = Boolean(camelRow.conditionalRelease ?? camelRow.conditional_release ?? false);
+            camelRow.benchData = camelRow.benchData || camelRow.bench_data || {};
+            camelRow.metricsCalculated = camelRow.metricsCalculated || camelRow.metrics_calculated || {};
         }
 
         return camelRow as T;
@@ -900,9 +1368,26 @@ export const updateSettings = async (settings: AppSettings) => {
         }
 
         if (existing && existing.id) {
-            return await updateItem('settings', existing.id, settings);
+            try {
+                return await updateItem('settings', existing.id, settings);
+            } catch (err: any) {
+                // Se a coluna 'config' ainda não foi criada no Supabase via migração, retenta sem 'config'
+                if (err?.message?.includes('config') || err?.code === 'PGRST204') {
+                    const { config, ...withoutConfig } = settings as any;
+                    return await updateItem('settings', existing.id, withoutConfig);
+                }
+                throw err;
+            }
         } else {
-            return await createItem('settings', settings);
+            try {
+                return await createItem('settings', settings);
+            } catch (err: any) {
+                if (err?.message?.includes('config') || err?.code === 'PGRST204') {
+                    const { config, ...withoutConfig } = settings as any;
+                    return await createItem('settings', withoutConfig);
+                }
+                throw err;
+            }
         }
     } catch (e) {
         console.warn('Falha remota ao sincronizar settings, preservando em fila offline:', e);

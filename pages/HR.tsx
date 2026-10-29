@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     Plus, X, Users, UserPlus, Search, Download, Edit2, Trash2, Wallet, Clock, Calendar,
     CheckCircle, XCircle, DollarSign, ArrowUpRight, Fingerprint, Play, StopCircle, Timer,
@@ -19,7 +19,7 @@ const HR = () => {
         salaryAdvances, addSalaryAdvance, updateAdvanceStatus, paySalaryAdvance, deleteAdvance,
         users
     } = useApp();
-    const { addTransaction, deleteTransaction, accounts, hasPermission, currentUser, transactions, addPurchaseOrder, settings } = useApp();
+    const { addTransaction, deleteTransaction, accounts, hasPermission, currentUser, transactions, addPurchaseOrder, settings, updateSettings } = useApp();
     const { addToast } = useToast();
 
     const [activeTab, setActiveTab] = useState<'employees' | 'payroll' | 'vacations' | 'advances' | 'time'>('employees');
@@ -150,6 +150,9 @@ const HR = () => {
     // Justificativas persistidas em localStorage
     const [justifications, setJustifications] = useState<Record<string, { type: string; reason: string; doctorCrm?: string; approvedBy: string; date: string }>>(() => {
         try {
+            if (settings?.config?.hrJustifications && typeof settings.config.hrJustifications === 'object') {
+                return settings.config.hrJustifications;
+            }
             const stored = localStorage.getItem('infracore_hr_justifications');
             return stored ? JSON.parse(stored) : {};
         } catch {
@@ -158,6 +161,13 @@ const HR = () => {
     });
 
     // Helper para converter string de horário "HH:MM" para minutos
+
+    useEffect(() => {
+        if (settings?.config?.hrJustifications && typeof settings.config.hrJustifications === 'object') {
+            setJustifications(settings.config.hrJustifications);
+        }
+    }, [settings?.config?.hrJustifications]);
+
     const parseTimeToMinutes = (t?: string): number | null => {
         if (!t) return null;
         const parts = t.trim().split(':').map(Number);
@@ -1537,6 +1547,12 @@ const HR = () => {
         setJustifications(updated);
         try {
             localStorage.setItem('infracore_hr_justifications', JSON.stringify(updated));
+            if (updateSettings && settings) {
+                updateSettings({
+                    ...settings,
+                    config: { ...(settings.config || {}), hrJustifications: updated }
+                });
+            }
         } catch {}
 
         // Registrar no TimeLog do dia para consistência telemétrica e auditoria MTE (sem marcações físicas forjadas)
@@ -1568,6 +1584,12 @@ const HR = () => {
         setJustifications(updated);
         try {
             localStorage.setItem('infracore_hr_justifications', JSON.stringify(updated));
+            if (updateSettings && settings) {
+                updateSettings({
+                    ...settings,
+                    config: { ...(settings.config || {}), hrJustifications: updated }
+                });
+            }
         } catch {}
         addToast("Abono revogado com sucesso.", 'info');
     };
