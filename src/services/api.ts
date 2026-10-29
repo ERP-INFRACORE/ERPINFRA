@@ -439,36 +439,27 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
 
     // 13. Mapeamento canônico para Configurações Gerais (compatível com schema Supabase 'settings')
     if (table === 'settings') {
-        const fullConfig = {
-            companyName: cleaned.companyName || cleaned.company_name,
-            tradeName: cleaned.tradeName || cleaned.trade_name,
-            document: cleaned.document || cleaned.cnpj,
-            email: cleaned.email,
-            phone: cleaned.phone,
-            website: cleaned.website,
-            address: cleaned.address,
-            bankDetails: cleaned.bankDetails || cleaned.bank_details,
-            technical: cleaned.technical,
-            operational: cleaned.operational || cleaned.operationalParams || cleaned.operational_params,
-            documents: cleaned.documents,
-            integrations: cleaned.integrations,
-            performance: cleaned.performance,
-            backup: cleaned.backup,
-            notifications: cleaned.notifications,
-            emailConfig: cleaned.emailConfig,
-            currency: cleaned.currency || 'BRL',
-            language: cleaned.language || 'pt-BR',
-            theme: cleaned.theme || 'light',
-            interfaceDensity: cleaned.interfaceDensity || cleaned.interface_density || 'comfortable',
-            enableAnimations: cleaned.enableAnimations ?? cleaned.enable_animations ?? true,
-            ...(cleaned.config || {})
+        const technicalData = cleaned.technical || {};
+        const stateReg = cleaned.stateRegistration || cleaned.state_reg || technicalData.stateRegistry || null;
+
+        const opParams = {
+            ...(cleaned.operational_params || {}),
+            operational: cleaned.operational || cleaned.operationalParams || {},
+            technical: {
+                ...technicalData,
+                stateRegistry: stateReg || technicalData.stateRegistry || ''
+            },
+            documents: cleaned.documents || {},
+            performance: cleaned.performance || {},
+            backup: cleaned.backup || {},
+            emailConfig: cleaned.emailConfig || {}
         };
 
         const mapped: Record<string, any> = {
             company_name: cleaned.companyName || cleaned.company_name || 'InfraCore BETA',
             trade_name: cleaned.tradeName || cleaned.trade_name || null,
             document: cleaned.document || cleaned.cnpj || '',
-            state_reg: cleaned.stateRegistration || cleaned.state_reg || cleaned.technical?.stateRegistry || null,
+            state_reg: stateReg,
             email: cleaned.email || null,
             phone: cleaned.phone || null,
             website: cleaned.website || null,
@@ -481,9 +472,8 @@ export const sanitizeDbPayload = (table: string, item: any, isCreate: boolean) =
             enable_animations: cleaned.enableAnimations ?? cleaned.enable_animations ?? true,
             notifications: cleaned.notifications || {},
             data_security: cleaned.dataSecurity || cleaned.data_security || {},
-            operational_params: cleaned.operational || cleaned.operationalParams || cleaned.operational_params || {},
+            operational_params: opParams,
             integrations: cleaned.integrations || {},
-            config: fullConfig,
             updated_at: new Date().toISOString()
         };
         if (isCreate && cleaned.id && typeof cleaned.id === 'string' && cleaned.id.length === 36) {
@@ -1168,45 +1158,52 @@ const transformFetchedData = <T>(table: string, data: any[] | null): T[] => {
         } else if (table === 'production_formulas') {
             camelRow.materials = Array.isArray(camelRow.materials) ? camelRow.materials : (camelRow.ingredients || []);
         } else if (table === 'settings') {
-            const cfg = (camelRow.config && typeof camelRow.config === 'object') ? camelRow.config : {};
-            camelRow.companyName = camelRow.companyName || camelRow.company_name || cfg.companyName || '';
-            camelRow.tradeName = camelRow.tradeName || camelRow.trade_name || cfg.tradeName || '';
-            camelRow.document = camelRow.document || camelRow.cnpj || cfg.document || '';
+            const opParams = (camelRow.operational_params && typeof camelRow.operational_params === 'object') ? camelRow.operational_params : {};
+            const technicalFromDb = opParams.technical || camelRow.technical || {};
+            const stateReg = camelRow.state_reg || camelRow.stateRegistration || technicalFromDb.stateRegistry || '';
+
+            camelRow.companyName = camelRow.companyName || camelRow.company_name || '';
+            camelRow.tradeName = camelRow.tradeName || camelRow.trade_name || '';
+            camelRow.document = camelRow.document || camelRow.cnpj || '';
             camelRow.cnpj = camelRow.document;
-            camelRow.stateRegistration = camelRow.stateRegistration || camelRow.state_reg || cfg.stateRegistration || cfg.technical?.stateRegistry || '';
-            camelRow.email = camelRow.email || cfg.email || '';
-            camelRow.phone = camelRow.phone || cfg.phone || '';
-            camelRow.website = camelRow.website || cfg.website || '';
-            camelRow.address = camelRow.address || cfg.address || '';
-            camelRow.bankDetails = camelRow.bankDetails || camelRow.bank_details || cfg.bankDetails || {
+            camelRow.stateRegistration = stateReg;
+            camelRow.email = camelRow.email || '';
+            camelRow.phone = camelRow.phone || '';
+            camelRow.website = camelRow.website || '';
+            camelRow.address = camelRow.address || '';
+            camelRow.bankDetails = camelRow.bankDetails || camelRow.bank_details || {
                 bankName: '',
                 agency: '',
                 account: '',
                 pixKey: '',
                 pixType: 'CNPJ'
             };
-            camelRow.technical = camelRow.technical || cfg.technical || {
+            camelRow.technical = {
                 taxRegime: 'Simples Nacional',
                 defaultTaxRate: 6.0,
                 financialYearStart: '01/01',
                 dateFormat: 'DD/MM/YYYY',
                 timezone: 'America/Sao_Paulo',
-                stateRegistry: camelRow.stateRegistration || '',
+                stateRegistry: stateReg,
                 cityRegistry: '',
                 cnae: '',
                 nfeSeries: '1',
                 nfeNextNumber: 10001,
                 nfeEnvironment: 'homologacao',
-                fiscalModuleEnabled: true
+                fiscalModuleEnabled: true,
+                ...technicalFromDb
             };
-            camelRow.operational = camelRow.operational || camelRow.operationalParams || camelRow.operational_params || cfg.operational || {};
-            camelRow.documents = camelRow.documents || cfg.documents || {};
-            camelRow.integrations = camelRow.integrations || cfg.integrations || {};
-            camelRow.performance = camelRow.performance || cfg.performance || {};
-            camelRow.backup = camelRow.backup || cfg.backup || {};
-            camelRow.notifications = camelRow.notifications || cfg.notifications || {};
-            camelRow.emailConfig = camelRow.emailConfig || cfg.emailConfig || {};
-            camelRow.config = cfg;
+            camelRow.technical.stateRegistry = stateReg;
+            camelRow.operational = opParams.operational || camelRow.operational || camelRow.operationalParams || {};
+            camelRow.documents = opParams.documents || camelRow.documents || {};
+            camelRow.integrations = camelRow.integrations || {};
+            camelRow.performance = opParams.performance || camelRow.performance || {};
+            camelRow.backup = opParams.backup || camelRow.backup || {};
+            camelRow.notifications = camelRow.notifications || {};
+            camelRow.emailConfig = opParams.emailConfig || camelRow.emailConfig || {};
+            camelRow.currency = camelRow.currency || 'BRL';
+            camelRow.language = camelRow.language || 'pt-BR';
+            camelRow.theme = camelRow.theme || 'light';
         } else if (table === 'inventory') {
             camelRow.costPrice = Number(camelRow.costPrice ?? camelRow.cost_price ?? 0);
             camelRow.unitCost = Number(camelRow.unitCost ?? camelRow.cost_price ?? 0);
@@ -1430,26 +1427,9 @@ export const updateSettings = async (settings: AppSettings) => {
         }
 
         if (existing && existing.id) {
-            try {
-                return await updateItem('settings', existing.id, settings);
-            } catch (err: any) {
-                // Se a coluna 'config' ainda não foi criada no Supabase via migração, retenta sem 'config'
-                if (err?.message?.includes('config') || err?.code === 'PGRST204') {
-                    const { config, ...withoutConfig } = settings as any;
-                    return await updateItem('settings', existing.id, withoutConfig);
-                }
-                throw err;
-            }
+            return await updateItem('settings', existing.id, settings);
         } else {
-            try {
-                return await createItem('settings', settings);
-            } catch (err: any) {
-                if (err?.message?.includes('config') || err?.code === 'PGRST204') {
-                    const { config, ...withoutConfig } = settings as any;
-                    return await createItem('settings', withoutConfig);
-                }
-                throw err;
-            }
+            return await createItem('settings', settings);
         }
     } catch (e) {
         console.warn('Falha remota ao sincronizar settings, preservando em fila offline:', e);
