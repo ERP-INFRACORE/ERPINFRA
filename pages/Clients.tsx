@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
+  Key,
   Filter,
   Download,
   Plus,
@@ -743,6 +744,23 @@ const Clients = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
   const [isLoadingPlate, setIsLoadingPlate] = useState(false);
+  const [isApiTokenModalOpen, setIsApiTokenModalOpen] = useState(false);
+  const [tempApiToken, setTempApiToken] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem('infracore_apibrasil_token') || '';
+    }
+    return '';
+  });
+
+  const handleSaveApiToken = () => {
+    try {
+      localStorage.setItem('infracore_apibrasil_token', tempApiToken.trim());
+      addToast('Token APIBrasil salvo com sucesso!', 'success');
+      setIsApiTokenModalOpen(false);
+    } catch {
+      addToast('Erro ao salvar o token no navegador.', 'error');
+    }
+  };
 
   const toInputDate = (dateStr?: string) => {
     if (!dateStr) return '';
