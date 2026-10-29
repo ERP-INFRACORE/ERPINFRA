@@ -4301,7 +4301,10 @@ const Settings = () => {
 
                                         {/* Grid de Usuários */}
                                         {(() => {
-                                            const filteredUsers = users.filter(user => {
+                                            const filteredUsers = users.filter((user, idx, self) => {
+                                                // Deduplicação estrita: remove duplicata de admin legado 'id: 1' e usernames repetidos
+                                                if (user.username?.toLowerCase() === 'admin' && user.id === '1') return false;
+                                                if (self.findIndex(u => u.username?.toLowerCase() === user.username?.toLowerCase()) !== idx) return false;
                                                 const q = userSearchQuery.trim().toLowerCase();
                                                 const userRole = findUserRole(user, roles);
                                                 const roleName = userRole?.name || roles.find(r => r.id === user.roleId)?.name || '';

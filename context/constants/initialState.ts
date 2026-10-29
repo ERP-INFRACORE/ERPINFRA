@@ -164,7 +164,7 @@ export const INITIAL_ROLES: AppRole[] = [
 ];
 
 export const INITIAL_USERS: User[] = [
-  { id: '1', name: 'Admin InfraCore', username: 'admin', password: '123', email: 'admin@infracore.com', roleId: 'admin', status: 'Ativo', registeredAt: '01/01/2026' },
+  { id: 'a6bfed8a-2374-4247-91d4-f1cb2572eab2', name: 'Admin InfraCore', username: 'admin', password: 'Ht212500@', email: 'admin@infracore.com', roleId: 'e881e024-16e0-4014-b1b4-edebafdd1dd2', status: 'Ativo', registeredAt: '01/01/2026' },
   { id: '2', name: 'Roberto Comercial', username: 'gerente_com', password: '123', email: 'roberto.vendas@infracore.com', roleId: 'manager_com', status: 'Ativo', registeredAt: '01/01/2026' },
   { id: '3', name: 'Julio Analista Com/Fin', username: 'analista_cf', password: '123', email: 'analista.comfin@infracore.com', roleId: 'analista_com_fin', status: 'Ativo', registeredAt: '01/01/2026' },
   { id: '4', name: 'Lucas Vendedor', username: 'vendedor', password: '123', email: 'lucas.vendas@infracore.com', roleId: 'salesperson', status: 'Ativo', registeredAt: '01/01/2026' },
