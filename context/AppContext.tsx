@@ -90,9 +90,11 @@ interface AppContextType {
   deleteTransaction: (id: string) => void;
   importTransactions: (file: any) => void;
   addSale: (sale: Sale) => void;
+  deleteSale: (id: string) => void;
   addBudget: (budget: Budget) => void;
   updateBudget: (budget: Budget) => void;
   updateBudgetStatus: (id: string, status: Budget['status']) => void;
+  deleteBudget: (id: string) => void;
 
   addPurchaseOrder: (order: PurchaseOrder) => void;
   updatePurchaseOrder: (order: PurchaseOrder) => void;
@@ -1348,9 +1350,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const deleteSale = (id: string) => syncDelete('sales', id, setSales);
+
   // Budgets
   const addBudget = (budget: Budget) => syncAdd('budgets', budget, setBudgets);
   const updateBudget = (budget: Budget) => syncUpdate('budgets', budget.id, budget, setBudgets);
+  const deleteBudget = (id: string) => syncDelete('budgets', id, setBudgets);
   const updateBudgetStatus = (id: string, status: Budget['status']) => {
     setBudgets(prev => prev.map(b => {
       if (b.id === id) {
@@ -2145,7 +2150,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addPayroll, payPayroll, addTimeLog,
     addVacation, updateVacationStatus, deleteVacation,
     addSalaryAdvance, updateAdvanceStatus, paySalaryAdvance, deleteAdvance,
-    addTransaction, updateTransaction, updateTransactionStatus, deleteTransaction, importTransactions, addSale, addBudget, updateBudget, updateBudgetStatus,
+    addTransaction, updateTransaction, updateTransactionStatus, deleteTransaction, importTransactions, addSale, deleteSale, addBudget, updateBudget, updateBudgetStatus, deleteBudget,
     addPurchaseOrder, updatePurchaseOrder, receivePurchaseOrder,
     addStockItem, updateStock, updateStockItem, deleteStockItem,
     addVehicle, updateVehicle, updateVehicleStatus, deleteVehicle,
@@ -2167,7 +2172,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addPayroll, payPayroll, addTimeLog,
     addVacation, updateVacationStatus, deleteVacation,
     addSalaryAdvance, updateAdvanceStatus, paySalaryAdvance, deleteAdvance,
-    addTransaction, updateTransaction, updateTransactionStatus, deleteTransaction, importTransactions, addSale, addBudget, updateBudget, updateBudgetStatus,
+    addTransaction, updateTransaction, updateTransactionStatus, deleteTransaction, importTransactions, addSale, deleteSale, addBudget, updateBudget, updateBudgetStatus, deleteBudget,
     addPurchaseOrder, updatePurchaseOrder, receivePurchaseOrder,
     addStockItem, updateStock, updateStockItem, deleteStockItem,
     addVehicle, updateVehicle, updateVehicleStatus, deleteVehicle,

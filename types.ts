@@ -385,7 +385,7 @@ export interface Budget {
   subtotal: number;
   discount: number;
   total: number;
-  status: 'Aberto' | 'Aprovado' | 'Rejeitado' | 'Convertido';
+  status: 'Aberto' | 'Aprovado' | 'Rejeitado' | 'Convertido' | 'Cancelado';
   expiryDate: string;
   tareWeight?: number;
   grossWeight?: number;
