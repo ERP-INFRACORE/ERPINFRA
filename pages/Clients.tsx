@@ -755,211 +755,6 @@ export const isServiceItem = (item: any): boolean => {
   return false;
 };
 
-const Clients = () => {
-  const {
-    clients, addClient, updateClient, deleteClient,
-    suppliers, addSupplier, updateSupplier, deleteSupplier,
-    employees, addEmployee, updateEmployee, deleteEmployee,
-    inventory, addStockItem, updateStockItem, deleteStockItem,
-    fleet, addVehicle, updateVehicle, deleteVehicle,
-    hasPermission
-  } = useApp();
-  const { addToast } = useToast();
-
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<any>({});
-  const [activeTab, setActiveTab] = useState('clients');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
-  const [isLoadingPlate, setIsLoadingPlate] = useState(false);
-  const [isReadingCrlv, setIsReadingCrlv] = useState(false);
-  const [isPresetModalOpen, setIsPresetModalOpen] = useState(false);
-  const [presetSearchTerm, setPresetSearchTerm] = useState('');
-  const [isApiTokenModalOpen, setIsApiTokenModalOpen] = useState(false);
-  const [apiBrasilToken, setApiBrasilToken] = useState(() => (typeof localStorage !== 'undefined' ? localStorage.getItem('infracore_apibrasil_token') || '' : ''));
-  const [tempApiToken, setTempApiToken] = useState(() => {
-    if (typeof localStorage !== 'undefined') {
-      return localStorage.getItem('infracore_apibrasil_token') || '';
-    }
-    return '';
-  });
-
-  const handleSaveApiToken = () => {
-    try {
-      const cleanToken = tempApiToken.trim();
-      localStorage.setItem('infracore_apibrasil_token', cleanToken);
-      setApiBrasilToken(cleanToken);
-      addToast('Token APIBrasil salvo com sucesso!', 'success');
-      setIsApiTokenModalOpen(false);
-    } catch {
-      addToast('Erro ao salvar o token no navegador.', 'error');
-    }
-  };
-
-  const [apiConfig, setApiConfig] = useState<any>(() => {
-    if (typeof localStorage !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('infracore_fleet_api_config');
-        if (saved) return JSON.parse(saved);
-        const legacyToken = localStorage.getItem('infracore_apibrasil_token') || '';
-        return { provider: 'auto', apiBrasilToken: legacyToken, wdapiToken: '', fipeApiToken: '' };
-      } catch {
-        return { provider: 'auto', apiBrasilToken: '', wdapiToken: '', fipeApiToken: '' };
-      }
-    }
-    return { provider: 'auto', apiBrasilToken: '', wdapiToken: '', fipeApiToken: '' };
-  });
-
-  const [tempApiConfig, setTempApiConfig] = useState<any>(apiConfig);
-
-  const handleSaveApiConfig = () => {
-    try {
-      localStorage.setItem('infracore_fleet_api_config', JSON.stringify(tempApiConfig));
-      const cleanToken = (tempApiConfig.apiBrasilToken || '').trim();
-      if (cleanToken) {
-        localStorage.setItem('infracore_apibrasil_token', cleanToken);
-        setApiBrasilToken(cleanToken);
-      }
-      setApiConfig(tempApiConfig);
-      addToast('Configurações salvas com sucesso!', 'success');
-      setIsApiTokenModalOpen(false);
-    } catch {
-      addToast('Erro ao salvar as configurações no navegador.', 'error');
-    }
-  };
-
-  const toInputDate = (dateStr?: string) => {
-    if (!dateStr) return '';
-    try {
-      if (dateStr.includes('/')) {
-        const [d, m, y] = dateStr.split('/');
-        if (y && m && d) return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-      }
-      return dateStr.split('T')[0];
-    } catch {
-      return '';
-    }
-  };
-
-  const canManage = (type: string) => {
-    switch (type) {
-      case 'clients': return hasPermission('clients.create') || hasPermission('clients.edit') || hasPermission('clients.manage');
-      case 'suppliers': return hasPermission('suppliers.manage') || hasPermission('clients.manage');
-      case 'employees': return hasPermission('hr.manage') || hasPermission('employees.manage');
-      case 'products':
-      case 'services': return hasPermission('inventory.create') || hasPermission('inventory.edit') || hasPermission('inventory.manage');
-      case 'vehicles': return hasPermission('fleet.manage');
-      default: return false;
-    }
-  };
-
-  const getInitialFormData = (type: string) => {
-    switch (type) {
-      case 'clients': return { status: 'Ativo', registeredAt: new Date().toLocaleDateString('pt-BR'), colorClass: 'bg-cyan-100 text-cyan-600', type: 'Matriz' };
-      case 'suppliers': return { status: 'Ativo', registeredAt: new Date().toLocaleDateString('pt-BR') };
-      case 'employees': return { status: 'Ativo', admissionDate: new Date().toLocaleDateString('pt-BR') };
-      case 'products': return { status: 'Ativo', quantity: 0, minStock: 10, price: 0, costPrice: 0, unit: 'ton', category: '1.01.01 - Venda de Agregados (Brita/Areia/Pó)' };
-      case 'services': return { status: 'Ativo', quantity: 0, minStock: 0, price: 0, costPrice: 0, unit: 'h', category: '1.01.04 - Serviço de Bombeamento de Concreto' };
-      case 'vehicles': return { status: 'Operacional', fuelLevel: 100, lastMaintenance: new Date().toLocaleDateString('pt-BR'), type: 'Carro' };
-      default: return {};
-    }
-  };
-
-  const handleOpenModal = (item?: any, type: string = activeTab) => {
-    setActiveTab(type);
-    if (item) {
-      setEditingId(item.id);
-      const initialData = type === 'vehicles' ? { ...item, name: item.model || item.name } : { ...item };
-      // Classificação automática em 1.01 se o item possuir categoria legada
-      if ((type === 'products' || type === 'services') && (!initialData.category || !initialData.category.startsWith('1.01.'))) {
-        initialData.category = classifyProductCategory101(initialData);
-      }
-      setFormData(initialData);
-    } else {
-      setEditingId(null);
-      setFormData(getInitialFormData(type));
-    }
-    setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditingId(null);
-    setFormData({});
-    setIsLoadingCnpj(false);
-    setIsLoadingPlate(false);
-  };
-
-  // ==========================================
-  // CONSULTA AUTOMÁTICA DE CNPJ (RECEITA FEDERAL / BRASILAPI)
-  // ==========================================
-  const handleCnpjLookup = async (manualDoc?: string) => {
-    const raw = (manualDoc !== undefined ? manualDoc : formData.document || '').replace(/\D/g, '');
-    if (!raw) return;
-
-    if (raw.length !== 14) {
-      if (manualDoc === undefined) {
-        addToast('Para consultar na Receita Federal, informe os 14 dígitos do CNPJ.', 'warning');
-      }
-      return;
-    }
-
-    if (!validateCNPJ(raw)) {
-      addToast('CNPJ inválido pelo dígito verificador.', 'error');
-      return;
-    }
-
-    setIsLoadingCnpj(true);
-    try {
-      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${raw}`);
-      if (!res.ok) {
-        if (res.status === 404) {
-          addToast('CNPJ não encontrado na base pública da Receita Federal.', 'error');
-        } else {
-          addToast(`Instabilidade na consulta da Receita (${res.status}). Você pode preencher manualmente.`, 'warning');
-        }
-        return;
-      }
-
-      const data = await res.json();
-
-      const situacao = (data.descricao_situacao_cadastral || data.situacao_cadastral || '').toUpperCase();
-      if (situacao && !situacao.includes('ATIVA')) {
-        addToast(`Atenção: Situação cadastral na Receita consta como "${situacao}".`, 'warning', 7000);
-      } else {
-        addToast('Dados preenchidos com sucesso via Receita Federal!', 'success');
-      }
-
-      const cleanPhone = (data.ddd_telefone_1 || '').replace(/\D/g, '');
-      const formattedPhone = cleanPhone ? formatPhone(cleanPhone) : '';
-
-      setFormData((prev: any) => ({
-        ...prev,
-        name: data.razao_social || prev.name || '',
-        tradeName: data.nome_fantasia || prev.tradeName || data.razao_social || '',
-        phone: formattedPhone || prev.phone || '',
-        email: data.email ? data.email.toLowerCase().trim() : (prev.email || ''),
-        address: {
-          ...(prev.address || {}),
-          zipCode: data.cep ? formatCEP(data.cep) : (prev.address?.zipCode || ''),
-          street: data.logradouro || prev.address?.street || '',
-          number: data.numero || prev.address?.number || '',
-          complement: data.complemento || prev.address?.complement || '',
-          district: data.bairro || prev.address?.district || '',
-          city: data.municipio || prev.address?.city || '',
-          state: data.uf || prev.address?.state || ''
-        }
-      }));
-    } catch (err) {
-      console.error('Erro ao consultar CNPJ via BrasilAPI:', err);
-      addToast('Não foi possível conectar ao serviço da Receita. Prossiga com o preenchimento manual.', 'warning');
-    } finally {
-      setIsLoadingCnpj(false);
-    }
-  };
-
 // ==========================================
 // CATÁLOGO BASE DE FROTAS PESADAS (PRESETS RÁPIDOS)
 // ==========================================
@@ -1230,6 +1025,213 @@ export const parseCrlvTextContent = (text: string) => {
     fuelType
   };
 };
+
+
+
+const Clients = () => {
+  const {
+    clients, addClient, updateClient, deleteClient,
+    suppliers, addSupplier, updateSupplier, deleteSupplier,
+    employees, addEmployee, updateEmployee, deleteEmployee,
+    inventory, addStockItem, updateStockItem, deleteStockItem,
+    fleet, addVehicle, updateVehicle, deleteVehicle,
+    hasPermission
+  } = useApp();
+  const { addToast } = useToast();
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formData, setFormData] = useState<any>({});
+  const [activeTab, setActiveTab] = useState('clients');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
+  const [isLoadingPlate, setIsLoadingPlate] = useState(false);
+  const [isReadingCrlv, setIsReadingCrlv] = useState(false);
+  const [isPresetModalOpen, setIsPresetModalOpen] = useState(false);
+  const [presetSearchTerm, setPresetSearchTerm] = useState('');
+  const [isApiTokenModalOpen, setIsApiTokenModalOpen] = useState(false);
+  const [apiBrasilToken, setApiBrasilToken] = useState(() => (typeof localStorage !== 'undefined' ? localStorage.getItem('infracore_apibrasil_token') || '' : ''));
+  const [tempApiToken, setTempApiToken] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem('infracore_apibrasil_token') || '';
+    }
+    return '';
+  });
+
+  const handleSaveApiToken = () => {
+    try {
+      const cleanToken = tempApiToken.trim();
+      localStorage.setItem('infracore_apibrasil_token', cleanToken);
+      setApiBrasilToken(cleanToken);
+      addToast('Token APIBrasil salvo com sucesso!', 'success');
+      setIsApiTokenModalOpen(false);
+    } catch {
+      addToast('Erro ao salvar o token no navegador.', 'error');
+    }
+  };
+
+  const [apiConfig, setApiConfig] = useState<any>(() => {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('infracore_fleet_api_config');
+        if (saved) return JSON.parse(saved);
+        const legacyToken = localStorage.getItem('infracore_apibrasil_token') || '';
+        return { provider: 'auto', apiBrasilToken: legacyToken, wdapiToken: '', fipeApiToken: '' };
+      } catch {
+        return { provider: 'auto', apiBrasilToken: '', wdapiToken: '', fipeApiToken: '' };
+      }
+    }
+    return { provider: 'auto', apiBrasilToken: '', wdapiToken: '', fipeApiToken: '' };
+  });
+
+  const [tempApiConfig, setTempApiConfig] = useState<any>(apiConfig);
+
+  const handleSaveApiConfig = () => {
+    try {
+      localStorage.setItem('infracore_fleet_api_config', JSON.stringify(tempApiConfig));
+      const cleanToken = (tempApiConfig.apiBrasilToken || '').trim();
+      if (cleanToken) {
+        localStorage.setItem('infracore_apibrasil_token', cleanToken);
+        setApiBrasilToken(cleanToken);
+      }
+      setApiConfig(tempApiConfig);
+      addToast('Configurações salvas com sucesso!', 'success');
+      setIsApiTokenModalOpen(false);
+    } catch {
+      addToast('Erro ao salvar as configurações no navegador.', 'error');
+    }
+  };
+
+  const toInputDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      if (dateStr.includes('/')) {
+        const [d, m, y] = dateStr.split('/');
+        if (y && m && d) return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+      return dateStr.split('T')[0];
+    } catch {
+      return '';
+    }
+  };
+
+  const canManage = (type: string) => {
+    switch (type) {
+      case 'clients': return hasPermission('clients.create') || hasPermission('clients.edit') || hasPermission('clients.manage');
+      case 'suppliers': return hasPermission('suppliers.manage') || hasPermission('clients.manage');
+      case 'employees': return hasPermission('hr.manage') || hasPermission('employees.manage');
+      case 'products':
+      case 'services': return hasPermission('inventory.create') || hasPermission('inventory.edit') || hasPermission('inventory.manage');
+      case 'vehicles': return hasPermission('fleet.manage');
+      default: return false;
+    }
+  };
+
+  const getInitialFormData = (type: string) => {
+    switch (type) {
+      case 'clients': return { status: 'Ativo', registeredAt: new Date().toLocaleDateString('pt-BR'), colorClass: 'bg-cyan-100 text-cyan-600', type: 'Matriz' };
+      case 'suppliers': return { status: 'Ativo', registeredAt: new Date().toLocaleDateString('pt-BR') };
+      case 'employees': return { status: 'Ativo', admissionDate: new Date().toLocaleDateString('pt-BR') };
+      case 'products': return { status: 'Ativo', quantity: 0, minStock: 10, price: 0, costPrice: 0, unit: 'ton', category: '1.01.01 - Venda de Agregados (Brita/Areia/Pó)' };
+      case 'services': return { status: 'Ativo', quantity: 0, minStock: 0, price: 0, costPrice: 0, unit: 'h', category: '1.01.04 - Serviço de Bombeamento de Concreto' };
+      case 'vehicles': return { status: 'Operacional', fuelLevel: 100, lastMaintenance: new Date().toLocaleDateString('pt-BR'), type: 'Carro' };
+      default: return {};
+    }
+  };
+
+  const handleOpenModal = (item?: any, type: string = activeTab) => {
+    setActiveTab(type);
+    if (item) {
+      setEditingId(item.id);
+      const initialData = type === 'vehicles' ? { ...item, name: item.model || item.name } : { ...item };
+      // Classificação automática em 1.01 se o item possuir categoria legada
+      if ((type === 'products' || type === 'services') && (!initialData.category || !initialData.category.startsWith('1.01.'))) {
+        initialData.category = classifyProductCategory101(initialData);
+      }
+      setFormData(initialData);
+    } else {
+      setEditingId(null);
+      setFormData(getInitialFormData(type));
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingId(null);
+    setFormData({});
+    setIsLoadingCnpj(false);
+    setIsLoadingPlate(false);
+  };
+
+  // ==========================================
+  // CONSULTA AUTOMÁTICA DE CNPJ (RECEITA FEDERAL / BRASILAPI)
+  // ==========================================
+  const handleCnpjLookup = async (manualDoc?: string) => {
+    const raw = (manualDoc !== undefined ? manualDoc : formData.document || '').replace(/\D/g, '');
+    if (!raw) return;
+
+    if (raw.length !== 14) {
+      if (manualDoc === undefined) {
+        addToast('Para consultar na Receita Federal, informe os 14 dígitos do CNPJ.', 'warning');
+      }
+      return;
+    }
+
+    if (!validateCNPJ(raw)) {
+      addToast('CNPJ inválido pelo dígito verificador.', 'error');
+      return;
+    }
+
+    setIsLoadingCnpj(true);
+    try {
+      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${raw}`);
+      if (!res.ok) {
+        if (res.status === 404) {
+          addToast('CNPJ não encontrado na base pública da Receita Federal.', 'error');
+        } else {
+          addToast(`Instabilidade na consulta da Receita (${res.status}). Você pode preencher manualmente.`, 'warning');
+        }
+        return;
+      }
+
+      const data = await res.json();
+
+      const situacao = (data.descricao_situacao_cadastral || data.situacao_cadastral || '').toUpperCase();
+      if (situacao && !situacao.includes('ATIVA')) {
+        addToast(`Atenção: Situação cadastral na Receita consta como "${situacao}".`, 'warning', 7000);
+      } else {
+        addToast('Dados preenchidos com sucesso via Receita Federal!', 'success');
+      }
+
+      const cleanPhone = (data.ddd_telefone_1 || '').replace(/\D/g, '');
+      const formattedPhone = cleanPhone ? formatPhone(cleanPhone) : '';
+
+      setFormData((prev: any) => ({
+        ...prev,
+        name: data.razao_social || prev.name || '',
+        tradeName: data.nome_fantasia || prev.tradeName || data.razao_social || '',
+        phone: formattedPhone || prev.phone || '',
+        email: data.email ? data.email.toLowerCase().trim() : (prev.email || ''),
+        address: {
+          ...(prev.address || {}),
+          zipCode: data.cep ? formatCEP(data.cep) : (prev.address?.zipCode || ''),
+          street: data.logradouro || prev.address?.street || '',
+          number: data.numero || prev.address?.number || '',
+          complement: data.complemento || prev.address?.complement || '',
+          district: data.bairro || prev.address?.district || '',
+          city: data.municipio || prev.address?.city || '',
+          state: data.uf || prev.address?.state || ''
+        }
+      }));
+    } catch (err) {
+      console.error('Erro ao consultar CNPJ via BrasilAPI:', err);
+      addToast('Não foi possível conectar ao serviço da Receita. Prossiga com o preenchimento manual.', 'warning');
+    } finally {
+      setIsLoadingCnpj(false);
+    }
+  };
 
   // ==========================================
   // CONSULTA NA BASE NACIONAL DE VEÍCULOS (APIBRASIL - SENATRAN/SINESP)
