@@ -29,7 +29,8 @@ import {
   Loader2,
   Wrench
 ,
-  Settings
+  Settings,
+  Sparkles
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -773,6 +774,9 @@ const Clients = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
   const [isLoadingPlate, setIsLoadingPlate] = useState(false);
+  const [isReadingCrlv, setIsReadingCrlv] = useState(false);
+  const [isPresetModalOpen, setIsPresetModalOpen] = useState(false);
+  const [presetSearchTerm, setPresetSearchTerm] = useState('');
   const [isApiTokenModalOpen, setIsApiTokenModalOpen] = useState(false);
   const [apiBrasilToken, setApiBrasilToken] = useState(() => (typeof localStorage !== 'undefined' ? localStorage.getItem('infracore_apibrasil_token') || '' : ''));
   const [tempApiToken, setTempApiToken] = useState(() => {
@@ -956,6 +960,277 @@ const Clients = () => {
     }
   };
 
+// ==========================================
+// CATÁLOGO BASE DE FROTAS PESADAS (PRESETS RÁPIDOS)
+// ==========================================
+export interface FleetPreset {
+  id: string;
+  category: 'Caminhões Pesados' | 'Caminhões Médios / Traçados' | 'Máquinas Pesadas' | 'Utilitários & Leves';
+  name: string;
+  brand: string;
+  model: string;
+  type: 'Carreta LS' | 'Truck' | 'Toco' | 'Máquina' | 'Utilitário';
+  fuelType: 'Diesel' | 'Flex';
+  year: number;
+  colorName: string;
+  color: string;
+}
+
+export const FLEET_PRESETS: FleetPreset[] = [
+  // Caminhões Pesados / Cavalos Mecânicos
+  {
+    id: 'volvo-fh540',
+    category: 'Caminhões Pesados',
+    name: 'Volvo FH 540 6x4T Globetrotter',
+    brand: 'Volvo',
+    model: 'FH 540 6x4T',
+    type: 'Carreta LS',
+    fuelType: 'Diesel',
+    year: 2023,
+    colorName: 'Branco',
+    color: '#ffffff'
+  },
+  {
+    id: 'scania-r450',
+    category: 'Caminhões Pesados',
+    name: 'Scania R 450 Highline 6x2',
+    brand: 'Scania',
+    model: 'R 450 A6X2NA',
+    type: 'Carreta LS',
+    fuelType: 'Diesel',
+    year: 2022,
+    colorName: 'Prata',
+    color: '#94a3b8'
+  },
+  {
+    id: 'actros-2651',
+    category: 'Caminhões Pesados',
+    name: 'Mercedes-Benz Actros 2651 LS 6x4',
+    brand: 'Mercedes-Benz',
+    model: 'Actros 2651 LS',
+    type: 'Carreta LS',
+    fuelType: 'Diesel',
+    year: 2023,
+    colorName: 'Azul',
+    color: '#1e40af'
+  },
+  {
+    id: 'meteor-29520',
+    category: 'Caminhões Pesados',
+    name: 'VW Meteor 29.520 6x4',
+    brand: 'Volkswagen',
+    model: 'Meteor 29.520',
+    type: 'Carreta LS',
+    fuelType: 'Diesel',
+    year: 2023,
+    colorName: 'Branco',
+    color: '#ffffff'
+  },
+
+  // Caminhões Médios / Traçados / Basculantes
+  {
+    id: 'vw-24280',
+    category: 'Caminhões Médios / Traçados',
+    name: 'VW Constellation 24.280 V-Tronic 6x2',
+    brand: 'Volkswagen',
+    model: 'Constellation 24.280',
+    type: 'Truck',
+    fuelType: 'Diesel',
+    year: 2022,
+    colorName: 'Branco',
+    color: '#ffffff'
+  },
+  {
+    id: 'volvo-vm330',
+    category: 'Caminhões Médios / Traçados',
+    name: 'Volvo VM 330 6x4 Basculante Pesado',
+    brand: 'Volvo',
+    model: 'VM 330 6x4R',
+    type: 'Truck',
+    fuelType: 'Diesel',
+    year: 2023,
+    colorName: 'Amarelo',
+    color: '#eab308'
+  },
+  {
+    id: 'atego-1719',
+    category: 'Caminhões Médios / Traçados',
+    name: 'MB Atego 1719 4x2 Caçamba Toco',
+    brand: 'Mercedes-Benz',
+    model: 'Atego 1719',
+    type: 'Toco',
+    fuelType: 'Diesel',
+    year: 2022,
+    colorName: 'Amarelo',
+    color: '#eab308'
+  },
+  {
+    id: 'tector-240e28',
+    category: 'Caminhões Médios / Traçados',
+    name: 'Iveco Tector 240E28 6x2 Basculante',
+    brand: 'Iveco',
+    model: 'Tector 240E28',
+    type: 'Truck',
+    fuelType: 'Diesel',
+    year: 2021,
+    colorName: 'Prata',
+    color: '#94a3b8'
+  },
+
+  // Máquinas e Equipamentos Pesados
+  {
+    id: 'cat-320',
+    category: 'Máquinas Pesadas',
+    name: 'Caterpillar 320 Escavadeira Hidráulica 20t',
+    brand: 'Caterpillar',
+    model: 'CAT 320 Next Gen',
+    type: 'Máquina',
+    fuelType: 'Diesel',
+    year: 2023,
+    colorName: 'Amarelo',
+    color: '#f59e0b'
+  },
+  {
+    id: 'retro-cat-416',
+    category: 'Máquinas Pesadas',
+    name: 'Caterpillar 416 Retroescavadeira 4x4',
+    brand: 'Caterpillar',
+    model: 'CAT 416',
+    type: 'Máquina',
+    fuelType: 'Diesel',
+    year: 2022,
+    colorName: 'Amarelo',
+    color: '#f59e0b'
+  },
+  {
+    id: 'pa-carregadeira-924k',
+    category: 'Máquinas Pesadas',
+    name: 'Caterpillar 924K Pá Carregadeira',
+    brand: 'Caterpillar',
+    model: 'CAT 924K',
+    type: 'Máquina',
+    fuelType: 'Diesel',
+    year: 2022,
+    colorName: 'Amarelo',
+    color: '#f59e0b'
+  },
+  {
+    id: 'rolo-dynapac-ca250',
+    category: 'Máquinas Pesadas',
+    name: 'Dynapac CA 250 Rolo Compactador Vibratório',
+    brand: 'Dynapac',
+    model: 'CA 250',
+    type: 'Máquina',
+    fuelType: 'Diesel',
+    year: 2021,
+    colorName: 'Amarelo',
+    color: '#eab308'
+  },
+
+  // Utilitários & Leves de Obra
+  {
+    id: 'hilux-cd-srv',
+    category: 'Utilitários & Leves',
+    name: 'Toyota Hilux CD SRV 2.8 4x4 Diesel',
+    brand: 'Toyota',
+    model: 'Hilux CD SRV 4x4',
+    type: 'Utilitário',
+    fuelType: 'Diesel',
+    year: 2023,
+    colorName: 'Prata',
+    color: '#94a3b8'
+  },
+  {
+    id: 'strada-endurance',
+    category: 'Utilitários & Leves',
+    name: 'Fiat Strada Endurance 1.3 Cabine Simples',
+    brand: 'Fiat',
+    model: 'Strada Endurance 1.3',
+    type: 'Utilitário',
+    fuelType: 'Flex',
+    year: 2023,
+    colorName: 'Branco',
+    color: '#ffffff'
+  },
+  {
+    id: 'fiorino-endurance',
+    category: 'Utilitários & Leves',
+    name: 'Fiat Fiorino Endurance 1.4 Furgão',
+    brand: 'Fiat',
+    model: 'Fiorino Endurance 1.4',
+    type: 'Utilitário',
+    fuelType: 'Flex',
+    year: 2022,
+    colorName: 'Branco',
+    color: '#ffffff'
+  }
+];
+
+// Parser Nativo de CRLV-e da Carteira Digital de Trânsito / SENATRAN
+export const parseCrlvTextContent = (text: string) => {
+  if (!text) return null;
+  const clean = text.replace(/\r/g, '');
+
+  const plateMatch = clean.match(/PLACA[:\s]*([A-Z]{3}[0-9][A-Z0-9][0-9]{2}|[A-Z]{3}-?[0-9]{4})/i) ||
+                     clean.match(/\b([A-Z]{3}[0-9][A-Z0-9][0-9]{2})\b/);
+  const plate = plateMatch ? plateMatch[1].replace('-', '').toUpperCase() : '';
+
+  const renavamMatch = clean.match(/RENAVAM[:\s]*([0-9]{9,11})/i) || clean.match(/\b([0-9]{11})\b/);
+  const renavam = renavamMatch ? renavamMatch[1] : '';
+
+  const chassisMatch = clean.match(/CHASSI[:\s]*([A-HJ-NPR-Z0-9]{17})/i) || clean.match(/\b([A-HJ-NPR-Z0-9]{17})\b/);
+  const chassis = chassisMatch ? chassisMatch[1].toUpperCase() : '';
+
+  const modelMatch = clean.match(/MARCA\s*\/\s*MODELO(?:\s*\/\s*VERS[ÃA]O)?[:\s]*([^\n\r]+)/i);
+  let rawModel = modelMatch ? modelMatch[1].trim() : '';
+
+  let brand = '';
+  let model = rawModel;
+  if (rawModel.includes('/')) {
+    const parts = rawModel.split('/');
+    brand = parts[0].trim();
+    model = parts.slice(1).join(' ').trim();
+  } else if (rawModel) {
+    const parts = rawModel.split(' ');
+    brand = parts[0].trim();
+    model = parts.slice(1).join(' ').trim();
+  }
+
+  const anoFabMatch = clean.match(/ANO\s*FABRICA[ÇC][ÃA]O[:\s]*([0-9]{4})/i);
+  const anoModMatch = clean.match(/ANO\s*MODELO[:\s]*([0-9]{4})/i);
+  const anoMatch = clean.match(/(?:ANO|EXERC[ÍI]CIO)[:\s]*([0-9]{4})/i);
+  const year = anoModMatch ? parseInt(anoModMatch[1], 10) : anoFabMatch ? parseInt(anoFabMatch[1], 10) : anoMatch ? parseInt(anoMatch[1], 10) : new Date().getFullYear();
+
+  const colorMatch = clean.match(/COR(?:\s*PREDOMINANTE)?[:\s]*([A-ZÁ-Ú]+)/i);
+  let colorName = colorMatch ? colorMatch[1].trim() : '';
+  if (colorName.toUpperCase() === 'BRANCA') colorName = 'Branco';
+  if (colorName.toUpperCase() === 'PRETA') colorName = 'Preto';
+  if (colorName.toUpperCase() === 'VERMELHA') colorName = 'Vermelho';
+  if (colorName.toUpperCase() === 'AMARELA') colorName = 'Amarelo';
+  if (colorName.toUpperCase() === 'CINZENTA' || colorName.toUpperCase() === 'PRATEADA') colorName = 'Prata';
+
+  const fuelMatch = clean.match(/COMBUST[ÍI]VEL[:\s]*([A-ZÁ-Ú]+)/i);
+  let fuelType: 'Diesel' | 'Flex' | 'Gasolina' = 'Diesel';
+  if (fuelMatch) {
+    const f = fuelMatch[1].toUpperCase();
+    if (f.includes('DIESEL')) fuelType = 'Diesel';
+    else if (f.includes('FLEX')) fuelType = 'Flex';
+    else if (f.includes('GASOLINA')) fuelType = 'Gasolina';
+  }
+
+  return {
+    plate,
+    renavam,
+    chassis,
+    brand,
+    model,
+    fullName: rawModel || (brand ? `${brand} ${model}`.trim() : ''),
+    year,
+    colorName,
+    fuelType
+  };
+};
+
   // ==========================================
   // CONSULTA NA BASE NACIONAL DE VEÍCULOS (APIBRASIL - SENATRAN/SINESP)
   // ==========================================
@@ -1086,6 +1361,86 @@ const Clients = () => {
     } finally {
       setIsLoadingPlate(false);
     }
+  };
+
+// ==========================================
+  // MODAL 2: IMPORTAÇÃO E LEITURA DE CRLV-e (PDF/ARQUIVO)
+  // ==========================================
+  const handleCrlvUpload = async (file: File) => {
+    if (!file) return;
+
+    setIsReadingCrlv(true);
+    try {
+      // 1. Salvar arquivo PDF automaticamente como anexo do veículo
+      const at = {
+        id: Date.now().toString(),
+        name: file.name,
+        date: new Date().toLocaleDateString('pt-BR'),
+        size: (file.size / 1024).toFixed(1) + 'KB'
+      };
+      setFormData((prev: any) => ({
+        ...prev,
+        attachments: [...(prev.attachments || []), at]
+      }));
+
+      // 2. Extração de texto oficial do arquivo
+      const text = await file.text();
+      const parsed = parseCrlvTextContent(text);
+
+      if (parsed && (parsed.plate || parsed.renavam || parsed.chassis || parsed.brand)) {
+        setFormData((prev: any) => {
+          const brand = parsed.brand || prev.brand || '';
+          const name = parsed.fullName || parsed.model || (brand ? `${brand} ${parsed.plate}` : prev.name);
+          return {
+            ...prev,
+            plate: parsed.plate ? formatPlate(parsed.plate) : prev.plate,
+            renavam: parsed.renavam || prev.renavam,
+            chassis: parsed.chassis || prev.chassis,
+            brand: brand || prev.brand,
+            name: name || prev.name,
+            model: parsed.model || prev.model || name,
+            year: parsed.year || prev.year || new Date().getFullYear(),
+            colorName: parsed.colorName || prev.colorName || 'Branco',
+            color: parsed.colorName?.toLowerCase().includes('amarel') ? '#eab308' :
+                   parsed.colorName?.toLowerCase().includes('azul') ? '#1e40af' :
+                   parsed.colorName?.toLowerCase().includes('vermelh') ? '#dc2626' :
+                   parsed.colorName?.toLowerCase().includes('prat') ? '#94a3b8' :
+                   parsed.colorName?.toLowerCase().includes('pret') ? '#000000' : (prev.color || '#ffffff'),
+            fuelType: parsed.fuelType || prev.fuelType || 'Diesel',
+            type: mapVehicleType(name, brand)
+          };
+        });
+
+        addToast(`CRLV-e de "${parsed.fullName || parsed.plate}" lido e anexado com sucesso!`, 'success', 6000);
+      } else {
+        // Se o PDF for baseado em imagem/bitmap digitalizada
+        addToast(`Arquivo "${file.name}" anexado à ficha do veículo! (Documento digitalizado: dados técnicos mantidos para revisão).`, 'info', 6000);
+      }
+    } catch (err) {
+      console.error('Erro na leitura do CRLV-e:', err);
+      addToast('Não foi possível processar o texto do arquivo. O documento foi salvo nos anexos.', 'warning');
+    } finally {
+      setIsReadingCrlv(false);
+    }
+  };
+
+  // ==========================================
+  // MODAL 3: SELETOR DE PRESETS RÁPIDOS DE FROTA
+  // ==========================================
+  const handleApplyPreset = (preset: FleetPreset) => {
+    setFormData((prev: any) => ({
+      ...prev,
+      brand: preset.brand,
+      name: preset.name,
+      model: preset.model,
+      type: preset.type,
+      fuelType: preset.fuelType,
+      year: preset.year,
+      colorName: preset.colorName,
+      color: preset.color
+    }));
+    setIsPresetModalOpen(false);
+    addToast(`Ficha técnica de "${preset.name}" aplicada com sucesso! Informe a Placa e Renavam.`, 'success', 5000);
   };
 
   // ==========================================
@@ -1707,6 +2062,75 @@ const Clients = () => {
                     Dados Principais
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+
+{/* -> VEÍCULOS: BARRA DE ATALHOS RÁPIDOS (MODAL 2: UPLOAD CRLV-e & MODAL 3: PRESETS DE FROTA) */}
+                    {activeTab === 'vehicles' && (
+                      <div className="md:col-span-12 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+
+                          {/* MODAL 2: ÁREA DE UPLOAD E LEITURA DO CRLV-e (PDF/DOCUMENTO) */}
+                          <div className="md:col-span-8 bg-gradient-to-r from-emerald-500/10 via-cyan-500/10 to-transparent dark:from-emerald-950/40 dark:via-cyan-950/40 border-2 border-dashed border-emerald-300 dark:border-emerald-700/60 rounded-2xl p-4 flex items-center justify-between gap-4 relative group hover:border-emerald-500 transition-all">
+                            <input
+                              type="file"
+                              accept=".pdf,.txt,.doc,.docx"
+                              className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleCrlvUpload(f);
+                                e.target.value = '';
+                              }}
+                              disabled={isReadingCrlv}
+                            />
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/20 group-hover:scale-105 transition-transform shrink-0">
+                                {isReadingCrlv ? <Loader2 size={24} className="animate-spin" /> : <Upload size={24} />}
+                              </div>
+                              <div>
+                                <h5 className="text-xs font-black text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                                  <span>📄 Importar CRLV-e Digital (PDF)</span>
+                                  <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                                    Preenchimento em 1s
+                                  </span>
+                                </h5>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                  {isReadingCrlv ? 'Lendo dados do documento...' : 'Arraste o PDF do CRLV da CDT aqui para preencher Placa, Renavam, Chassi e Marca/Modelo'}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="hidden sm:flex px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider items-center gap-1.5 shadow-sm shrink-0 pointer-events-none"
+                            >
+                              <Upload size={14} /> Selecionar PDF
+                            </button>
+                          </div>
+
+                          {/* MODAL 3: BOTÃO DO CATÁLOGO DE MODELOS RÁPIDOS DE FROTA (PRESETS) */}
+                          <div className="md:col-span-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 flex flex-col justify-between">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1">
+                                <Sparkles size={13} /> Modelos de Frota
+                              </span>
+                              <span className="text-[9px] font-bold text-slate-400">15 Modelos</span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug mb-3">
+                              Selecione modelos frequentes de Caminhões (Volvo, Scania, MB) e Máquinas.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPresetSearchTerm('');
+                                setIsPresetModalOpen(true);
+                              }}
+                              className="w-full px-3 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm hover:scale-[1.01]"
+                            >
+                              <Truck size={14} /> Catálogo de Modelos
+                            </button>
+                          </div>
+
+                        </div>
+                      </div>
+                    )}
 
                     {/* Nome / Descrição */}
                     <div className="md:col-span-8">
@@ -2565,6 +2989,101 @@ const Clients = () => {
                 className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg shadow-emerald-600/20 transition-all cursor-pointer flex items-center gap-2"
               >
                 <Save size={14} /> Salvar Configurações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+{/* Modal 3: Catálogo Base de Modelos de Frota (Presets Rápidos) */}
+      {isPresetModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-700 w-full max-w-2xl overflow-hidden animate-scale-up flex flex-col max-h-[85vh]">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600">
+                  <Truck size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">Modelos e Fichas de Frota</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Preenchimento Rápido de Fábrica</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPresetModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800">
+              <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <input
+                  type="text"
+                  placeholder="Pesquisar por modelo, marca (ex: Volvo FH, Scania, CAT, Hilux)..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={presetSearchTerm}
+                  onChange={e => setPresetSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+              {['Caminhões Pesados', 'Caminhões Médios / Traçados', 'Máquinas Pesadas', 'Utilitários & Leves'].map(cat => {
+                const items = FLEET_PRESETS.filter(p => p.category === cat && (
+                  !presetSearchTerm ||
+                  p.name.toLowerCase().includes(presetSearchTerm.toLowerCase()) ||
+                  p.brand.toLowerCase().includes(presetSearchTerm.toLowerCase()) ||
+                  p.model.toLowerCase().includes(presetSearchTerm.toLowerCase())
+                ));
+
+                if (items.length === 0) return null;
+
+                return (
+                  <div key={cat} className="space-y-3">
+                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                      {cat}
+                    </h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {items.map(preset => (
+                        <div
+                          key={preset.id}
+                          onClick={() => handleApplyPreset(preset)}
+                          className="p-3.5 bg-slate-50 hover:bg-indigo-50/70 dark:bg-slate-900/60 dark:hover:bg-indigo-950/40 border border-slate-200/80 dark:border-slate-700/80 hover:border-indigo-300 dark:hover:border-indigo-700 rounded-2xl cursor-pointer transition-all hover:scale-[1.01] group shadow-sm"
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700 shadow-2xs">
+                              {preset.type}
+                            </span>
+                            <span className="text-[9px] font-bold text-slate-400">
+                              {preset.fuelType} • {preset.year}
+                            </span>
+                          </div>
+                          <h6 className="text-xs font-black text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            {preset.name}
+                          </h6>
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            Marca: {preset.brand} • Cor: {preset.colorName}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsPresetModalOpen(false)}
+                className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                Fechar
               </button>
             </div>
           </div>
