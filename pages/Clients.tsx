@@ -772,192 +772,2009 @@ export interface FleetPreset {
 }
 
 export const FLEET_PRESETS: FleetPreset[] = [
-  // Caminhões Pesados / Cavalos Mecânicos
   {
-    id: 'volvo-fh540',
-    category: 'Caminhões Pesados',
-    name: 'Volvo FH 540 6x4T Globetrotter',
-    brand: 'Volvo',
-    model: 'FH 540 6x4T',
-    type: 'Carreta LS',
-    fuelType: 'Diesel',
-    year: 2023,
-    colorName: 'Branco',
-    color: '#ffffff'
+    "id": "volvo-fh540",
+    "category": "Caminhões Pesados",
+    "name": "Volvo FH 540 6x4T Globetrotter",
+    "brand": "Volvo",
+    "model": "FH 540 6x4T",
+    "type": "Carreta LS",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
   },
   {
-    id: 'scania-r450',
-    category: 'Caminhões Pesados',
-    name: 'Scania R 450 Highline 6x2',
-    brand: 'Scania',
-    model: 'R 450 A6X2NA',
-    type: 'Carreta LS',
-    fuelType: 'Diesel',
-    year: 2022,
-    colorName: 'Prata',
-    color: '#94a3b8'
+    "id": "scania-r450",
+    "category": "Caminhões Pesados",
+    "name": "Scania R 450 Highline 6x2",
+    "brand": "Scania",
+    "model": "R 450 A6X2NA",
+    "type": "Carreta LS",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Prata",
+    "color": "#94a3b8"
   },
   {
-    id: 'actros-2651',
-    category: 'Caminhões Pesados',
-    name: 'Mercedes-Benz Actros 2651 LS 6x4',
-    brand: 'Mercedes-Benz',
-    model: 'Actros 2651 LS',
-    type: 'Carreta LS',
-    fuelType: 'Diesel',
-    year: 2023,
-    colorName: 'Azul',
-    color: '#1e40af'
+    "id": "actros-2651",
+    "category": "Caminhões Pesados",
+    "name": "Mercedes-Benz Actros 2651 LS 6x4",
+    "brand": "Mercedes-Benz",
+    "model": "Actros 2651 LS",
+    "type": "Carreta LS",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Azul",
+    "color": "#1e40af"
   },
   {
-    id: 'meteor-29520',
-    category: 'Caminhões Pesados',
-    name: 'VW Meteor 29.520 6x4',
-    brand: 'Volkswagen',
-    model: 'Meteor 29.520',
-    type: 'Carreta LS',
-    fuelType: 'Diesel',
-    year: 2023,
-    colorName: 'Branco',
-    color: '#ffffff'
-  },
-
-  // Caminhões Médios / Traçados / Basculantes
-  {
-    id: 'vw-24280',
-    category: 'Caminhões Médios / Traçados',
-    name: 'VW Constellation 24.280 V-Tronic 6x2',
-    brand: 'Volkswagen',
-    model: 'Constellation 24.280',
-    type: 'Truck',
-    fuelType: 'Diesel',
-    year: 2022,
-    colorName: 'Branco',
-    color: '#ffffff'
+    "id": "meteor-29520",
+    "category": "Caminhões Pesados",
+    "name": "VW Meteor 29.520 6x4",
+    "brand": "Volkswagen",
+    "model": "Meteor 29.520",
+    "type": "Carreta LS",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
   },
   {
-    id: 'volvo-vm330',
-    category: 'Caminhões Médios / Traçados',
-    name: 'Volvo VM 330 6x4 Basculante Pesado',
-    brand: 'Volvo',
-    model: 'VM 330 6x4R',
-    type: 'Truck',
-    fuelType: 'Diesel',
-    year: 2023,
-    colorName: 'Amarelo',
-    color: '#eab308'
+    "id": "scania-r540",
+    "category": "Caminhões Pesados",
+    "name": "Scania R 540 V8 6x4",
+    "brand": "Scania",
+    "model": "R 540 6x4",
+    "type": "Carreta LS",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Vermelho",
+    "color": "#dc2626"
   },
   {
-    id: 'atego-1719',
-    category: 'Caminhões Médios / Traçados',
-    name: 'MB Atego 1719 4x2 Caçamba Toco',
-    brand: 'Mercedes-Benz',
-    model: 'Atego 1719',
-    type: 'Toco',
-    fuelType: 'Diesel',
-    year: 2022,
-    colorName: 'Amarelo',
-    color: '#eab308'
+    "id": "volvo-fh500",
+    "category": "Caminhões Pesados",
+    "name": "Volvo FH 500 6x2T",
+    "brand": "Volvo",
+    "model": "FH 500 6x2",
+    "type": "Carreta LS",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Prata",
+    "color": "#94a3b8"
   },
   {
-    id: 'tector-240e28',
-    category: 'Caminhões Médios / Traçados',
-    name: 'Iveco Tector 240E28 6x2 Basculante',
-    brand: 'Iveco',
-    model: 'Tector 240E28',
-    type: 'Truck',
-    fuelType: 'Diesel',
-    year: 2021,
-    colorName: 'Prata',
-    color: '#94a3b8'
-  },
-
-  // Máquinas e Equipamentos Pesados
-  {
-    id: 'cat-320',
-    category: 'Máquinas Pesadas',
-    name: 'Caterpillar 320 Escavadeira Hidráulica 20t',
-    brand: 'Caterpillar',
-    model: 'CAT 320 Next Gen',
-    type: 'Máquina',
-    fuelType: 'Diesel',
-    year: 2023,
-    colorName: 'Amarelo',
-    color: '#f59e0b'
+    "id": "daf-xf530",
+    "category": "Caminhões Pesados",
+    "name": "DAF XF 530 Super Space Cab 6x4",
+    "brand": "DAF",
+    "model": "XF 530",
+    "type": "Carreta LS",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
   },
   {
-    id: 'retro-cat-416',
-    category: 'Máquinas Pesadas',
-    name: 'Caterpillar 416 Retroescavadeira 4x4',
-    brand: 'Caterpillar',
-    model: 'CAT 416',
-    type: 'Máquina',
-    fuelType: 'Diesel',
-    year: 2022,
-    colorName: 'Amarelo',
-    color: '#f59e0b'
+    "id": "med-1",
+    "category": "Caminhões Médios / Traçados",
+    "name": "VW Constellation 24.280 V-Tronic 6x2 Basculante",
+    "brand": "Volkswagen",
+    "model": "Constellation 24.280",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
   },
   {
-    id: 'pa-carregadeira-924k',
-    category: 'Máquinas Pesadas',
-    name: 'Caterpillar 924K Pá Carregadeira',
-    brand: 'Caterpillar',
-    model: 'CAT 924K',
-    type: 'Máquina',
-    fuelType: 'Diesel',
-    year: 2022,
-    colorName: 'Amarelo',
-    color: '#f59e0b'
+    "id": "med-2",
+    "category": "Caminhões Médios / Traçados",
+    "name": "VW Constellation 26.280 6x4 Betoneira 8m³",
+    "brand": "Volkswagen",
+    "model": "Constellation 26.280",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
   },
   {
-    id: 'rolo-dynapac-ca250',
-    category: 'Máquinas Pesadas',
-    name: 'Dynapac CA 250 Rolo Compactador Vibratório',
-    brand: 'Dynapac',
-    model: 'CA 250',
-    type: 'Máquina',
-    fuelType: 'Diesel',
-    year: 2021,
-    colorName: 'Amarelo',
-    color: '#eab308'
-  },
-
-  // Utilitários & Leves de Obra
-  {
-    id: 'hilux-cd-srv',
-    category: 'Utilitários & Leves',
-    name: 'Toyota Hilux CD SRV 2.8 4x4 Diesel',
-    brand: 'Toyota',
-    model: 'Hilux CD SRV 4x4',
-    type: 'Utilitário',
-    fuelType: 'Diesel',
-    year: 2023,
-    colorName: 'Prata',
-    color: '#94a3b8'
+    "id": "med-3",
+    "category": "Caminhões Médios / Traçados",
+    "name": "VW Constellation 31.280 6x4 Caçamba Mineração",
+    "brand": "Volkswagen",
+    "model": "Constellation 31.280",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#eab308"
   },
   {
-    id: 'strada-endurance',
-    category: 'Utilitários & Leves',
-    name: 'Fiat Strada Endurance 1.3 Cabine Simples',
-    brand: 'Fiat',
-    model: 'Strada Endurance 1.3',
-    type: 'Utilitário',
-    fuelType: 'Flex',
-    year: 2023,
-    colorName: 'Branco',
-    color: '#ffffff'
+    "id": "med-4",
+    "category": "Caminhões Médios / Traçados",
+    "name": "VW Constellation 31.330 6x4 Pipa 15.000L",
+    "brand": "Volkswagen",
+    "model": "Constellation 31.330",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
   },
   {
-    id: 'fiorino-endurance',
-    category: 'Utilitários & Leves',
-    name: 'Fiat Fiorino Endurance 1.4 Furgão',
-    brand: 'Fiat',
-    model: 'Fiorino Endurance 1.4',
-    type: 'Utilitário',
-    fuelType: 'Flex',
-    year: 2022,
-    colorName: 'Branco',
-    color: '#ffffff'
+    "id": "med-5",
+    "category": "Caminhões Médios / Traçados",
+    "name": "VW Constellation 32.360 6x4 Caçamba 14m³",
+    "brand": "Volkswagen",
+    "model": "Constellation 32.360",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "med-6",
+    "category": "Caminhões Médios / Traçados",
+    "name": "VW Constellation 17.190 4x2 Toco Carroceria",
+    "brand": "Volkswagen",
+    "model": "Constellation 17.190",
+    "type": "Toco",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-7",
+    "category": "Caminhões Médios / Traçados",
+    "name": "VW Constellation 17.280 4x2 Toco Basculante",
+    "brand": "Volkswagen",
+    "model": "Constellation 17.280",
+    "type": "Toco",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "med-8",
+    "category": "Caminhões Médios / Traçados",
+    "name": "VW Constellation 24.330 6x2 Carroceria Aberta",
+    "brand": "Volkswagen",
+    "model": "Constellation 24.330",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-9",
+    "category": "Caminhões Médios / Traçados",
+    "name": "VW Delivery 11.180 4x2 Plataforma Guincho",
+    "brand": "Volkswagen",
+    "model": "Delivery 11.180",
+    "type": "Toco",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-10",
+    "category": "Caminhões Médios / Traçados",
+    "name": "VW Delivery 9.170 4x2 Baú Carga Seca",
+    "brand": "Volkswagen",
+    "model": "Delivery 9.170",
+    "type": "Toco",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-11",
+    "category": "Caminhões Médios / Traçados",
+    "name": "VW Delivery 13.180 6x2 Cesto Aéreo 15m",
+    "brand": "Volkswagen",
+    "model": "Delivery 13.180",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-12",
+    "category": "Caminhões Médios / Traçados",
+    "name": "VW Constellation 27.260 6x4 Caçamba Meio-Tubo",
+    "brand": "Volkswagen",
+    "model": "Constellation 27.260",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Azul",
+    "color": "#1e40af"
+  },
+  {
+    "id": "med-13",
+    "category": "Caminhões Médios / Traçados",
+    "name": "VW Constellation 26.260 6x4 Munck Articulado 20t",
+    "brand": "Volkswagen",
+    "model": "Constellation 26.260",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-14",
+    "category": "Caminhões Médios / Traçados",
+    "name": "VW Constellation 14.190 4x2 Caçamba Toco Urbano",
+    "brand": "Volkswagen",
+    "model": "Constellation 14.190",
+    "type": "Toco",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-15",
+    "category": "Caminhões Médios / Traçados",
+    "name": "MB Atego 1719 4x2 Basculante Toco 6m³",
+    "brand": "Mercedes-Benz",
+    "model": "Atego 1719",
+    "type": "Toco",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "med-16",
+    "category": "Caminhões Médios / Traçados",
+    "name": "MB Atego 2426 6x2 Carroceria Carga Seca",
+    "brand": "Mercedes-Benz",
+    "model": "Atego 2426",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-17",
+    "category": "Caminhões Médios / Traçados",
+    "name": "MB Atego 2430 6x2 Munck Guindauto 30t",
+    "brand": "Mercedes-Benz",
+    "model": "Atego 2430",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "med-18",
+    "category": "Caminhões Médios / Traçados",
+    "name": "MB Atego 2730 6x4 Basculante Traçado 12m³",
+    "brand": "Mercedes-Benz",
+    "model": "Atego 2730",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-19",
+    "category": "Caminhões Médios / Traçados",
+    "name": "MB Atego 3030 8x2 Caçamba Bitruck 16m³",
+    "brand": "Mercedes-Benz",
+    "model": "Atego 3030",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "med-20",
+    "category": "Caminhões Médios / Traçados",
+    "name": "MB Atego 1726 4x4 Off-Road Obras",
+    "brand": "Mercedes-Benz",
+    "model": "Atego 1726 4x4",
+    "type": "Toco",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Laranja",
+    "color": "#f97316"
+  },
+  {
+    "id": "med-21",
+    "category": "Caminhões Médios / Traçados",
+    "name": "MB Accelo 1016 4x2 Munck 4t Compacto",
+    "brand": "Mercedes-Benz",
+    "model": "Accelo 1016",
+    "type": "Toco",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-22",
+    "category": "Caminhões Médios / Traçados",
+    "name": "MB Accelo 1316 6x2 Tanque Comboio Lubrificação",
+    "brand": "Mercedes-Benz",
+    "model": "Accelo 1316",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "med-23",
+    "category": "Caminhões Médios / Traçados",
+    "name": "MB Axor 3131 6x4 Basculante Pedreira",
+    "brand": "Mercedes-Benz",
+    "model": "Axor 3131",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "med-24",
+    "category": "Caminhões Médios / Traçados",
+    "name": "MB Axor 3131 6x4 Betoneira 8m³",
+    "brand": "Mercedes-Benz",
+    "model": "Axor 3131",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-25",
+    "category": "Caminhões Médios / Traçados",
+    "name": "MB Arocs 3345 6x4 Pesado Fora-de-Estrada",
+    "brand": "Mercedes-Benz",
+    "model": "Arocs 3345",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Cinza",
+    "color": "#64748b"
+  },
+  {
+    "id": "med-26",
+    "category": "Caminhões Médios / Traçados",
+    "name": "MB Arocs 4848 8x4 Mineração 20m³",
+    "brand": "Mercedes-Benz",
+    "model": "Arocs 4848",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "med-27",
+    "category": "Caminhões Médios / Traçados",
+    "name": "MB Atego 2730 6x4 Pipa Hidrojato 12.000L",
+    "brand": "Mercedes-Benz",
+    "model": "Atego 2730 Pipa",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-28",
+    "category": "Caminhões Médios / Traçados",
+    "name": "MB Atego 1419 4x2 Coletor Compactador",
+    "brand": "Mercedes-Benz",
+    "model": "Atego 1419",
+    "type": "Toco",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-29",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Volvo VM 270 6x2 Carroceria Graneleira",
+    "brand": "Volvo",
+    "model": "VM 270 6x2",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "med-30",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Volvo VM 330 6x4 Basculante Traçado 12m³",
+    "brand": "Volvo",
+    "model": "VM 330 6x4",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "med-31",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Volvo VM 330 8x4 Betoneira 10m³",
+    "brand": "Volvo",
+    "model": "VM 330 8x4",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-32",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Volvo VM 330 6x4 Pipa Irrigador Asfalto",
+    "brand": "Volvo",
+    "model": "VM 330 Pipa",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-33",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Volvo VM 360 8x2 Caçamba 16m³ Bitruck",
+    "brand": "Volvo",
+    "model": "VM 360 8x2",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Azul",
+    "color": "#1e40af"
+  },
+  {
+    "id": "med-34",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Volvo VM 290 4x2 Toco Carga Seca",
+    "brand": "Volvo",
+    "model": "VM 290 4x2",
+    "type": "Toco",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-35",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Volvo VM 330 6x4 Munck Articulado 45t",
+    "brand": "Volvo",
+    "model": "VM 330 Munck",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "med-36",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Volvo FMX 460 6x4 Caçamba Pedreira Pesada",
+    "brand": "Volvo",
+    "model": "FMX 460 6x4",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "med-37",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Volvo FMX 500 8x4 Caçamba Mineração Reforçada",
+    "brand": "Volvo",
+    "model": "FMX 500 8x4",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "med-38",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Iveco Tector 170E21 4x2 Toco Basculante",
+    "brand": "Iveco",
+    "model": "Tector 170E21",
+    "type": "Toco",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-39",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Iveco Tector 240E28 6x2 Carroceria Aberta",
+    "brand": "Iveco",
+    "model": "Tector 240E28",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Vermelho",
+    "color": "#dc2626"
+  },
+  {
+    "id": "med-40",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Iveco Tector 260E30 6x4 Caçamba Caçambão",
+    "brand": "Iveco",
+    "model": "Tector 260E30",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-41",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Iveco Tector 310E30 8x2 Bitruck Basculante",
+    "brand": "Iveco",
+    "model": "Tector 310E30",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "med-42",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Iveco Tector 270E30 6x4 Betoneira 8m³",
+    "brand": "Iveco",
+    "model": "Tector 270E30",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-43",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Iveco Daily 70C17 4x2 Guincho Plataforma",
+    "brand": "Iveco",
+    "model": "Daily 70C17",
+    "type": "Toco",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-44",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Iveco Tector 260E28 6x4 Pipa 15.000L",
+    "brand": "Iveco",
+    "model": "Tector 260E28",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-45",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Scania P 310 6x2 Carroceria Carga Pesada",
+    "brand": "Scania",
+    "model": "P 310 6x2",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2021,
+    "colorName": "Azul",
+    "color": "#1e40af"
+  },
+  {
+    "id": "med-46",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Scania P 360 6x4 Basculante Pedreira",
+    "brand": "Scania",
+    "model": "P 360 6x4",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "med-47",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Scania P 450 XT 8x4 Caçamba Fora-de-Estrada",
+    "brand": "Scania",
+    "model": "P 450 XT 8x4",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Cinza",
+    "color": "#64748b"
+  },
+  {
+    "id": "med-48",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Scania P 280 4x2 Toco Furgão Alumínio",
+    "brand": "Scania",
+    "model": "P 280 4x2",
+    "type": "Toco",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-49",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Scania G 450 6x4 Betoneira Pesada 10m³",
+    "brand": "Scania",
+    "model": "G 450 6x4",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-50",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Ford Cargo 2429 6x2 Caçamba Basculante",
+    "brand": "Ford",
+    "model": "Cargo 2429",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2019,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "med-51",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Ford Cargo 2629 6x4 Traçado Caçamba 12m³",
+    "brand": "Ford",
+    "model": "Cargo 2629",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2018,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-52",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Ford Cargo 1719 4x2 Toco Carroceria de Aço",
+    "brand": "Ford",
+    "model": "Cargo 1719",
+    "type": "Toco",
+    "fuelType": "Diesel",
+    "year": 2018,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-53",
+    "category": "Caminhões Médios / Traçados",
+    "name": "Ford Cargo 3133 6x4 Basculante Rocha",
+    "brand": "Ford",
+    "model": "Cargo 3133",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2019,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "med-54",
+    "category": "Caminhões Médios / Traçados",
+    "name": "DAF CF 310 6x2 Carroceria Aberta Longa",
+    "brand": "DAF",
+    "model": "CF 310 6x2",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "med-55",
+    "category": "Caminhões Médios / Traçados",
+    "name": "DAF CF 410 6x4 Basculante Fora de Estrada",
+    "brand": "DAF",
+    "model": "CF 410 6x4",
+    "type": "Truck",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Azul",
+    "color": "#1e40af"
+  },
+  {
+    "id": "maq-56",
+    "category": "Máquinas Pesadas",
+    "name": "Caterpillar 320 Escavadeira Hidráulica 20t",
+    "brand": "Caterpillar",
+    "model": "CAT 320 Next Gen",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-57",
+    "category": "Máquinas Pesadas",
+    "name": "Caterpillar 336 Escavadeira Hidráulica 36t",
+    "brand": "Caterpillar",
+    "model": "CAT 336",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-58",
+    "category": "Máquinas Pesadas",
+    "name": "Caterpillar 315 Escavadeira Compacta 15t",
+    "brand": "Caterpillar",
+    "model": "CAT 315",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-59",
+    "category": "Máquinas Pesadas",
+    "name": "Caterpillar 416 Retroescavadeira 4x4 Cabinada",
+    "brand": "Caterpillar",
+    "model": "CAT 416",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-60",
+    "category": "Máquinas Pesadas",
+    "name": "Caterpillar 426F2 Retroescavadeira 4x4",
+    "brand": "Caterpillar",
+    "model": "CAT 426F2",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-61",
+    "category": "Máquinas Pesadas",
+    "name": "Caterpillar 924K Pá Carregadeira 2.1m³",
+    "brand": "Caterpillar",
+    "model": "CAT 924K",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-62",
+    "category": "Máquinas Pesadas",
+    "name": "Caterpillar 938K Pá Carregadeira 2.7m³",
+    "brand": "Caterpillar",
+    "model": "CAT 938K",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-63",
+    "category": "Máquinas Pesadas",
+    "name": "Caterpillar 950M Pá Carregadeira 3.3m³",
+    "brand": "Caterpillar",
+    "model": "CAT 950M",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-64",
+    "category": "Máquinas Pesadas",
+    "name": "Caterpillar 140K Motoniveladora Lâmina 14ft",
+    "brand": "Caterpillar",
+    "model": "CAT 140K",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-65",
+    "category": "Máquinas Pesadas",
+    "name": "Caterpillar 120 Motoniveladora Operacional",
+    "brand": "Caterpillar",
+    "model": "CAT 120",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-66",
+    "category": "Máquinas Pesadas",
+    "name": "Caterpillar CS54B Rolo Compactador Liso 11t",
+    "brand": "Caterpillar",
+    "model": "CAT CS54B",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-67",
+    "category": "Máquinas Pesadas",
+    "name": "Caterpillar CP54B Rolo Compactador Pé de Carneiro",
+    "brand": "Caterpillar",
+    "model": "CAT CP54B",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-68",
+    "category": "Máquinas Pesadas",
+    "name": "Caterpillar D6N Trator de Esteira com Ripper",
+    "brand": "Caterpillar",
+    "model": "CAT D6N",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-69",
+    "category": "Máquinas Pesadas",
+    "name": "Caterpillar D8T Trator de Esteira Pesado",
+    "brand": "Caterpillar",
+    "model": "CAT D8T",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-70",
+    "category": "Máquinas Pesadas",
+    "name": "Komatsu PC200-8M0 Escavadeira Hidráulica 20t",
+    "brand": "Komatsu",
+    "model": "PC200-8M0",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-71",
+    "category": "Máquinas Pesadas",
+    "name": "Komatsu PC130-8 Escavadeira Compacta 13t",
+    "brand": "Komatsu",
+    "model": "PC130-8",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-72",
+    "category": "Máquinas Pesadas",
+    "name": "Komatsu PC350LC-8 Escavadeira Pesada 35t",
+    "brand": "Komatsu",
+    "model": "PC350LC-8",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-73",
+    "category": "Máquinas Pesadas",
+    "name": "Komatsu WA200-6 Pá Carregadeira 2.0m³",
+    "brand": "Komatsu",
+    "model": "WA200-6",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-74",
+    "category": "Máquinas Pesadas",
+    "name": "Komatsu WA320-6 Pá Carregadeira 3.0m³",
+    "brand": "Komatsu",
+    "model": "WA320-6",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-75",
+    "category": "Máquinas Pesadas",
+    "name": "Komatsu GD555-5 Motoniveladora Articulada",
+    "brand": "Komatsu",
+    "model": "GD555-5",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-76",
+    "category": "Máquinas Pesadas",
+    "name": "Komatsu GD655-5 Motoniveladora 16t",
+    "brand": "Komatsu",
+    "model": "GD655-5",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-77",
+    "category": "Máquinas Pesadas",
+    "name": "Komatsu D51EX Trator de Esteiras Hidrostático",
+    "brand": "Komatsu",
+    "model": "D51EX",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-78",
+    "category": "Máquinas Pesadas",
+    "name": "Komatsu D65EX-16 Trator de Lâmina e Ripper",
+    "brand": "Komatsu",
+    "model": "D65EX-16",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-79",
+    "category": "Máquinas Pesadas",
+    "name": "Volvo EC220D Escavadeira Hidráulica 22t",
+    "brand": "Volvo CE",
+    "model": "EC220D",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "maq-80",
+    "category": "Máquinas Pesadas",
+    "name": "Volvo EC140D Escavadeira Hidráulica 14t",
+    "brand": "Volvo CE",
+    "model": "EC140D",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "maq-81",
+    "category": "Máquinas Pesadas",
+    "name": "Volvo EC380D Escavadeira Hidráulica 38t",
+    "brand": "Volvo CE",
+    "model": "EC380D",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "maq-82",
+    "category": "Máquinas Pesadas",
+    "name": "Volvo L60H Pá Carregadeira Cabine Confort",
+    "brand": "Volvo CE",
+    "model": "L60H",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "maq-83",
+    "category": "Máquinas Pesadas",
+    "name": "Volvo L70H Pá Carregadeira 2.4m³",
+    "brand": "Volvo CE",
+    "model": "L70H",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "maq-84",
+    "category": "Máquinas Pesadas",
+    "name": "Volvo L90H Pá Carregadeira de Pátio",
+    "brand": "Volvo CE",
+    "model": "L90H",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "maq-85",
+    "category": "Máquinas Pesadas",
+    "name": "Volvo G930 Motoniveladora Rodoviária",
+    "brand": "Volvo CE",
+    "model": "G930",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "maq-86",
+    "category": "Máquinas Pesadas",
+    "name": "Volvo SD110B Rolo Compactador Monocilíndrico 11t",
+    "brand": "Volvo CE",
+    "model": "SD110B",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "maq-87",
+    "category": "Máquinas Pesadas",
+    "name": "Case 580N Retroescavadeira 4x4 Tração Forte",
+    "brand": "Case CE",
+    "model": "580N",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Laranja",
+    "color": "#f97316"
+  },
+  {
+    "id": "maq-88",
+    "category": "Máquinas Pesadas",
+    "name": "Case CX220C Escavadeira Hidráulica 22t",
+    "brand": "Case CE",
+    "model": "CX220C",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Laranja",
+    "color": "#f97316"
+  },
+  {
+    "id": "maq-89",
+    "category": "Máquinas Pesadas",
+    "name": "Case 621E Pá Carregadeira Caçamba 2.1m³",
+    "brand": "Case CE",
+    "model": "621E",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Laranja",
+    "color": "#f97316"
+  },
+  {
+    "id": "maq-90",
+    "category": "Máquinas Pesadas",
+    "name": "Case 721E Pá Carregadeira Caçamba 2.7m³",
+    "brand": "Case CE",
+    "model": "721E",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Laranja",
+    "color": "#f97316"
+  },
+  {
+    "id": "maq-91",
+    "category": "Máquinas Pesadas",
+    "name": "Case 865B Motoniveladora Articulada 15t",
+    "brand": "Case CE",
+    "model": "865B",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Laranja",
+    "color": "#f97316"
+  },
+  {
+    "id": "maq-92",
+    "category": "Máquinas Pesadas",
+    "name": "Case 1150M Trator de Esteira Silvicultura/Terrapleno",
+    "brand": "Case CE",
+    "model": "1150M",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Laranja",
+    "color": "#f97316"
+  },
+  {
+    "id": "maq-93",
+    "category": "Máquinas Pesadas",
+    "name": "Case 1107EX Rolo Compactador Vibratório Solo",
+    "brand": "Case CE",
+    "model": "1107EX",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Laranja",
+    "color": "#f97316"
+  },
+  {
+    "id": "maq-94",
+    "category": "Máquinas Pesadas",
+    "name": "JCB 3CX Retroescavadeira Traçada 4x4",
+    "brand": "JCB",
+    "model": "3CX",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-95",
+    "category": "Máquinas Pesadas",
+    "name": "JCB 4CX Retroescavadeira 4x4x4 Quatro Rodas Iguais",
+    "brand": "JCB",
+    "model": "4CX",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-96",
+    "category": "Máquinas Pesadas",
+    "name": "JCB JS220F Escavadeira Hidráulica 22t",
+    "brand": "JCB",
+    "model": "JS220F",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-97",
+    "category": "Máquinas Pesadas",
+    "name": "JCB 426ZX Pá Carregadeira 2.1m³",
+    "brand": "JCB",
+    "model": "426ZX",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-98",
+    "category": "Máquinas Pesadas",
+    "name": "JCB 116D Rolo Compactador de Solo 11.5t",
+    "brand": "JCB",
+    "model": "116D",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-99",
+    "category": "Máquinas Pesadas",
+    "name": "New Holland B95B Retroescavadeira 4x4",
+    "brand": "New Holland",
+    "model": "B95B",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-100",
+    "category": "Máquinas Pesadas",
+    "name": "New Holland E215C Escavadeira Hidráulica 21t",
+    "brand": "New Holland",
+    "model": "E215C",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-101",
+    "category": "Máquinas Pesadas",
+    "name": "New Holland W130B Pá Carregadeira Articulada",
+    "brand": "New Holland",
+    "model": "W130B",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-102",
+    "category": "Máquinas Pesadas",
+    "name": "New Holland RG140.B Motoniveladora 14t",
+    "brand": "New Holland",
+    "model": "RG140.B",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-103",
+    "category": "Máquinas Pesadas",
+    "name": "New Holland D150B Trator de Esteira",
+    "brand": "New Holland",
+    "model": "D150B",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "maq-104",
+    "category": "Máquinas Pesadas",
+    "name": "Dynapac CA 250 Rolo Compactador Vibratório 11t",
+    "brand": "Dynapac",
+    "model": "CA 250",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "maq-105",
+    "category": "Máquinas Pesadas",
+    "name": "Dynapac CC 424 HF Rolo Compactador Tandem Asfalto",
+    "brand": "Dynapac",
+    "model": "CC 424 HF",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Amarelo",
+    "color": "#eab308"
+  },
+  {
+    "id": "maq-106",
+    "category": "Máquinas Pesadas",
+    "name": "Hamm 3411 Rolo Compactador Monocilíndrico 11t",
+    "brand": "Hamm",
+    "model": "Hamm 3411",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Laranja",
+    "color": "#f97316"
+  },
+  {
+    "id": "maq-107",
+    "category": "Máquinas Pesadas",
+    "name": "Vögele Super 1300-3i Vibroacabadora de Asfalto",
+    "brand": "Vögele",
+    "model": "Super 1300-3i",
+    "type": "Máquina",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Verde",
+    "color": "#16a34a"
+  },
+  {
+    "id": "utl-108",
+    "category": "Utilitários & Leves",
+    "name": "Toyota Hilux CD SRV 2.8 4x4 Diesel Automática",
+    "brand": "Toyota",
+    "model": "Hilux CD SRV 4x4",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "utl-109",
+    "category": "Utilitários & Leves",
+    "name": "Toyota Hilux CD STD Power Pack 2.8 4x4 Manual",
+    "brand": "Toyota",
+    "model": "Hilux STD 4x4",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-110",
+    "category": "Utilitários & Leves",
+    "name": "Toyota Hilux CS Chassi 2.8 4x4 Diesel para Baú",
+    "brand": "Toyota",
+    "model": "Hilux CS Chassi",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-111",
+    "category": "Utilitários & Leves",
+    "name": "Toyota Hilux CD GR-Sport 2.8 4x4",
+    "brand": "Toyota",
+    "model": "Hilux GR-Sport",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Preto",
+    "color": "#000000"
+  },
+  {
+    "id": "utl-112",
+    "category": "Utilitários & Leves",
+    "name": "Toyota Yaris Hatch XL 1.5 Automático Ronda Obra",
+    "brand": "Toyota",
+    "model": "Yaris XL 1.5",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-113",
+    "category": "Utilitários & Leves",
+    "name": "Fiat Strada Endurance 1.3 Cabine Simples",
+    "brand": "Fiat",
+    "model": "Strada Endurance CS",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-114",
+    "category": "Utilitários & Leves",
+    "name": "Fiat Strada Freedom 1.3 Cabine Plus",
+    "brand": "Fiat",
+    "model": "Strada Freedom",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2023,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "utl-115",
+    "category": "Utilitários & Leves",
+    "name": "Fiat Strada Volcano 1.3 Cabine Dupla 4 Portas",
+    "brand": "Fiat",
+    "model": "Strada Volcano CD",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2024,
+    "colorName": "Cinza",
+    "color": "#64748b"
+  },
+  {
+    "id": "utl-116",
+    "category": "Utilitários & Leves",
+    "name": "Fiat Strada Ranch 1.0 Turbo CVT",
+    "brand": "Fiat",
+    "model": "Strada Ranch Turbo",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2024,
+    "colorName": "Cinza",
+    "color": "#64748b"
+  },
+  {
+    "id": "utl-117",
+    "category": "Utilitários & Leves",
+    "name": "Fiat Toro Endurance 1.3 Turbo Flex Automática",
+    "brand": "Fiat",
+    "model": "Toro Endurance T270",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-118",
+    "category": "Utilitários & Leves",
+    "name": "Fiat Toro Freedom 2.0 4x4 Diesel Automática",
+    "brand": "Fiat",
+    "model": "Toro Freedom 4x4",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "utl-119",
+    "category": "Utilitários & Leves",
+    "name": "Fiat Toro Volcano 2.0 4x4 Diesel",
+    "brand": "Fiat",
+    "model": "Toro Volcano 4x4",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Preto",
+    "color": "#000000"
+  },
+  {
+    "id": "utl-120",
+    "category": "Utilitários & Leves",
+    "name": "Fiat Fiorino Endurance 1.4 EVO Furgão Carga",
+    "brand": "Fiat",
+    "model": "Fiorino Endurance 1.4",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-121",
+    "category": "Utilitários & Leves",
+    "name": "Fiat Scudo Cargo 1.5 Turbo Diesel Furgão",
+    "brand": "Fiat",
+    "model": "Scudo Cargo 1.5",
+    "type": "Van",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-122",
+    "category": "Utilitários & Leves",
+    "name": "Fiat Ducato Maxi Cargo 2.2 Turbo Diesel 13m³",
+    "brand": "Fiat",
+    "model": "Ducato Maxi Cargo",
+    "type": "Van",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-123",
+    "category": "Utilitários & Leves",
+    "name": "Fiat Ducato Minibus 16+1 Lugares Transporte Equipe",
+    "brand": "Fiat",
+    "model": "Ducato Minibus 16P",
+    "type": "Van",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-124",
+    "category": "Utilitários & Leves",
+    "name": "Fiat Mobi Like 1.0 Fire Ronda Canteiro",
+    "brand": "Fiat",
+    "model": "Mobi Like 1.0",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-125",
+    "category": "Utilitários & Leves",
+    "name": "Chevrolet S10 Cabine Dupla LT 2.8 4x4 Diesel",
+    "brand": "Chevrolet",
+    "model": "S10 CD LT 4x4",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "utl-126",
+    "category": "Utilitários & Leves",
+    "name": "Chevrolet S10 Cabine Simples Chassi 2.8 4x4",
+    "brand": "Chevrolet",
+    "model": "S10 CS Chassi",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-127",
+    "category": "Utilitários & Leves",
+    "name": "Chevrolet S10 Cabine Dupla Z71 2.8 4x4 Off-Road",
+    "brand": "Chevrolet",
+    "model": "S10 Z71 4x4",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Cinza",
+    "color": "#64748b"
+  },
+  {
+    "id": "utl-128",
+    "category": "Utilitários & Leves",
+    "name": "Chevrolet S10 High Country 2.8 4x4 Diesel",
+    "brand": "Chevrolet",
+    "model": "S10 High Country",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Preto",
+    "color": "#000000"
+  },
+  {
+    "id": "utl-129",
+    "category": "Utilitários & Leves",
+    "name": "Chevrolet Montana 1.2 Turbo Flex MT6",
+    "brand": "Chevrolet",
+    "model": "Montana 1.2 Turbo",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-130",
+    "category": "Utilitários & Leves",
+    "name": "Chevrolet Montana Premier 1.2 Turbo AT",
+    "brand": "Chevrolet",
+    "model": "Montana Premier",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2024,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "utl-131",
+    "category": "Utilitários & Leves",
+    "name": "Chevrolet Onix Plus LT 1.0 Apoio Engenharia",
+    "brand": "Chevrolet",
+    "model": "Onix Plus LT",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-132",
+    "category": "Utilitários & Leves",
+    "name": "Ford Ranger XLS 2.0 4x4 Turbo Diesel Automática",
+    "brand": "Ford",
+    "model": "Ranger XLS 2.0 4x4",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "utl-133",
+    "category": "Utilitários & Leves",
+    "name": "Ford Ranger XL 2.0 4x4 Manual Frota",
+    "brand": "Ford",
+    "model": "Ranger XL 4x4",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-134",
+    "category": "Utilitários & Leves",
+    "name": "Ford Ranger XLT 3.0 V6 4x4 Diesel",
+    "brand": "Ford",
+    "model": "Ranger XLT V6",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Azul",
+    "color": "#1e40af"
+  },
+  {
+    "id": "utl-135",
+    "category": "Utilitários & Leves",
+    "name": "Ford Transit Furgão L3H2 2.0 Turbo Diesel 10m³",
+    "brand": "Ford",
+    "model": "Transit Furgão L3H2",
+    "type": "Van",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-136",
+    "category": "Utilitários & Leves",
+    "name": "Ford Transit Minibus 18+1 Passageiros",
+    "brand": "Ford",
+    "model": "Transit Minibus 18P",
+    "type": "Van",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-137",
+    "category": "Utilitários & Leves",
+    "name": "Ford Transit Chassi 2.0 para Carroceria",
+    "brand": "Ford",
+    "model": "Transit Chassi",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-138",
+    "category": "Utilitários & Leves",
+    "name": "VW Amarok Comfortline CD 2.0 4x4 Diesel",
+    "brand": "Volkswagen",
+    "model": "Amarok Comfortline 4x4",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-139",
+    "category": "Utilitários & Leves",
+    "name": "VW Amarok Highline 3.0 V6 4x4 Diesel",
+    "brand": "Volkswagen",
+    "model": "Amarok V6 Highline",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Cinza",
+    "color": "#64748b"
+  },
+  {
+    "id": "utl-140",
+    "category": "Utilitários & Leves",
+    "name": "VW Saveiro Robust 1.6 Cabine Simples Obras",
+    "brand": "Volkswagen",
+    "model": "Saveiro Robust CS",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-141",
+    "category": "Utilitários & Leves",
+    "name": "VW Saveiro Robust 1.6 Cabine Dupla",
+    "brand": "Volkswagen",
+    "model": "Saveiro Robust CD",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2023,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "utl-142",
+    "category": "Utilitários & Leves",
+    "name": "VW Gol 1.0 MPI Apoio de Campo",
+    "brand": "Volkswagen",
+    "model": "Gol 1.0 MPI",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2022,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-143",
+    "category": "Utilitários & Leves",
+    "name": "VW Polo Track 1.0 Flex Carro Fiscalização",
+    "brand": "Volkswagen",
+    "model": "Polo Track 1.0",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2024,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-144",
+    "category": "Utilitários & Leves",
+    "name": "Mitsubishi L200 Triton GL 2.4 4x4 Diesel Manual",
+    "brand": "Mitsubishi",
+    "model": "L200 Triton GL 4x4",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-145",
+    "category": "Utilitários & Leves",
+    "name": "Mitsubishi L200 Triton Outdoor GLS 2.4 4x4 AT",
+    "brand": "Mitsubishi",
+    "model": "L200 Triton GLS",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "utl-146",
+    "category": "Utilitários & Leves",
+    "name": "Mitsubishi L200 Triton Sport HPE 2.4 4x4",
+    "brand": "Mitsubishi",
+    "model": "L200 Triton HPE",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Cinza",
+    "color": "#64748b"
+  },
+  {
+    "id": "utl-147",
+    "category": "Utilitários & Leves",
+    "name": "Nissan Frontier S 2.3 4x4 Turbo Diesel MT",
+    "brand": "Nissan",
+    "model": "Frontier S 4x4",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-148",
+    "category": "Utilitários & Leves",
+    "name": "Nissan Frontier Attack 2.3 Bi-Turbo 4x4 AT",
+    "brand": "Nissan",
+    "model": "Frontier Attack 4x4",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Cinza",
+    "color": "#64748b"
+  },
+  {
+    "id": "utl-149",
+    "category": "Utilitários & Leves",
+    "name": "Nissan Frontier PRO-4X 2.3 4x4 Diesel",
+    "brand": "Nissan",
+    "model": "Frontier PRO-4X",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Laranja",
+    "color": "#f97316"
+  },
+  {
+    "id": "utl-150",
+    "category": "Utilitários & Leves",
+    "name": "Renault Master Furgão L3H2 2.3 dCi 13m³",
+    "brand": "Renault",
+    "model": "Master Furgão L3H2",
+    "type": "Van",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-151",
+    "category": "Utilitários & Leves",
+    "name": "Renault Master Chassi Cabine 2.3 dCi",
+    "brand": "Renault",
+    "model": "Master Chassi",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-152",
+    "category": "Utilitários & Leves",
+    "name": "Renault Master Minibus Executive 16 Lugares",
+    "brand": "Renault",
+    "model": "Master Minibus 16L",
+    "type": "Van",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "utl-153",
+    "category": "Utilitários & Leves",
+    "name": "Renault Duster Oroch Pro 1.6 SCe Picape",
+    "brand": "Renault",
+    "model": "Oroch Pro 1.6",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-154",
+    "category": "Utilitários & Leves",
+    "name": "Renault Kwid Zen 1.0 Apoio Administrativo",
+    "brand": "Renault",
+    "model": "Kwid Zen 1.0",
+    "type": "Utilitário",
+    "fuelType": "Flex",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-155",
+    "category": "Utilitários & Leves",
+    "name": "MB Sprinter 416 CDI Furgão Street 10.5m³",
+    "brand": "Mercedes-Benz",
+    "model": "Sprinter 416 Furgão",
+    "type": "Van",
+    "fuelType": "Diesel",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-156",
+    "category": "Utilitários & Leves",
+    "name": "MB Sprinter 314 CDI Street Chassi",
+    "brand": "Mercedes-Benz",
+    "model": "Sprinter 314 Chassi",
+    "type": "Utilitário",
+    "fuelType": "Diesel",
+    "year": 2022,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-157",
+    "category": "Utilitários & Leves",
+    "name": "MB Sprinter 516 CDI Minibus 19+1 Van",
+    "brand": "Mercedes-Benz",
+    "model": "Sprinter 516 Minibus",
+    "type": "Van",
+    "fuelType": "Diesel",
+    "year": 2024,
+    "colorName": "Prata",
+    "color": "#94a3b8"
+  },
+  {
+    "id": "utl-158",
+    "category": "Utilitários & Leves",
+    "name": "Honda CG 160 Cargo Moto Apontador / Estafeta",
+    "brand": "Honda",
+    "model": "CG 160 Cargo",
+    "type": "Motocicleta",
+    "fuelType": "Flex",
+    "year": 2023,
+    "colorName": "Branco",
+    "color": "#ffffff"
+  },
+  {
+    "id": "utl-159",
+    "category": "Utilitários & Leves",
+    "name": "Honda NXR 160 Bros ESD Ronda Trilha Terreno",
+    "brand": "Honda",
+    "model": "NXR 160 Bros",
+    "type": "Motocicleta",
+    "fuelType": "Flex",
+    "year": 2023,
+    "colorName": "Vermelho",
+    "color": "#dc2626"
+  },
+  {
+    "id": "utl-160",
+    "category": "Utilitários & Leves",
+    "name": "Yamaha Crosser 150 Z ABS Moto Ronda Trilha",
+    "brand": "Yamaha",
+    "model": "Crosser 150 Z",
+    "type": "Motocicleta",
+    "fuelType": "Flex",
+    "year": 2024,
+    "colorName": "Azul",
+    "color": "#1e40af"
   }
 ];
 
@@ -2065,75 +3882,6 @@ const Clients = () => {
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
 
-{/* -> VEÍCULOS: BARRA DE ATALHOS RÁPIDOS (MODAL 2: UPLOAD CRLV-e & MODAL 3: PRESETS DE FROTA) */}
-                    {activeTab === 'vehicles' && (
-                      <div className="md:col-span-12 space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-
-                          {/* MODAL 2: ÁREA DE UPLOAD E LEITURA DO CRLV-e (PDF/DOCUMENTO) */}
-                          <div className="md:col-span-8 bg-gradient-to-r from-emerald-500/10 via-cyan-500/10 to-transparent dark:from-emerald-950/40 dark:via-cyan-950/40 border-2 border-dashed border-emerald-300 dark:border-emerald-700/60 rounded-2xl p-4 flex items-center justify-between gap-4 relative group hover:border-emerald-500 transition-all">
-                            <input
-                              type="file"
-                              accept=".pdf,.txt,.doc,.docx"
-                              className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                              onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                if (f) handleCrlvUpload(f);
-                                e.target.value = '';
-                              }}
-                              disabled={isReadingCrlv}
-                            />
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/20 group-hover:scale-105 transition-transform shrink-0">
-                                {isReadingCrlv ? <Loader2 size={24} className="animate-spin" /> : <Upload size={24} />}
-                              </div>
-                              <div>
-                                <h5 className="text-xs font-black text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                                  <span>📄 Importar CRLV-e Digital (PDF)</span>
-                                  <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
-                                    Preenchimento em 1s
-                                  </span>
-                                </h5>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                  {isReadingCrlv ? 'Lendo dados do documento...' : 'Arraste o PDF do CRLV da CDT aqui para preencher Placa, Renavam, Chassi e Marca/Modelo'}
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              className="hidden sm:flex px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider items-center gap-1.5 shadow-sm shrink-0 pointer-events-none"
-                            >
-                              <Upload size={14} /> Selecionar PDF
-                            </button>
-                          </div>
-
-                          {/* MODAL 3: BOTÃO DO CATÁLOGO DE MODELOS RÁPIDOS DE FROTA (PRESETS) */}
-                          <div className="md:col-span-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 flex flex-col justify-between">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1">
-                                <Sparkles size={13} /> Modelos de Frota
-                              </span>
-                              <span className="text-[9px] font-bold text-slate-400">15 Modelos</span>
-                            </div>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug mb-3">
-                              Selecione modelos frequentes de Caminhões (Volvo, Scania, MB) e Máquinas.
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPresetSearchTerm('');
-                                setIsPresetModalOpen(true);
-                              }}
-                              className="w-full px-3 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm hover:scale-[1.01]"
-                            >
-                              <Truck size={14} /> Catálogo de Modelos
-                            </button>
-                          </div>
-
-                        </div>
-                      </div>
-                    )}
-
                     {/* Nome / Descrição */}
                     <div className="md:col-span-8">
                       <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
@@ -2709,6 +4457,73 @@ const Clients = () => {
                             value={toInputDate(formData.insuranceExpiry)}
                             onChange={e => setFormData({ ...formData, insuranceExpiry: e.target.value ? e.target.value.split('-').reverse().join('/') : '' })}
                           />
+                        </div>
+
+                        {/* -> QUADROS DE PREENCHIMENTO RÁPIDO NO RODAPÉ DE VEÍCULOS (MODAL 2: UPLOAD CRLV-e & MODAL 3: PRESETS) */}
+                        <div className="md:col-span-12 mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/60">
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+
+                            {/* MODAL 2: ÁREA DE UPLOAD E LEITURA DO CRLV-e (PDF/DOCUMENTO) */}
+                            <div className="md:col-span-8 bg-gradient-to-r from-emerald-500/10 via-cyan-500/10 to-transparent dark:from-emerald-950/40 dark:via-cyan-950/40 border-2 border-dashed border-emerald-300 dark:border-emerald-700/60 rounded-2xl p-4 flex items-center justify-between gap-4 relative group hover:border-emerald-500 transition-all">
+                              <input
+                                type="file"
+                                accept=".pdf,.txt,.doc,.docx"
+                                className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) handleCrlvUpload(f);
+                                  e.target.value = '';
+                                }}
+                                disabled={isReadingCrlv}
+                              />
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/20 group-hover:scale-105 transition-transform shrink-0">
+                                  {isReadingCrlv ? <Loader2 size={24} className="animate-spin" /> : <Upload size={24} />}
+                                </div>
+                                <div>
+                                  <h5 className="text-xs font-black text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                                    <span>📄 Importar CRLV-e Digital (PDF)</span>
+                                    <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                                      Preenchimento em 1s
+                                    </span>
+                                  </h5>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    {isReadingCrlv ? 'Lendo dados do documento...' : 'Arraste o PDF do CRLV da CDT aqui para preencher Placa, Renavam, Chassi e Marca/Modelo'}
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="hidden sm:flex px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider items-center gap-1.5 shadow-sm shrink-0 pointer-events-none"
+                              >
+                                <Upload size={14} /> Selecionar PDF
+                              </button>
+                            </div>
+
+                            {/* MODAL 3: BOTÃO DO CATÁLOGO DE MODELOS RÁPIDOS DE FROTA (PRESETS) */}
+                            <div className="md:col-span-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 flex flex-col justify-between">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1">
+                                  <Sparkles size={13} /> Modelos de Frota
+                                </span>
+                                <span className="text-[9px] font-bold text-slate-400">165+ Modelos</span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug mb-3">
+                                Selecione modelos frequentes de Caminhões (Volvo, Scania, MB) e Máquinas.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPresetSearchTerm('');
+                                  setIsPresetModalOpen(true);
+                                }}
+                                className="w-full px-3 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm hover:scale-[1.01]"
+                              >
+                                <Truck size={14} /> Catálogo de Modelos (165+)
+                              </button>
+                            </div>
+
+                          </div>
                         </div>
                       </>
                     )}
