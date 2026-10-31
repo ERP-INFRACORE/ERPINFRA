@@ -43,8 +43,9 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
-import { FleetVehicle, MaintenanceRecord, FuelLog, Tire, TireHistory } from '../types';
+import { FleetVehicle, MaintenanceRecord, FuelLog, Tire, TireHistory, PurchaseOrder, Transaction } from '../types';
 import { exportToCSV } from '../utils/exportUtils';
+import { isValidUUID, toDeterministicUUID } from '../src/services/api';
 
 const Fleet = () => {
 
@@ -52,7 +53,7 @@ const Fleet = () => {
         fleet, tires, inventory, addVehicle, updateVehicle, deleteVehicle, updateVehicleStatus,
         addMaintenanceRecord, deleteMaintenanceRecord, addFuelLog, deleteFuelLog,
         addTire, updateTire, deleteTire, addTireHistory, deleteTireHistory, accounts: financialAccounts,
-        updateStock, purchaseOrders, addPurchaseOrder
+        updateStock, purchaseOrders, addPurchaseOrder, updatePurchaseOrder, transactions, addTransaction, updateTransaction, currentUser, hasPermission
     } = useApp();
     const { addToast } = useToast();
     const [activeTab, setActiveTab] = useState<'overview' | 'vehicles' | 'maintenance' | 'fuel' | 'tires' | 'almoxarifado'>('overview');
@@ -377,6 +378,18 @@ const Fleet = () => {
 
     // Forms
     const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
+    const [maintPaymentStatus, setMaintPaymentStatus] = useState<'Pago' | 'A Pagar'>('Pago');
+    const [maintDueDate, setMaintDueDate] = useState<string>(new Date().toISOString().split('T')[0]);
+    // Exclusão Segura e Desfazer (Undo / Restauração)
+    const [maintenanceToDelete, setMaintenanceToDelete] = useState<{ vehicleId: string; record: MaintenanceRecord } | null>(null);
+    const [lastDeletedMaintenance, setLastDeletedMaintenance] = useState<{ vehicleId: string; record: MaintenanceRecord } | null>(() => {
+        try {
+            const saved = localStorage.getItem('infracore_last_deleted_maint');
+            return saved ? JSON.parse(saved) : null;
+        } catch { return null; }
+    });
+    const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+    const autoSyncedRef = React.useRef(false);
     const [newMaint, setNewMaint] = useState<Partial<MaintenanceRecord>>({
         type: 'Preventiva',
         date: new Date().toISOString().split('T')[0],
@@ -529,14 +542,262 @@ const Fleet = () => {
 
     const formatBRL = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
+    // Sincronização Retroativa e Validação de Pendências OSM / Financeiro
+    const pendingMaintSyncCount = useMemo(() => {
+        let count = 0;
+        fleet.forEach(vehicle => {
+            (vehicle.maintenanceHistory || []).forEach(m => {
+                const targetId = m.id;
+                const mDeterministicId = isValidUUID(targetId) ? targetId : toDeterministicUUID(targetId);
+                const hasOSM = purchaseOrders.some(p => p.id === m.id || p.id === `M-${m.id}` || p.id === mDeterministicId);
+                const txId = toDeterministicUUID(`maint-${mDeterministicId}`);
+                const hasTx = transactions.some(t => t.id === txId || t.id === `maint-${m.id}` || (t.type === 'Despesa' && Math.abs(t.amount - (m.cost || 0)) < 0.01 && t.date === m.date));
+                if (!hasOSM || !hasTx) {
+                    count++;
+                }
+            });
+        });
+        return count;
+    }, [fleet, purchaseOrders, transactions]);
+
+    // Auto-Sincronização Automática na montagem do componente (Silent Auto-Sync)
+    React.useEffect(() => {
+        if (!autoSyncedRef.current && fleet.length > 0 && purchaseOrders && transactions) {
+            autoSyncedRef.current = true;
+            // Varre manutenções para checar pendências e executa sincronização automática
+            let hasPending = false;
+            fleet.forEach(v => {
+                (v.maintenanceHistory || []).forEach(m => {
+                    const mDetId = isValidUUID(m.id) ? m.id : toDeterministicUUID(m.id);
+                    const hasOSM = purchaseOrders.some(p => p.id === m.id || p.id === `M-${m.id}` || p.id === mDetId);
+                    const txId = toDeterministicUUID(`maint-${mDetId}`);
+                    const hasTx = transactions.some(t => t.id === txId || t.id === `maint-${m.id}` || (t.type === 'Despesa' && Math.abs(t.amount - (m.cost || 0)) < 0.01 && t.date === m.date));
+                    if (!hasOSM || !hasTx) hasPending = true;
+                });
+            });
+
+            if (hasPending) {
+                handleSyncExistingMaintenances(true);
+            }
+        }
+    }, [fleet, purchaseOrders, transactions]);
+
+    // Detecta OSMs em Compras que não estão vinculadas a nenhum veículo (possivelmente excluídas na frota)
+    const orphanedOSMs = useMemo(() => {
+        const allMaintIds = new Set(fleet.flatMap(v => (v.maintenanceHistory || []).map(m => m.id)));
+        return purchaseOrders.filter(po => {
+            const isOSM = po.id.startsWith('M-') || po.ledgerCode?.startsWith('2.02.02');
+            return isOSM && !allMaintIds.has(po.id) && !allMaintIds.has(po.id.replace('M-', '')) && po.status !== 'Cancelado';
+        });
+    }, [fleet, purchaseOrders]);
+
+    // Função de Exclusão Segura com Validação de Permissão
+    const handleRequestDeleteMaintenance = (vehicleId: string, record: MaintenanceRecord) => {
+        const canDelete = hasPermission('fleet.maintenance') || hasPermission('fleet.manage') || currentUser?.roleId === 'admin' || currentUser?.username?.toLowerCase() === 'admin';
+        if (!canDelete) {
+            addToast("Acesso Restrito: Seu perfil de usuário não possui permissão para excluir registros de manutenção. Solicite a um administrador.", "error");
+            return;
+        }
+        setMaintenanceToDelete({ vehicleId, record });
+    };
+
+    // Confirmação de Exclusão (com snapshot para Desfazer)
+    const handleConfirmDeleteMaintenance = () => {
+        if (!maintenanceToDelete) return;
+        const { vehicleId, record } = maintenanceToDelete;
+
+        // Salva snapshot para permitir Desfazer imediato
+        const snapshot = { vehicleId, record };
+        setLastDeletedMaintenance(snapshot);
+        try {
+            localStorage.setItem('infracore_last_deleted_maint', JSON.stringify(snapshot));
+        } catch (e) {
+            console.warn('Erro ao salvar snapshot de exclusão no localStorage', e);
+        }
+
+        // Executa a exclusão através do AppContext
+        deleteMaintenanceRecord(vehicleId, record.id);
+
+        // Se houver OSM vinculada, marca como Cancelada em Compras
+        const linkedOsm = purchaseOrders.find(p => p.id === record.id || p.id === `M-${record.id}`);
+        if (linkedOsm) {
+            updatePurchaseOrder({ ...linkedOsm, status: 'Cancelado' });
+        }
+
+        setMaintenanceToDelete(null);
+        addToast("Ordem de manutenção excluída. Você pode clicar em 'Desfazer Exclusão' para recuperá-la.", "warning");
+    };
+
+    // Desfazer Exclusão / Restaurar Manutenção
+    const handleUndoDeleteMaintenance = (customSnapshot?: { vehicleId: string; record: MaintenanceRecord }) => {
+        const toRestore = customSnapshot || lastDeletedMaintenance;
+        if (!toRestore) {
+            addToast("Nenhuma manutenção recente disponível para restauração.", "info");
+            return;
+        }
+
+        const vehicle = fleet.find(v => v.id === toRestore.vehicleId) || fleet[0];
+        if (!vehicle) {
+            addToast("Veículo de destino não encontrado para restauração.", "error");
+            return;
+        }
+
+        // 1. Reinsere a manutenção no veículo
+        addMaintenanceRecord(vehicle.id, toRestore.record);
+
+        // 2. Reativa ou cria a OSM em Compras
+        const osmOrder: PurchaseOrder = {
+            id: toRestore.record.id.startsWith('M-') ? toRestore.record.id : `M-${toRestore.record.id}`,
+            supplierId: toRestore.record.mechanic ? 'SUP-OFICINA' : 'OFICINA-INTERNA',
+            supplierName: toRestore.record.mechanic || `Oficina Manutenção (${vehicle.plate})`,
+            date: toRestore.record.date,
+            items: [{
+                id: `SRV-${toRestore.record.id}`,
+                name: `OSM: ${toRestore.record.type} - ${toRestore.record.description} (${vehicle.plate})`,
+                quantity: 1,
+                unit: 'SV',
+                price: toRestore.record.cost
+            }],
+            subtotal: toRestore.record.cost,
+            total: toRestore.record.cost,
+            status: toRestore.record.debitAccountId ? 'Recebido' : 'Pendente',
+            paymentTerms: toRestore.record.debitAccountId ? 'À Vista / Caixa' : 'A Prazo / Boleto',
+            targetAccountId: toRestore.record.debitAccountId || financialAccounts[0]?.id || '',
+            accountId: toRestore.record.debitAccountId || financialAccounts[0]?.id || '',
+            ledgerCode: toRestore.record.ledgerCode || '2.02.02',
+            ledgerName: toRestore.record.ledgerName || 'Manutenção de Frota',
+            attachments: toRestore.record.attachments || []
+        };
+        addPurchaseOrder(osmOrder);
+
+        // Limpa o estado
+        setLastDeletedMaintenance(null);
+        try {
+            localStorage.removeItem('infracore_last_deleted_maint');
+        } catch {}
+
+        setIsRestoreModalOpen(false);
+        addToast(`Ordem de manutenção da placa ${vehicle.plate} restaurada com sucesso, reintegrando OSM e Financeiro!`, "success");
+    };
+
+    // Restaurar uma OSM órfã encontrada em Compras
+    const handleRestoreOrphanedOSM = (osm: PurchaseOrder, targetVehicleId: string) => {
+        const vehicle = fleet.find(v => v.id === targetVehicleId);
+        if (!vehicle) {
+            addToast("Selecione um veículo para vincular a ordem restaurada.", "error");
+            return;
+        }
+
+        const restoredRecord: MaintenanceRecord = {
+            id: osm.id,
+            vehicleId: vehicle.id,
+            date: osm.date,
+            type: 'Corretiva',
+            description: osm.items?.[0]?.name ? osm.items[0].name.replace(/^OSM:s*/, '') : 'Manutenção Restaurada',
+            cost: osm.total || 0,
+            km: vehicle.km || 0,
+            mechanic: osm.supplierName,
+            debitAccountId: osm.targetAccountId || osm.accountId || financialAccounts[0]?.id || '',
+            ledgerCode: osm.ledgerCode || '2.02.02',
+            ledgerName: osm.ledgerName || 'Manutenção de Frota',
+            attachments: osm.attachments || []
+        };
+
+        addMaintenanceRecord(vehicle.id, restoredRecord);
+        updatePurchaseOrder({ ...osm, status: 'Recebido' });
+        addToast(`OSM ${osm.id} reincorporada com sucesso à frota no veículo ${vehicle.plate}!`, "success");
+    };
+
+    const handleSyncExistingMaintenances = (isAutoSilent: boolean = false) => {
+        let syncedOSM = 0;
+        let syncedTx = 0;
+        const defaultAccount = financialAccounts[0];
+
+        fleet.forEach(vehicle => {
+            (vehicle.maintenanceHistory || []).forEach(m => {
+                const targetId = m.id;
+                const mDeterministicId = isValidUUID(targetId) ? targetId : toDeterministicUUID(targetId);
+
+                // 1. Cria a OSM se não existir no módulo de Compras
+                const hasOSM = purchaseOrders.some(p => p.id === m.id || p.id === `M-${m.id}` || p.id === mDeterministicId);
+                if (!hasOSM) {
+                    const osmOrder: PurchaseOrder = {
+                        id: m.id.startsWith('M-') ? m.id : `M-${m.id}`,
+                        supplierId: m.mechanic ? 'SUP-OFICINA' : 'OFICINA-INTERNA',
+                        supplierName: m.mechanic || `Oficina Manutenção (${vehicle.plate})`,
+                        date: m.date || new Date().toISOString().split('T')[0],
+                        items: [{
+                            id: `SRV-${m.id}`,
+                            name: `OSM: ${m.type} - ${m.description || 'Manutenção'} (${vehicle.plate})`,
+                            quantity: 1,
+                            unit: 'SV',
+                            price: m.cost || 0
+                        }],
+                        subtotal: m.cost || 0,
+                        total: m.cost || 0,
+                        status: m.debitAccountId ? 'Recebido' : 'Pendente',
+                        paymentTerms: m.debitAccountId ? 'À Vista / Caixa' : 'A Prazo / Boleto',
+                        targetAccountId: m.debitAccountId || defaultAccount?.id || '',
+                        accountId: m.debitAccountId || defaultAccount?.id || '',
+                        ledgerCode: m.ledgerCode || '2.02.02',
+                        ledgerName: m.ledgerName || 'Manutenção de Frota',
+                        attachments: m.attachments || []
+                    };
+                    addPurchaseOrder(osmOrder);
+                    syncedOSM++;
+                }
+
+                // 2. Cria a Transação Financeira se não existir
+                const txId = toDeterministicUUID(`maint-${mDeterministicId}`);
+                const hasTx = transactions.some(t => t.id === txId || t.id === `maint-${m.id}` || (t.type === 'Despesa' && Math.abs(t.amount - (m.cost || 0)) < 0.01 && t.date === m.date));
+                if (!hasTx && (m.cost || 0) > 0) {
+                    const debitAccount = financialAccounts.find(a => a.id === m.debitAccountId) || defaultAccount;
+                    const expense: Transaction = {
+                        id: txId,
+                        date: m.date || new Date().toISOString().split('T')[0],
+                        dueDate: m.date || new Date().toISOString().split('T')[0],
+                        description: `Manutenção: ${vehicle.plate} - ${m.description || m.type}`,
+                        category: 'Manutenção',
+                        account: debitAccount?.name || 'Caixa Geral',
+                        accountId: debitAccount?.id ? (isValidUUID(debitAccount.id) ? debitAccount.id : toDeterministicUUID(debitAccount.id)) : '',
+                        amount: m.cost || 0,
+                        status: m.debitAccountId ? 'Conciliado' : 'Pendente',
+                        type: 'Despesa',
+                        originModule: 'Frota',
+                        originId: vehicle.id ? (isValidUUID(vehicle.id) ? vehicle.id : toDeterministicUUID(vehicle.id)) : undefined,
+                        ledgerCode: m.ledgerCode || '2.02.02',
+                        ledgerName: m.ledgerName || 'Manutenção de Frota'
+                    };
+                    addTransaction(expense);
+                    syncedTx++;
+                }
+            });
+        });
+
+        if (syncedOSM === 0 && syncedTx === 0) {
+            if (!isAutoSilent) {
+                addToast("Todas as ordens de manutenção já estão 100% sincronizadas com OSM e Financeiro!", 'info');
+            }
+        } else {
+            addToast(`Sincronização concluída! ${syncedOSM} OSM(s) gerada(s) em Compras e ${syncedTx} lançamento(s) financeiro(s) conciliados sem perda de dados.`, 'success');
+        }
+    };
+
     const handleSaveMaintenance = (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedVehicleId) return;
 
+        const vehicle = fleet.find(v => v.id === selectedVehicleId);
+        if (!vehicle) return;
+
+        const generatedId = `M-${Date.now()}`;
+        const debitAccId = newMaint.debitAccountId || (financialAccounts.length > 0 ? financialAccounts[0].id : '');
+        const debitAccount = financialAccounts.find(a => a.id === debitAccId) || financialAccounts[0];
+
         const record: MaintenanceRecord = {
-            id: `M-${Date.now()}`,
+            id: generatedId,
             vehicleId: selectedVehicleId,
-            date: newMaint.date || '',
+            date: newMaint.date || new Date().toISOString().split('T')[0],
             type: newMaint.type || 'Preventiva',
             description: newMaint.description || '',
             cost: Number(newMaint.cost) || 0,
@@ -545,21 +806,81 @@ const Fleet = () => {
             attachments: newMaint.attachments,
             productId: newMaint.productId,
             productQuantity: newMaint.productQuantity,
-            debitAccountId: newMaint.debitAccountId,
-            ledgerCode: newMaint.ledgerCode,
-            ledgerName: newMaint.ledgerName
+            debitAccountId: debitAccId,
+            ledgerCode: newMaint.ledgerCode || '2.02.02',
+            ledgerName: newMaint.ledgerName || 'Manutenção de Frota'
         };
 
+        // 1. Salva no histórico do veículo e movimenta estoque se houver peças
         addMaintenanceRecord(selectedVehicleId, record);
+
+        // 2. Cria a OSM correspondente em Compras (reconhecida por M- e ledgerCode 2.02.02)
+        const osmOrder: PurchaseOrder = {
+            id: record.id,
+            supplierId: record.mechanic ? 'SUP-OFICINA' : 'OFICINA-INTERNA',
+            supplierName: record.mechanic || `Oficina Mecânica / Manutenção (${vehicle.plate})`,
+            date: record.date,
+            items: [{
+                id: `SRV-${record.id}`,
+                name: `OSM: ${record.type} - ${record.description} (${vehicle.plate})`,
+                quantity: 1,
+                unit: 'SV',
+                price: record.cost
+            }],
+            subtotal: record.cost,
+            total: record.cost,
+            status: maintPaymentStatus === 'A Pagar' ? 'Pendente' : 'Recebido',
+            paymentTerms: maintPaymentStatus === 'A Pagar' ? 'A Prazo / Boleto' : 'À Vista / Caixa',
+            targetAccountId: debitAccId,
+            accountId: debitAccId,
+            ledgerCode: record.ledgerCode || '2.02.02',
+            ledgerName: record.ledgerName || 'Manutenção de Frota',
+            attachments: record.attachments || []
+        };
+        addPurchaseOrder(osmOrder);
+
+        // 3. Integração Financeira: Saída Imediata do Caixa ou Provisão no Contas a Pagar
+        const recordDeterministicId = isValidUUID(record.id) ? record.id : toDeterministicUUID(record.id);
+        const expenseTxId = toDeterministicUUID(`maint-${recordDeterministicId}`);
+
+        if (maintPaymentStatus === 'A Pagar') {
+            updateTransaction({
+                id: expenseTxId,
+                date: record.date,
+                dueDate: maintDueDate || record.date,
+                description: `Manutenção: ${vehicle.plate} - ${record.description}`,
+                category: 'Manutenção',
+                account: debitAccount?.name || 'Caixa Geral',
+                accountId: debitAccId ? (isValidUUID(debitAccId) ? debitAccId : toDeterministicUUID(debitAccId)) : '',
+                amount: record.cost,
+                status: 'Pendente',
+                type: 'Despesa',
+                originModule: 'Frota',
+                originId: selectedVehicleId ? (isValidUUID(selectedVehicleId) ? selectedVehicleId : toDeterministicUUID(selectedVehicleId)) : undefined,
+                ledgerCode: record.ledgerCode || '2.02.02',
+                ledgerName: record.ledgerName || 'Manutenção de Frota'
+            });
+        }
+
         setIsMaintModalOpen(false);
         setNewMaint({
             type: 'Preventiva',
             date: new Date().toISOString().split('T')[0],
             cost: 0,
             km: 0,
+            ledgerCode: '2.02.02',
+            ledgerName: 'Manutenção de Frota',
             attachments: []
         });
-        addToast("Manutenção registrada e custo lançado no financeiro!", 'success');
+        setMaintPaymentStatus('Pago');
+        setMaintDueDate(new Date().toISOString().split('T')[0]);
+
+        addToast(
+            maintPaymentStatus === 'A Pagar'
+                ? "Manutenção registrada, OSM vinculada em Compras e lançada em Contas a Pagar!"
+                : "Manutenção registrada, OSM vinculada em Compras e saída debitada no Caixa/Banco!",
+            'success'
+        );
     };
 
     const handleSaveVehicle = (e: React.FormEvent) => {
@@ -1354,16 +1675,56 @@ const Fleet = () => {
                             <Settings className="text-teal-600" />
                             <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">Histórico de Ordens de Manutenção</h3>
                         </div>
-                        <div className="flex gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
+                            {/* Botão de Desfazer Exclusão / Restaurar */}
+                            {(lastDeletedMaintenance || orphanedOSMs.length > 0) && (
+                                <button
+                                    onClick={() => {
+                                        if (lastDeletedMaintenance) {
+                                            handleUndoDeleteMaintenance();
+                                        } else {
+                                            setIsRestoreModalOpen(true);
+                                        }
+                                    }}
+                                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase flex items-center gap-1.5 transition-all shadow-md shadow-emerald-600/20 animate-pulse"
+                                    title="Desfazer exclusão e restaurar ordem de manutenção recente"
+                                >
+                                    <History size={14} /> Desfazer Exclusão / Restaurar
+                                    {orphanedOSMs.length > 0 && !lastDeletedMaintenance && (
+                                        <span className="ml-1 px-1.5 py-0.2 bg-white text-emerald-800 rounded-full text-[10px] font-black">
+                                            {orphanedOSMs.length} recuperável(is)
+                                        </span>
+                                    )}
+                                </button>
+                            )}
+
+                            <button
+                                onClick={() => handleSyncExistingMaintenances(false)}
+                                className={`px-3 py-2 rounded-xl text-xs font-black uppercase flex items-center gap-1.5 transition-all shadow-sm border ${
+                                    pendingMaintSyncCount > 0
+                                        ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 animate-pulse'
+                                        : 'bg-white dark:bg-slate-700 text-teal-600 dark:text-teal-400 border-slate-200 dark:border-slate-600 hover:border-teal-500'
+                                }`}
+                                title="Garante a criação de OSM em Compras e conciliação no Contas a Pagar / Caixa de todas as ordens existentes sem perda de dados"
+                            >
+                                <RefreshCw size={14} className={pendingMaintSyncCount > 0 ? "animate-spin" : ""} />
+                                Sincronizar OSMs & Financeiro
+                                {pendingMaintSyncCount > 0 && (
+                                    <span className="ml-1 px-1.5 py-0.2 bg-white text-amber-700 rounded-full text-[10px] font-black">
+                                        {pendingMaintSyncCount} pendente(s)
+                                    </span>
+                                )}
+                            </button>
                             <button
                                 onClick={() => exportToCSV(fleet.flatMap(v => v.maintenanceHistory || []), 'Historico_Manutencao')}
                                 className="p-2 bg-white dark:bg-slate-700 text-slate-400 hover:text-emerald-500 rounded-xl shadow-sm border dark:border-slate-600 transition-colors"
+                                title="Exportar CSV"
                             >
                                 <Download size={16} />
                             </button>
                             <button
                                 onClick={() => setIsMaintModalOpen(true)}
-                                className="px-4 py-2 bg-teal-600 text-white font-black rounded-xl text-xs uppercase shadow-lg shadow-teal-600/20 flex items-center gap-1.5"
+                                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-black rounded-xl text-xs uppercase shadow-lg shadow-teal-600/20 flex items-center gap-1.5 transition-colors"
                             >
                                 <Plus size={14} /> Nova Ordem de Manutenção
                             </button>
@@ -1384,6 +1745,13 @@ const Fleet = () => {
                             <tbody className="divide-y dark:divide-gray-700">
                                 {fleet.flatMap(v => v.maintenanceHistory || []).sort((a, b) => b.date.localeCompare(a.date)).map(m => {
                                     const veh = fleet.find(v => v.id === m.vehicleId);
+                                    const mDetId = isValidUUID(m.id) ? m.id : toDeterministicUUID(m.id);
+                                    const osmLinked = purchaseOrders.find(p => p.id === m.id || p.id === `M-${m.id}` || p.id === mDetId);
+                                    const mTxId = toDeterministicUUID(`maint-${mDetId}`);
+                                    const txLinked = transactions.find(t => t.id === mTxId || t.id === `maint-${m.id}` || (t.type === 'Despesa' && Math.abs(t.amount - (m.cost || 0)) < 0.01 && t.date === m.date));
+                                    const isPaidInCash = txLinked?.status === 'Conciliado';
+                                    const isPayable = txLinked?.status === 'Pendente';
+
                                     return (
                                         <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-teal-900/10 transition-all group">
                                             <td className="px-6 py-5 text-center font-bold text-slate-500">{m.date}</td>
@@ -1396,9 +1764,31 @@ const Fleet = () => {
                                                     {m.description}
                                                     {m.attachments && m.attachments.length > 0 && <Paperclip size={12} className="text-teal-500" />}
                                                 </p>
-                                                <div className="flex items-center gap-1.5 mt-1">
-                                                    <span className="text-[9px] font-black text-slate-400 bg-slate-100 dark:bg-slate-700 px-1 rounded italic">{m.ledgerCode}</span>
+                                                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                                    <span className="text-[9px] font-black text-slate-400 bg-slate-100 dark:bg-slate-700 px-1 rounded italic">{m.ledgerCode || '2.02.02'}</span>
                                                     <span className="text-[10px] font-black text-teal-600 uppercase tracking-widest">{m.ledgerName || m.type}</span>
+                                                    
+                                                    {/* Badge da OSM */}
+                                                    {osmLinked ? (
+                                                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-md" title="OSM integrada em Compras">
+                                                            <CheckCircle size={10} /> OSM #{osmLinked.id.replace('M-', '').slice(-6)}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800 rounded-md" title="Sem OSM vinculada - clique em Sincronizar">
+                                                            <AlertTriangle size={10} /> Sem OSM
+                                                        </span>
+                                                    )}
+
+                                                    {/* Badge do Financeiro */}
+                                                    {isPaidInCash ? (
+                                                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-md" title="Débito efetuado no Caixa / Banco">
+                                                            Caixa Débito
+                                                        </span>
+                                                    ) : isPayable ? (
+                                                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800 rounded-md" title="Título lançado no Contas a Pagar">
+                                                            Contas a Pagar
+                                                        </span>
+                                                    ) : null}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-5 text-right font-mono text-xs">{m.km.toLocaleString()}</td>
@@ -1407,8 +1797,9 @@ const Fleet = () => {
                                                 <div className="flex items-center justify-center gap-2">
                                                     <span className="px-3 py-1 bg-green-100 text-green-700 text-[10px] font-black rounded-full uppercase">Concluído</span>
                                                     <button
-                                                        onClick={() => deleteMaintenanceRecord(m.vehicleId, m.id)}
-                                                        className="text-slate-400 hover:text-rose-600 p-1"
+                                                        onClick={() => handleRequestDeleteMaintenance(m.vehicleId, m)}
+                                                        className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
+                                                        title="Excluir Ordem de Manutenção (Requer confirmação segura)"
                                                     >
                                                         <Trash2 size={16} />
                                                     </button>
@@ -2058,6 +2449,168 @@ const Fleet = () => {
                 </div>
             )}
 
+            {/* Modal de Confirmação Segura de Exclusão de Manutenção */}
+            {maintenanceToDelete && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg border border-slate-100 dark:border-slate-700 overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-6 border-b dark:border-slate-700 flex items-center gap-3 bg-rose-50/60 dark:bg-rose-950/20">
+                            <div className="w-10 h-10 rounded-2xl bg-rose-100 dark:bg-rose-900/50 flex items-center justify-center text-rose-600">
+                                <AlertTriangle size={20} />
+                            </div>
+                            <div>
+                                <h3 className="font-black text-base text-slate-900 dark:text-white uppercase">Confirmar Exclusão</h3>
+                                <p className="text-xs text-slate-500">Validação de permissão e integridade de dados</p>
+                            </div>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-100 dark:border-slate-700 space-y-2">
+                                <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-400 uppercase font-bold text-[10px]">Veículo:</span>
+                                    <span className="font-black text-slate-800 dark:text-slate-200">
+                                        {fleet.find(v => v.id === maintenanceToDelete.vehicleId)?.plate} - {fleet.find(v => v.id === maintenanceToDelete.vehicleId)?.name}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-400 uppercase font-bold text-[10px]">Serviço:</span>
+                                    <span className="font-bold text-slate-700 dark:text-slate-300">{maintenanceToDelete.record.description}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-400 uppercase font-bold text-[10px]">Valor:</span>
+                                    <span className="font-black text-rose-600 text-sm">{formatBRL(maintenanceToDelete.record.cost || 0)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-400 uppercase font-bold text-[10px]">Data:</span>
+                                    <span className="font-bold text-slate-600 dark:text-slate-400">{maintenanceToDelete.record.date}</span>
+                                </div>
+                            </div>
+
+                            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+                                <p className="font-bold flex items-center gap-1.5">
+                                    <Info size={13} /> Impactos operacionais desta exclusão:
+                                </p>
+                                <ul className="list-disc pl-4 space-y-0.5 text-[10px]">
+                                    <li>Estorna peças retiradas do estoque de volta ao Almoxarifado (se houver).</li>
+                                    <li>Cancela a OSM correspondente no módulo de Compras.</li>
+                                    <li>Estorna ou cancela a despesa correspondente no Caixa / Contas a Pagar.</li>
+                                    <li>Você poderá usar o botão <strong>"Desfazer Exclusão"</strong> caso necessite recuperá-la.</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div className="p-6 bg-slate-50 dark:bg-slate-900/60 border-t dark:border-slate-700 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setMaintenanceToDelete(null)}
+                                className="px-5 py-2.5 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 rounded-xl text-xs font-bold uppercase hover:bg-slate-100 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmDeleteMaintenance}
+                                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black uppercase shadow-lg shadow-rose-600/20 flex items-center gap-1.5 transition-colors"
+                            >
+                                <Trash2 size={14} /> Sim, Confirmar Exclusão
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Restauração de OSMs Órfãs / Recuperação */}
+            {isRestoreModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-2xl border border-slate-100 dark:border-slate-700 overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-teal-50/60 dark:bg-teal-950/20">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center text-teal-600">
+                                    <History size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-base text-slate-900 dark:text-white uppercase">Recuperar Manutenções Excluídas / OSMs Órfãs</h3>
+                                    <p className="text-xs text-slate-500">Ordens localizadas no sistema prontas para reincorporação</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsRestoreModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
+                            {lastDeletedMaintenance && (
+                                <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center justify-between">
+                                    <div>
+                                        <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 text-[9px] font-black uppercase rounded">Última Excluída Nesta Sessão</span>
+                                        <p className="font-black text-slate-900 dark:text-white text-xs mt-1">
+                                            {lastDeletedMaintenance.record.description} ({formatBRL(lastDeletedMaintenance.record.cost || 0)})
+                                        </p>
+                                        <p className="text-[10px] text-slate-500">Data: {lastDeletedMaintenance.record.date}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => handleUndoDeleteMaintenance()}
+                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase shadow-sm"
+                                    >
+                                        Restaurar Agora
+                                    </button>
+                                </div>
+                            )}
+
+                            {orphanedOSMs.length > 0 ? (
+                                <div className="space-y-3">
+                                    <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">OSMs de Compras sem Vínculo na Frota ({orphanedOSMs.length}):</h4>
+                                    {orphanedOSMs.map(osm => (
+                                        <div key={osm.id} className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-700 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-black text-teal-600">OSM #{osm.id.replace('M-', '').slice(-6)}</span>
+                                                    <span className="text-[10px] text-slate-400">{osm.date}</span>
+                                                </div>
+                                                <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-0.5">{osm.items?.[0]?.name || osm.supplierName}</p>
+                                                <p className="text-[10px] font-black text-slate-500 mt-0.5">Valor: {formatBRL(osm.total || 0)}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <select
+                                                    id={`restore-veh-${osm.id}`}
+                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-xs font-bold rounded-xl py-2 px-3"
+                                                    defaultValue={fleet[0]?.id || ''}
+                                                >
+                                                    {fleet.map(v => (
+                                                        <option key={v.id} value={v.id}>{v.plate} - {v.name}</option>
+                                                    ))}
+                                                </select>
+                                                <button
+                                                    onClick={() => {
+                                                        const sel = document.getElementById(`restore-veh-${osm.id}`) as HTMLSelectElement;
+                                                        if (sel) handleRestoreOrphanedOSM(osm, sel.value);
+                                                    }}
+                                                    className="px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold uppercase shrink-0"
+                                                >
+                                                    Reincorporar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : !lastDeletedMaintenance && (
+                                <div className="text-center py-8 text-slate-400">
+                                    <p className="text-xs font-bold uppercase">Nenhuma manutenção órfã ou excluída pendente de restauração.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border-t dark:border-slate-700 flex justify-end">
+                            <button
+                                onClick={() => setIsRestoreModalOpen(false)}
+                                className="px-5 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold uppercase"
+                            >
+                                Fechar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Maintenance Modal */}
             {
                 isMaintModalOpen && (
@@ -2101,18 +2654,79 @@ const Fleet = () => {
                                             <textarea className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 px-4 font-bold text-sm" placeholder="Ex: Troca de óleo, filtros, pastilhas..." value={newMaint.description} onChange={e => setNewMaint({ ...newMaint, description: e.target.value })} required rows={4}></textarea>
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Conta de Débito</label>
-                                            <select
-                                                className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 font-bold text-sm"
-                                                value={newMaint.debitAccountId || ''}
-                                                onChange={e => setNewMaint({ ...newMaint, debitAccountId: e.target.value })}
-                                                required
-                                            >
-                                                <option value="">Selecione a conta...</option>
-                                                {financialAccounts.map(acc => (
-                                                    <option key={acc.id} value={acc.id}>{acc.name} ({formatBRL(acc.balance)})</option>
-                                                ))}
-                                            </select>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Oficina Mecânica / Prestador (Fornecedor OSM)</label>
+                                            <input
+                                                type="text"
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl py-4 px-4 font-bold text-sm"
+                                                placeholder="Ex: Oficina Central, Concessionária Scania, Auto Elétrica..."
+                                                value={newMaint.mechanic || ''}
+                                                onChange={e => setNewMaint({ ...newMaint, mechanic: e.target.value })}
+                                            />
+                                        </div>
+
+                                        {/* Condição de Pagamento e Saída de Caixa / Contas a Pagar */}
+                                        <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-100 dark:border-slate-700 space-y-3">
+                                            <label className="block text-[10px] font-black text-teal-600 uppercase">Liquidação & Integração Financeira</label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setMaintPaymentStatus('Pago')}
+                                                    className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                                                        maintPaymentStatus === 'Pago'
+                                                            ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20'
+                                                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                                                    }`}
+                                                >
+                                                    <CheckCircle size={13} /> Pago no Caixa/Banco
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setMaintPaymentStatus('A Pagar')}
+                                                    className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                                                        maintPaymentStatus === 'A Pagar'
+                                                            ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+                                                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                                                    }`}
+                                                >
+                                                    <Calendar size={13} /> A Pagar (Boleto/Prazo)
+                                                </button>
+                                            </div>
+
+                                            {maintPaymentStatus === 'A Pagar' && (
+                                                <div className="pt-2 animate-in fade-in duration-200">
+                                                    <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Data de Vencimento (Contas a Pagar)</label>
+                                                    <input
+                                                        type="date"
+                                                        className="w-full bg-white dark:bg-slate-800 border dark:border-slate-600 rounded-xl py-2.5 px-3 font-bold text-xs"
+                                                        value={maintDueDate}
+                                                        onChange={e => setMaintDueDate(e.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">
+                                                    {maintPaymentStatus === 'Pago' ? 'Conta Bancária / Caixa a Debitar' : 'Conta de Previsão Financeira'}
+                                                </label>
+                                                <select
+                                                    className="w-full bg-white dark:bg-slate-800 border dark:border-slate-600 rounded-xl py-2.5 px-3 font-bold text-xs"
+                                                    value={newMaint.debitAccountId || ''}
+                                                    onChange={e => setNewMaint({ ...newMaint, debitAccountId: e.target.value })}
+                                                    required
+                                                >
+                                                    <option value="">Selecione a conta...</option>
+                                                    {financialAccounts.map(acc => (
+                                                        <option key={acc.id} value={acc.id}>{acc.name} ({formatBRL(acc.balance)})</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            <p className="text-[9px] text-slate-400 italic">
+                                                {maintPaymentStatus === 'Pago'
+                                                    ? '✓ Abate imediatamente o saldo da conta e gera a OSM liquidada em Compras.'
+                                                    : '✓ Gera título pendente em Contas a Pagar e abre a OSM aguardando quitação em Compras.'}
+                                            </p>
                                         </div>
                                     </div>
 
