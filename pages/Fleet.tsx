@@ -378,7 +378,7 @@ const Fleet = () => {
 
     // Forms
     const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
-    const [maintPaymentStatus, setMaintPaymentStatus] = useState<'Pago' | 'A Pagar'>('Pago');
+    const [maintPaymentStatus, setMaintPaymentStatus] = useState<'Pago' | 'A Pagar'>('A Pagar');
     const [maintDueDate, setMaintDueDate] = useState<string>(new Date().toISOString().split('T')[0]);
     // Exclusão Segura e Desfazer (Undo / Restauração)
     const [maintenanceToDelete, setMaintenanceToDelete] = useState<{ vehicleId: string; record: MaintenanceRecord } | null>(null);
@@ -542,17 +542,24 @@ const Fleet = () => {
 
     const formatBRL = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-    // Sincronização Retroativa e Validação de Pendências OSM / Financeiro
+    // Sincronização Retroativa e Validação de Pendências OSM / Contas a Pagar
     const pendingMaintSyncCount = useMemo(() => {
         let count = 0;
         fleet.forEach(vehicle => {
             (vehicle.maintenanceHistory || []).forEach(m => {
                 const targetId = m.id;
                 const mDeterministicId = isValidUUID(targetId) ? targetId : toDeterministicUUID(targetId);
-                const hasOSM = purchaseOrders.some(p => p.id === m.id || p.id === `M-${m.id}` || p.id === mDeterministicId);
+                // Verifica OSM com código contábil 2.02.02
+                const hasValidOSM = purchaseOrders.some(p => 
+                    (p.id === m.id || p.id === `M-${m.id}` || p.id === mDeterministicId) &&
+                    (p.ledgerCode?.startsWith('2.02.02') || p.id.startsWith('M-'))
+                );
+                // Verifica transação no Contas a Pagar (Pendente)
                 const txId = toDeterministicUUID(`maint-${mDeterministicId}`);
-                const hasTx = transactions.some(t => t.id === txId || t.id === `maint-${m.id}` || (t.type === 'Despesa' && Math.abs(t.amount - (m.cost || 0)) < 0.01 && t.date === m.date));
-                if (!hasOSM || !hasTx) {
+                const tx = transactions.find(t => t.id === txId || t.id === `maint-${m.id}` || (t.type === 'Despesa' && Math.abs(t.amount - (m.cost || 0)) < 0.01 && (t.description?.includes(vehicle.plate) || false)));
+                const isInPayables = tx && tx.status === 'Pendente';
+                
+                if (!hasValidOSM || !isInPayables) {
                     count++;
                 }
             });
@@ -711,6 +718,7 @@ const Fleet = () => {
     const handleSyncExistingMaintenances = (isAutoSilent: boolean = false) => {
         let syncedOSM = 0;
         let syncedTx = 0;
+        let convertedToPayable = 0;
         const defaultAccount = financialAccounts[0];
 
         fleet.forEach(vehicle => {
@@ -718,13 +726,19 @@ const Fleet = () => {
                 const targetId = m.id;
                 const mDeterministicId = isValidUUID(targetId) ? targetId : toDeterministicUUID(targetId);
 
-                // 1. Cria a OSM se não existir no módulo de Compras
-                const hasOSM = purchaseOrders.some(p => p.id === m.id || p.id === `M-${m.id}` || p.id === mDeterministicId);
-                if (!hasOSM) {
+                // 1. GERAÇÃO / CONFERÊNCIA DA OSM EM COMPRAS (CUSTOS E DESPESAS)
+                const existingOSM = purchaseOrders.find(p => 
+                    p.id === m.id || 
+                    p.id === `M-${m.id}` || 
+                    p.id === mDeterministicId ||
+                    (p.total === m.cost && p.date === m.date && (p.supplierName?.includes(vehicle.plate) || p.items?.[0]?.name?.includes(vehicle.plate)))
+                );
+
+                if (!existingOSM) {
                     const osmOrder: PurchaseOrder = {
                         id: m.id.startsWith('M-') ? m.id : `M-${m.id}`,
                         supplierId: m.mechanic ? 'SUP-OFICINA' : 'OFICINA-INTERNA',
-                        supplierName: m.mechanic || `Oficina Manutenção (${vehicle.plate})`,
+                        supplierName: m.mechanic || `Oficina Mecânica - Frota (${vehicle.plate})`,
                         date: m.date || new Date().toISOString().split('T')[0],
                         items: [{
                             id: `SRV-${m.id}`,
@@ -735,51 +749,85 @@ const Fleet = () => {
                         }],
                         subtotal: m.cost || 0,
                         total: m.cost || 0,
-                        status: m.debitAccountId ? 'Recebido' : 'Pendente',
-                        paymentTerms: m.debitAccountId ? 'À Vista / Caixa' : 'A Prazo / Boleto',
+                        status: 'Pendente', // <--- Exibida em Compras > Histórico de Pedidos / OSM
+                        paymentTerms: 'A Prazo / Boleto',
                         targetAccountId: m.debitAccountId || defaultAccount?.id || '',
                         accountId: m.debitAccountId || defaultAccount?.id || '',
-                        ledgerCode: m.ledgerCode || '2.02.02',
-                        ledgerName: m.ledgerName || 'Manutenção de Frota',
+                        ledgerCode: '2.02.02', // <--- Código 2.02.02 garante 100% de reconhecimento no filtro OSM de Compras!
+                        ledgerName: 'Manutenção de Frota',
                         attachments: m.attachments || []
                     };
                     addPurchaseOrder(osmOrder);
                     syncedOSM++;
+                } else if (!existingOSM.ledgerCode?.startsWith('2.02.02')) {
+                    // Garante que o ledgerCode seja 2.02.02 para perfeita exibição em Compras
+                    updatePurchaseOrder({
+                        ...existingOSM,
+                        ledgerCode: '2.02.02',
+                        ledgerName: 'Manutenção de Frota',
+                        supplierName: existingOSM.supplierName || m.mechanic || `Oficina Mecânica (${vehicle.plate})`
+                    });
+                    syncedOSM++;
                 }
 
-                // 2. Cria a Transação Financeira se não existir
+                // 2. GERAÇÃO / CONVERSÃO PARA CONTAS A PAGAR NO FINANCEIRO
                 const txId = toDeterministicUUID(`maint-${mDeterministicId}`);
-                const hasTx = transactions.some(t => t.id === txId || t.id === `maint-${m.id}` || (t.type === 'Despesa' && Math.abs(t.amount - (m.cost || 0)) < 0.01 && t.date === m.date));
-                if (!hasTx && (m.cost || 0) > 0) {
+                const existingTx = transactions.find(t => 
+                    t.id === txId || 
+                    t.id === `maint-${m.id}` || 
+                    (t.type === 'Despesa' && Math.abs(t.amount - (m.cost || 0)) < 0.01 && (t.description?.includes(vehicle.plate) || false))
+                );
+
+                if ((m.cost || 0) > 0) {
                     const debitAccount = financialAccounts.find(a => a.id === m.debitAccountId) || defaultAccount;
-                    const expense: Transaction = {
-                        id: txId,
-                        date: m.date || new Date().toISOString().split('T')[0],
-                        dueDate: m.date || new Date().toISOString().split('T')[0],
-                        description: `Manutenção: ${vehicle.plate} - ${m.description || m.type}`,
-                        category: 'Manutenção',
-                        account: debitAccount?.name || 'Caixa Geral',
-                        accountId: debitAccount?.id ? (isValidUUID(debitAccount.id) ? debitAccount.id : toDeterministicUUID(debitAccount.id)) : '',
-                        amount: m.cost || 0,
-                        status: m.debitAccountId ? 'Conciliado' : 'Pendente',
-                        type: 'Despesa',
-                        originModule: 'Frota',
-                        originId: vehicle.id ? (isValidUUID(vehicle.id) ? vehicle.id : toDeterministicUUID(vehicle.id)) : undefined,
-                        ledgerCode: m.ledgerCode || '2.02.02',
-                        ledgerName: m.ledgerName || 'Manutenção de Frota'
-                    };
-                    addTransaction(expense);
-                    syncedTx++;
+
+                    if (existingTx) {
+                        // Se a transação já existe mas está 'Conciliado', converte para 'Pendente' para APARECER EM CONTAS A PAGAR!
+                        if (existingTx.status === 'Conciliado') {
+                            updateTransaction({
+                                ...existingTx,
+                                status: 'Pendente', // <--- Entra no Contas a Pagar do Financeiro!
+                                dueDate: m.date || new Date().toISOString().split('T')[0],
+                                partnerName: m.mechanic || `Oficina Mecânica (${vehicle.plate})`,
+                                description: `Manutenção: ${vehicle.plate} - ${m.description || m.type}`,
+                                category: 'Manutenção',
+                                ledgerCode: '2.02.02',
+                                ledgerName: 'Manutenção de Frota'
+                            });
+                            convertedToPayable++;
+                        }
+                    } else {
+                        // Cria a nova transação com status Pendente
+                        const expense: Transaction = {
+                            id: txId,
+                            date: m.date || new Date().toISOString().split('T')[0],
+                            dueDate: m.date || new Date().toISOString().split('T')[0],
+                            description: `Manutenção: ${vehicle.plate} - ${m.description || m.type}`,
+                            partnerName: m.mechanic || `Oficina Mecânica (${vehicle.plate})`,
+                            category: 'Manutenção',
+                            account: debitAccount?.name || 'Caixa Geral',
+                            accountId: debitAccount?.id ? (isValidUUID(debitAccount.id) ? debitAccount.id : toDeterministicUUID(debitAccount.id)) : '',
+                            amount: m.cost || 0,
+                            status: 'Pendente', // <--- Entra direto no Contas a Pagar!
+                            type: 'Despesa',
+                            originModule: 'Frota',
+                            originId: vehicle.id ? (isValidUUID(vehicle.id) ? vehicle.id : toDeterministicUUID(vehicle.id)) : undefined,
+                            ledgerCode: '2.02.02',
+                            ledgerName: 'Manutenção de Frota'
+                        };
+                        addTransaction(expense);
+                        syncedTx++;
+                    }
                 }
             });
         });
 
-        if (syncedOSM === 0 && syncedTx === 0) {
+        if (syncedOSM === 0 && syncedTx === 0 && convertedToPayable === 0) {
             if (!isAutoSilent) {
-                addToast("Todas as ordens de manutenção já estão 100% sincronizadas com OSM e Financeiro!", 'info');
+                addToast("Todas as manutenções já estão sincronizadas com Compras (OSM) e Contas a Pagar!", 'info');
             }
         } else {
-            addToast(`Sincronização concluída! ${syncedOSM} OSM(s) gerada(s) em Compras e ${syncedTx} lançamento(s) financeiro(s) conciliados sem perda de dados.`, 'success');
+            addToast(`Sincronização concluída! ${syncedOSM} OSM(s) atualizada(s) em Compras e ${syncedTx + convertedToPayable} título(s) inserido(s) no Contas a Pagar com sucesso.`, 'success');
         }
     };
 
@@ -814,11 +862,11 @@ const Fleet = () => {
         // 1. Salva no histórico do veículo e movimenta estoque se houver peças
         addMaintenanceRecord(selectedVehicleId, record);
 
-        // 2. Cria a OSM correspondente em Compras (reconhecida por M- e ledgerCode 2.02.02)
+        // 2. Cria a OSM correspondente em Compras (com ledgerCode 2.02.02 garantido para aparecer no Histórico de Pedidos de Custos e Despesas)
         const osmOrder: PurchaseOrder = {
-            id: record.id,
+            id: record.id.startsWith('M-') ? record.id : `M-${record.id}`,
             supplierId: record.mechanic ? 'SUP-OFICINA' : 'OFICINA-INTERNA',
-            supplierName: record.mechanic || `Oficina Mecânica / Manutenção (${vehicle.plate})`,
+            supplierName: record.mechanic || `Oficina Mecânica - Frota (${vehicle.plate})`,
             date: record.date,
             items: [{
                 id: `SRV-${record.id}`,
@@ -829,38 +877,40 @@ const Fleet = () => {
             }],
             subtotal: record.cost,
             total: record.cost,
-            status: maintPaymentStatus === 'A Pagar' ? 'Pendente' : 'Recebido',
-            paymentTerms: maintPaymentStatus === 'A Pagar' ? 'A Prazo / Boleto' : 'À Vista / Caixa',
+            status: maintPaymentStatus === 'Pago' ? 'Recebido' : 'Pendente',
+            paymentTerms: maintPaymentStatus === 'Pago' ? 'À Vista / Caixa' : 'A Prazo / Boleto',
             targetAccountId: debitAccId,
             accountId: debitAccId,
-            ledgerCode: record.ledgerCode || '2.02.02',
-            ledgerName: record.ledgerName || 'Manutenção de Frota',
+            ledgerCode: '2.02.02',
+            ledgerName: 'Manutenção de Frota',
             attachments: record.attachments || []
         };
         addPurchaseOrder(osmOrder);
 
-        // 3. Integração Financeira: Saída Imediata do Caixa ou Provisão no Contas a Pagar
+        // 3. Integração com Contas a Pagar no Financeiro
         const recordDeterministicId = isValidUUID(record.id) ? record.id : toDeterministicUUID(record.id);
         const expenseTxId = toDeterministicUUID(`maint-${recordDeterministicId}`);
 
-        if (maintPaymentStatus === 'A Pagar') {
+        // Executa atualização garantida da transação após addMaintenanceRecord
+        setTimeout(() => {
             updateTransaction({
                 id: expenseTxId,
                 date: record.date,
                 dueDate: maintDueDate || record.date,
                 description: `Manutenção: ${vehicle.plate} - ${record.description}`,
+                partnerName: record.mechanic || `Oficina Mecânica (${vehicle.plate})`,
                 category: 'Manutenção',
                 account: debitAccount?.name || 'Caixa Geral',
                 accountId: debitAccId ? (isValidUUID(debitAccId) ? debitAccId : toDeterministicUUID(debitAccId)) : '',
                 amount: record.cost,
-                status: 'Pendente',
+                status: maintPaymentStatus === 'Pago' ? 'Conciliado' : 'Pendente', // <--- Se A Pagar, entra direto em Contas a Pagar!
                 type: 'Despesa',
                 originModule: 'Frota',
                 originId: selectedVehicleId ? (isValidUUID(selectedVehicleId) ? selectedVehicleId : toDeterministicUUID(selectedVehicleId)) : undefined,
-                ledgerCode: record.ledgerCode || '2.02.02',
-                ledgerName: record.ledgerName || 'Manutenção de Frota'
+                ledgerCode: '2.02.02',
+                ledgerName: 'Manutenção de Frota'
             });
-        }
+        }, 50);
 
         setIsMaintModalOpen(false);
         setNewMaint({
@@ -1673,30 +1723,40 @@ const Fleet = () => {
                     <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
                         <div className="flex items-center gap-3">
                             <Settings className="text-teal-600" />
-                            <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">Histórico de Ordens de Manutenção</h3>
+                            <div>
+                                <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">Histórico de Ordens de Manutenção</h3>
+                                <p className="text-xs text-slate-500 font-medium">Sincronizado em tempo real com Compras (OSM) e Financeiro (Contas a Pagar)</p>
+                            </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-3">
-                            {/* Botão de Desfazer Exclusão / Restaurar */}
-                            {(lastDeletedMaintenance || orphanedOSMs.length > 0) && (
-                                <button
-                                    onClick={() => {
-                                        if (lastDeletedMaintenance) {
-                                            handleUndoDeleteMaintenance();
-                                        } else {
-                                            setIsRestoreModalOpen(true);
-                                        }
-                                    }}
-                                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase flex items-center gap-1.5 transition-all shadow-md shadow-emerald-600/20 animate-pulse"
-                                    title="Desfazer exclusão e restaurar ordem de manutenção recente"
-                                >
-                                    <History size={14} /> Desfazer Exclusão / Restaurar
-                                    {orphanedOSMs.length > 0 && !lastDeletedMaintenance && (
-                                        <span className="ml-1 px-1.5 py-0.2 bg-white text-emerald-800 rounded-full text-[10px] font-black">
-                                            {orphanedOSMs.length} recuperável(is)
-                                        </span>
-                                    )}
-                                </button>
-                            )}
+                            {/* Botão de Desfazer Exclusão / Restaurar (Sempre acessível) */}
+                            <button
+                                onClick={() => {
+                                    if (lastDeletedMaintenance) {
+                                        handleUndoDeleteMaintenance();
+                                    } else {
+                                        setIsRestoreModalOpen(true);
+                                    }
+                                }}
+                                className={`px-3 py-2 rounded-xl text-xs font-black uppercase flex items-center gap-1.5 transition-all shadow-sm ${
+                                    lastDeletedMaintenance || orphanedOSMs.length > 0
+                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 animate-pulse'
+                                        : 'bg-white dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700'
+                                }`}
+                                title="Desfazer exclusão ou restaurar ordens de manutenção"
+                            >
+                                <History size={14} /> Desfazer / Restaurar
+                                {lastDeletedMaintenance && (
+                                    <span className="ml-1 px-1.5 py-0.2 bg-white text-emerald-800 rounded-full text-[10px] font-black">
+                                        1 recente
+                                    </span>
+                                )}
+                                {!lastDeletedMaintenance && orphanedOSMs.length > 0 && (
+                                    <span className="ml-1 px-1.5 py-0.2 bg-white text-emerald-800 rounded-full text-[10px] font-black">
+                                        {orphanedOSMs.length} órfã(s)
+                                    </span>
+                                )}
+                            </button>
 
                             <button
                                 onClick={() => handleSyncExistingMaintenances(false)}
@@ -2593,8 +2653,25 @@ const Fleet = () => {
                                     ))}
                                 </div>
                             ) : !lastDeletedMaintenance && (
-                                <div className="text-center py-8 text-slate-400">
-                                    <p className="text-xs font-bold uppercase">Nenhuma manutenção órfã ou excluída pendente de restauração.</p>
+                                <div className="p-6 bg-slate-50 dark:bg-slate-900/60 border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl text-center space-y-4">
+                                    <div className="w-12 h-12 mx-auto rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 flex items-center justify-center">
+                                        <Wrench size={22} />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-black text-sm text-slate-800 dark:text-slate-200 uppercase">Recuperação Rápida da Ordem Excluída</h4>
+                                        <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                                            A manutenção foi apagada antes da ativação do snapshot automático desta sessão. Clique no botão abaixo para reabri-la rapidamente com OSM e Contas a Pagar já configurados:
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setIsRestoreModalOpen(false);
+                                            setIsMaintModalOpen(true);
+                                        }}
+                                        className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-black rounded-xl text-xs uppercase shadow-md transition-all inline-flex items-center gap-2"
+                                    >
+                                        <Plus size={14} /> Recadastrar com Integração Automática
+                                    </button>
                                 </div>
                             )}
                         </div>
