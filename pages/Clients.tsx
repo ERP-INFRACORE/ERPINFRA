@@ -764,8 +764,8 @@ export interface FleetPreset {
   name: string;
   brand: string;
   model: string;
-  type: 'Carreta LS' | 'Truck' | 'Toco' | 'Máquina' | 'Utilitário';
-  fuelType: 'Diesel' | 'Flex';
+  type: 'Caminhão' | 'Carro' | 'Van' | 'Motocicleta' | 'Máquina' | 'Toco' | 'Truck' | 'Carreta LS' | 'Utilitário';
+  fuelType: 'Diesel' | 'Gasolina' | 'Etanol' | 'Flex' | 'Elétrico';
   year: number;
   colorName: string;
   color: string;
