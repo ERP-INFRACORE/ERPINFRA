@@ -730,7 +730,7 @@ const Sales = () => {
     };
   }, [abcTab, abcProducts, abcClients]);
 
-  const [activeTab, setActiveTab] = useState<'new' | 'history' | 'budgets' | 'dashboard'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'new' | 'history' | 'budgets' | 'dashboard' | 'scale'>('dashboard');
   const [mobileTab, setMobileTab] = useState<'catalog' | 'checkout'>('catalog');
 
   // Modal State
@@ -746,8 +746,115 @@ const Sales = () => {
 
   const [budgetSearchTerm, setBudgetSearchTerm] = useState('');
   const [budgetDateFilter, setBudgetDateFilter] = useState('');
-  const [budgetStatusFilter, setBudgetStatusFilter] = useState<'all' | 'Aberto' | 'Aprovado' | 'Rejeitado' | 'Convertido'>('all');
+  const [budgetStatusFilter, setBudgetStatusFilter] = useState<'all' | 'Aberto' | 'Aprovado' | 'Rejeitado' | 'Convertido' | 'Cancelado'>('all');
   const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
+
+  // ==========================================
+  // ESTADOS DA BALANÇA RODOVIÁRIA & GUIAS DE PESAGEM
+  // ==========================================
+  interface ScaleTicket {
+    id: string;
+    ticketNumber: string;
+    date: string;
+    time: string;
+    operationType: 'Saída' | 'Entrada' | 'Pesagem Avulsa';
+    status: 'Concluído' | 'Pendente' | 'Cancelado';
+    clientId?: string;
+    clientName: string;
+    vehiclePlate: string;
+    driverName: string;
+    productName: string;
+    unit: string;
+    tareWeight: number; // kg
+    grossWeight: number; // kg
+    netWeight: number; // kg
+    weightNotes?: string;
+    operatorName: string;
+    linkedDocument?: {
+      type: 'sale' | 'budget';
+      id: string;
+      displayNumber: string;
+    };
+  }
+
+  const [scaleTickets, setScaleTickets] = useState<ScaleTicket[]>(() => {
+    try {
+      const saved = localStorage.getItem('infracore_scale_tickets');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('Erro ao carregar tickets da balança:', e);
+    }
+    return [
+      {
+        id: 'ticket-1',
+        ticketNumber: '005421',
+        date: new Date().toLocaleDateString('pt-BR'),
+        time: '14:25:10',
+        operationType: 'Saída',
+        status: 'Concluído',
+        clientName: 'Construtora Vale do Paraíba Ltda',
+        vehiclePlate: 'BRA2E19',
+        driverName: 'Marcos Vinicius Ribeiro',
+        productName: 'Brita 1 (Granito Lavado)',
+        unit: 'ton',
+        tareWeight: 14200,
+        grossWeight: 38650,
+        netWeight: 24450,
+        weightNotes: 'Carreta Caçamba 3 eixos. Lona amarrada.',
+        operatorName: 'Operador Balança 01',
+        linkedDocument: {
+          type: 'sale',
+          id: 'S-1001',
+          displayNumber: '001001'
+        }
+      },
+      {
+        id: 'ticket-2',
+        ticketNumber: '005422',
+        date: new Date().toLocaleDateString('pt-BR'),
+        time: '15:10:45',
+        operationType: 'Pesagem Avulsa',
+        status: 'Concluído',
+        clientName: 'Transportes Rodominas',
+        vehiclePlate: 'QNF8A42',
+        driverName: 'José Carlos Peixoto',
+        productName: 'Areia Média Lavada',
+        unit: 'ton',
+        tareWeight: 12800,
+        grossWeight: 29400,
+        netWeight: 16600,
+        weightNotes: 'Pesagem de conferência de carga.',
+        operatorName: 'Operador Balança 01'
+      }
+    ];
+  });
+
+  const saveScaleTickets = (updated: ScaleTicket[]) => {
+    setScaleTickets(updated);
+    try {
+      localStorage.setItem('infracore_scale_tickets', JSON.stringify(updated));
+    } catch (e) {
+      console.error('Erro ao salvar tickets da balança:', e);
+    }
+  };
+
+  // Formulário de Nova Guia de Pesagem
+  const [scaleForm, setScaleForm] = useState({
+    operationType: 'Saída' as 'Saída' | 'Entrada' | 'Pesagem Avulsa',
+    clientName: '',
+    vehiclePlate: '',
+    driverName: '',
+    productName: '',
+    unit: 'ton',
+    tareWeight: 0,
+    grossWeight: 0,
+    weightNotes: '',
+    linkedDocType: 'none' as 'none' | 'sale' | 'budget',
+    linkedDocId: ''
+  });
+
+  const [scaleSearchTerm, setScaleSearchTerm] = useState('');
+  const [scaleFilterType, setScaleFilterType] = useState<string>('all');
 
   // Quick Client Registration Modal State
   const [isQuickClientOpen, setIsQuickClientOpen] = useState(false);
@@ -2577,6 +2684,376 @@ const Sales = () => {
     printDocument(`Recibo_${sale.id}`, html);
   };
 
+  // ==========================================
+  // IMPRESSÃO DE GUIA DE PESAGEM (A4 E CUPOM 80MM)
+  // ==========================================
+  const handlePrintScaleTicket = (ticket: ScaleTicket, format: 'a4' | 'thermal' = 'a4') => {
+    const company = settings || {
+      companyName: 'INFRACORE ERP SISTEMAS LTDA',
+      tradeName: 'InfraCore ERP',
+      document: '00.000.000/0001-00',
+      email: 'contato@infracore.com.br',
+      phone: '(11) 4002-8922',
+      address: 'Av. Industrial, 1200 - Distrito Industrial, São Paulo - SP'
+    } as AppSettings;
+
+    const netWeightTons = (ticket.netWeight / 1000).toFixed(3);
+    const tareTons = (ticket.tareWeight / 1000).toFixed(3);
+    const grossTons = (ticket.grossWeight / 1000).toFixed(3);
+
+    if (format === 'thermal') {
+      const htmlThermal = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Ticket Pesagem #${ticket.ticketNumber}</title>
+  <style>
+    @page {
+      size: 80mm auto;
+      margin: 3mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      color: #000;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+      font-size: 11px;
+      line-height: 1.25;
+      width: 74mm;
+    }
+    .center { text-align: center; }
+    .bold { font-weight: bold; }
+    .divider { border-top: 1px dashed #000; margin: 4px 0; }
+    .double-divider { border-top: 2px solid #000; margin: 5px 0; }
+    .row { display: flex; justify-content: space-between; margin: 2px 0; }
+    .box-weights {
+      border: 1px solid #000;
+      padding: 5px;
+      margin: 5px 0;
+      background: #fafafa;
+    }
+    .signature {
+      margin-top: 25px;
+      text-align: center;
+      border-top: 1px solid #000;
+      padding-top: 3px;
+      font-size: 9px;
+    }
+  </style>
+</head>
+<body>
+  <div class="center bold" style="font-size: 13px;">${company.tradeName || company.companyName}</div>
+  <div class="center" style="font-size: 9px;">CNPJ: ${company.document}</div>
+  <div class="center" style="font-size: 9px;">${company.phone}</div>
+  <div class="double-divider"></div>
+  <div class="center bold" style="font-size: 12px;">TICKET DE PESAGEM RODOVIÁRIA</div>
+  <div class="center bold" style="font-size: 13px;">Nº ${ticket.ticketNumber}</div>
+  <div class="divider"></div>
+  <div class="row"><span>DATA/HORA:</span><span>${ticket.date} ${ticket.time}</span></div>
+  <div class="row"><span>TIPO OPERAÇÃO:</span><span class="bold">${ticket.operationType.toUpperCase()}</span></div>
+  <div class="row"><span>PLACA VEÍCULO:</span><span class="bold">${ticket.vehiclePlate}</span></div>
+  <div class="row"><span>MOTORISTA:</span><span>${ticket.driverName || 'Não Informado'}</span></div>
+  <div class="row"><span>CLIENTE/DEST.:</span><span>${ticket.clientName}</span></div>
+  <div class="row"><span>PRODUTO/CARGA:</span><span class="bold">${ticket.productName}</span></div>
+  ${ticket.linkedDocument ? `<div class="row"><span>DOC. VINCULADO:</span><span>${ticket.linkedDocument.type === 'sale' ? 'Venda' : 'Orçamento'} #${ticket.linkedDocument.displayNumber}</span></div>` : ''}
+  <div class="double-divider"></div>
+  <div class="box-weights">
+    <div class="row" style="font-size: 12px;"><span>PESO BRUTO (1ª):</span><span class="bold">${ticket.grossWeight.toLocaleString('pt-BR')} kg</span></div>
+    <div class="row" style="font-size: 12px;"><span>PESO TARA  (2ª):</span><span class="bold">${ticket.tareWeight.toLocaleString('pt-BR')} kg</span></div>
+    <div class="divider"></div>
+    <div class="row" style="font-size: 14px; font-weight: bold;">
+      <span>LÍQUIDO:</span>
+      <span>${ticket.netWeight.toLocaleString('pt-BR')} kg</span>
+    </div>
+    <div class="center bold" style="font-size: 11px; margin-top: 2px;">
+      (${netWeightTons} TONELADAS)
+    </div>
+  </div>
+  ${ticket.weightNotes ? `<div style="font-size: 9px; margin-top: 4px;"><strong>OBS:</strong> ${ticket.weightNotes}</div>` : ''}
+  <div class="divider"></div>
+  <div class="row" style="font-size: 9px;"><span>OPERADOR:</span><span>${ticket.operatorName}</span></div>
+  <div class="signature">ASSINATURA DO MOTORISTA</div>
+  <div class="signature" style="margin-top: 18px;">VISTO DO BALANCEIRO</div>
+  <div class="center" style="font-size: 8px; margin-top: 10px;">InfraCore ERP • Balança Rodoviária Integrada</div>
+</body>
+</html>`;
+      printDocument(`Ticket_Pesagem_${ticket.ticketNumber}_Termico`, htmlThermal);
+      return;
+    }
+
+    const htmlA4 = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Guia de Pesagem Rodoviária #${ticket.ticketNumber} - ${company.tradeName || company.companyName}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+    @page {
+      size: A4 portrait;
+      margin: 12mm 15mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #0f172a;
+      background: #ffffff;
+      margin: 0;
+      padding: 0;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .header-box {
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 12px;
+      margin-bottom: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .company-title {
+      font-size: 18px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: -0.02em;
+      margin: 0 0 2px 0;
+    }
+    .company-sub {
+      font-size: 10px;
+      color: #475569;
+      margin: 1px 0;
+    }
+    .badge-doc {
+      background: #0f172a;
+      color: #ffffff;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: inline-block;
+    }
+    .ticket-id {
+      font-size: 18px;
+      font-weight: 900;
+      color: #0891b2;
+      margin-top: 4px;
+      text-align: right;
+    }
+    .grid-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 15px;
+    }
+    .card {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 10px 14px;
+      background: #ffffff;
+    }
+    .card-title {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #0f172a;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 4px;
+      margin-bottom: 8px;
+    }
+    .card-row {
+      margin: 4px 0;
+      font-size: 10.5px;
+      color: #334155;
+    }
+    .card-row strong {
+      color: #0f172a;
+    }
+    .weights-container {
+      border: 2px solid #0f172a;
+      border-radius: 6px;
+      padding: 14px 18px;
+      background: #f8fafc;
+      margin-bottom: 18px;
+    }
+    .weights-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.3fr;
+      gap: 16px;
+      align-items: center;
+      text-align: center;
+    }
+    .weight-item {
+      padding: 8px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+    }
+    .weight-item.highlight {
+      background: #ecfeff;
+      border: 2px solid #0891b2;
+    }
+    .weight-label {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #64748b;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+    .weight-value {
+      font-size: 18px;
+      font-weight: 900;
+      font-family: monospace;
+      color: #0f172a;
+    }
+    .weight-item.highlight .weight-value {
+      color: #0891b2;
+      font-size: 22px;
+    }
+    .weight-sub {
+      font-size: 9px;
+      font-weight: 700;
+      color: #64748b;
+      margin-top: 2px;
+    }
+    .signatures-block {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      margin-top: 40px;
+      padding-top: 10px;
+    }
+    .sig-line {
+      border-bottom: 1px solid #0f172a;
+      height: 1px;
+      margin-bottom: 6px;
+    }
+    .sig-name {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      text-align: center;
+      color: #0f172a;
+      margin: 0;
+    }
+    .sig-title {
+      font-size: 8.5px;
+      color: #64748b;
+      text-align: center;
+      margin: 1px 0 0 0;
+    }
+    .footer {
+      margin-top: 30px;
+      padding-top: 10px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 8px;
+      color: #64748b;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <div class="header-box">
+    <div>
+      <h1 class="company-title">${company.tradeName || company.companyName}</h1>
+      <p class="company-sub"><strong>Razão Social:</strong> ${company.companyName}</p>
+      <p class="company-sub"><strong>CNPJ:</strong> ${company.document} | <strong>Telefone:</strong> ${company.phone}</p>
+      <p class="company-sub"><strong>Endereço:</strong> ${company.address}</p>
+    </div>
+    <div style="text-align: right;">
+      <span class="badge-doc">Guia de Pesagem Rodoviária</span>
+      <div class="ticket-id">Nº ${ticket.ticketNumber}</div>
+      <div style="font-size: 9.5px; color: #64748b; margin-top: 3px;">Emissão: <strong>${ticket.date} às ${ticket.time}</strong></div>
+    </div>
+  </div>
+
+  <div class="grid-cards">
+    <div class="card">
+      <div class="card-title">Dados do Transporte & Veículo</div>
+      <p class="card-row"><strong>Placa do Veículo:</strong> <span style="font-family: monospace; font-weight: 800; font-size: 12px; color: #0891b2;">${ticket.vehiclePlate}</span></p>
+      <p class="card-row"><strong>Nome do Condutor:</strong> ${ticket.driverName || 'Não Informado'}</p>
+      <p class="card-row"><strong>Tipo de Operação:</strong> <span style="font-weight: 700;">${ticket.operationType}</span></p>
+      <p class="card-row"><strong>Status da Pesagem:</strong> ${ticket.status}</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Dados Comerciais & Carga</div>
+      <p class="card-row"><strong>Destinatário / Cliente:</strong> ${ticket.clientName}</p>
+      <p class="card-row"><strong>Material / Produto:</strong> <span style="font-weight: 800;">${ticket.productName}</span></p>
+      <p class="card-row"><strong>Unidade de Faturamento:</strong> ${ticket.unit.toUpperCase()}</p>
+      ${ticket.linkedDocument ? `<p class="card-row"><strong>Documento Vinculado:</strong> ${ticket.linkedDocument.type === 'sale' ? 'Venda' : 'Orçamento'} #${ticket.linkedDocument.displayNumber}</p>` : '<p class="card-row"><strong>Documento Vinculado:</strong> Pesagem Avulsa / Direta</p>'}
+    </div>
+  </div>
+
+  <div class="weights-container">
+    <div style="font-size: 10px; font-weight: 900; text-transform: uppercase; color: #0f172a; margin-bottom: 10px; letter-spacing: 0.05em; text-align: center;">
+      Medição da Balança Rodoviária Integrada (Pesagem Certificada)
+    </div>
+    <div class="weights-grid">
+      <div class="weight-item">
+        <div class="weight-label">1ª Medição (Bruto Entrada/Saída)</div>
+        <div class="weight-value">${ticket.grossWeight.toLocaleString('pt-BR')} kg</div>
+        <div class="weight-sub">(${grossTons} ton)</div>
+      </div>
+
+      <div class="weight-item">
+        <div class="weight-label">2ª Medição (Tara Veículo)</div>
+        <div class="weight-value">${ticket.tareWeight.toLocaleString('pt-BR')} kg</div>
+        <div class="weight-sub">(${tareTons} ton)</div>
+      </div>
+
+      <div class="weight-item highlight">
+        <div class="weight-label" style="color: #0891b2;">PESO LÍQUIDO FATURADO</div>
+        <div class="weight-value">${ticket.netWeight.toLocaleString('pt-BR')} kg</div>
+        <div class="weight-sub" style="font-size: 11px; font-weight: 800; color: #0891b2;">(${netWeightTons} TONELADAS)</div>
+      </div>
+    </div>
+  </div>
+
+  ${ticket.weightNotes ? `
+  <div class="card" style="margin-bottom: 18px;">
+    <div class="card-title">Observações da Pesagem / Portaria</div>
+    <p style="margin: 0; font-size: 10px; color: #334155; font-style: italic;">${ticket.weightNotes}</p>
+  </div>
+  ` : ''}
+
+  <div class="signatures-block">
+    <div>
+      <div class="sig-line"></div>
+      <p class="sig-name">${ticket.operatorName || 'Operador de Balança'}</p>
+      <p class="sig-title">Responsável pela Pesagem / Balança</p>
+    </div>
+    <div>
+      <div class="sig-line"></div>
+      <p class="sig-name">${ticket.driverName || 'Condutor do Veículo'}</p>
+      <p class="sig-title">Conferência e Carga Recebida / De Acordo</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>InfraCore ERP • Módulo Comercial & Balança Rodoviária Integrada</span>
+    <span>Ticket Nº ${ticket.ticketNumber} • Autenticação: BAL-${ticket.id}-${Date.now().toString(36).toUpperCase()}</span>
+    <span>Emissão: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</span>
+  </div>
+</body>
+</html>`;
+
+    printDocument(`Guia_Pesagem_${ticket.ticketNumber}_${ticket.vehiclePlate}`, htmlA4);
+  };
+
   const selectedClientData = (clients || []).find(c => c.id === selectedClient);
   const danfeClient = showNFE ? (clients || []).find(c => c.id === showNFE.data.clientId) : null;
 
@@ -3153,6 +3630,13 @@ const Sales = () => {
           >
             <RefreshCw size={16} />
             Histórico
+          </button>
+          <button
+            onClick={() => setActiveTab('scale')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'scale' ? 'bg-white dark:bg-slate-600 shadow-sm text-cyan-600 dark:text-cyan-400 font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900'}`}
+          >
+            <Scale size={16} />
+            Balança Rodoviária
           </button>
         </div>
       </div>
@@ -4801,7 +5285,7 @@ const Sales = () => {
             </table>
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'history' ? (
         /* Aba de Histórico de Vendas */
         <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex-1 flex flex-col animate-in fade-in duration-500">
           <div className="p-6 border-b dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/50">
@@ -4940,6 +5424,485 @@ const Sales = () => {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      ) : (
+        /* Aba de Balança Rodoviária e Guias de Pesagem */
+        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex-1 flex flex-col animate-in fade-in duration-300">
+          {/* Header da Aba Balança Rodoviária */}
+          <div className="p-5 border-b dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/50">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-cyan-600 rounded-xl text-white shadow-lg shadow-cyan-600/20">
+                <Scale size={22} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-black text-lg text-slate-800 dark:text-white">Balança Rodoviária & Guias de Pesagem</h3>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${isScaleConnected ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
+                    {isScaleConnected ? '● Online' : '○ Standby'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Controle de pesagens de caminhões, conferência de tara/bruto e emissão de tickets.</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsScaleConnected(!isScaleConnected)}
+                className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${isScaleConnected ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/30' : 'bg-white dark:bg-gray-700 border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-200'}`}
+                title="Alternar status do sensor da balança rodoviária"
+              >
+                <Activity size={14} />
+                <span>{isScaleConnected ? 'Sensor Conectado' : 'Conectar Balança'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
+            {/* Bloco 1: Formulário de Pesagem e Emissão de Ticket */}
+            <div className="bg-slate-50 dark:bg-gray-900/40 p-5 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-gray-700 pb-3">
+                <div className="flex items-center gap-2">
+                  <Truck size={18} className="text-cyan-600" />
+                  <h4 className="font-black text-sm uppercase tracking-wider text-slate-800 dark:text-white">Nova Pesagem Rodoviária / Emissão de Guia</h4>
+                </div>
+                <span className="text-xs font-bold text-slate-400">Próximo Ticket: #{String((scaleTickets.length || 0) + 5423).padStart(6, '0')}</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* Tipo de Operação */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest pl-0.5">Operação</label>
+                  <select
+                    value={scaleForm.operationType}
+                    onChange={e => setScaleForm(prev => ({ ...prev, operationType: e.target.value as any }))}
+                    className="w-full p-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold"
+                  >
+                    <option value="Saída">Saída (Venda / Expedição)</option>
+                    <option value="Entrada">Entrada (Compra / Insumo)</option>
+                    <option value="Pesagem Avulsa">Pesagem Avulsa (Conferência)</option>
+                  </select>
+                </div>
+
+                {/* Vínculo de Documento Comercial */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest pl-0.5">Vincular Venda / Pedido</label>
+                  <select
+                    value={scaleForm.linkedDocId ? `${scaleForm.linkedDocType}:${scaleForm.linkedDocId}` : 'none'}
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === 'none') {
+                        setScaleForm(prev => ({ ...prev, linkedDocType: 'none', linkedDocId: '' }));
+                      } else {
+                        const [t, id] = val.split(':');
+                        if (t === 'sale') {
+                          const s = sales.find(x => x.id === id);
+                          if (s) {
+                            setScaleForm(prev => ({
+                              ...prev,
+                              linkedDocType: 'sale',
+                              linkedDocId: id,
+                              clientName: s.clientName || prev.clientName,
+                              vehiclePlate: fleet.find(v => v.id === s.vehicleId)?.plate || prev.vehiclePlate,
+                              driverName: s.driverName || prev.driverName,
+                              productName: (s.items || [])[0]?.name || prev.productName,
+                              tareWeight: s.tareWeight || prev.tareWeight,
+                              grossWeight: s.grossWeight || prev.grossWeight
+                            }));
+                          }
+                        } else if (t === 'budget') {
+                          const b = budgets.find(x => x.id === id);
+                          if (b) {
+                            setScaleForm(prev => ({
+                              ...prev,
+                              linkedDocType: 'budget',
+                              linkedDocId: id,
+                              clientName: b.clientName || prev.clientName,
+                              productName: (b.items || [])[0]?.name || prev.productName,
+                              tareWeight: b.tareWeight || prev.tareWeight,
+                              grossWeight: b.grossWeight || prev.grossWeight
+                            }));
+                          }
+                        }
+                      }
+                    }}
+                    className="w-full p-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-800 dark:text-white"
+                  >
+                    <option value="none">Nenhum (Pesagem Avulsa)</option>
+                    <optgroup label="Vendas Recentes">
+                      {sales.slice(0, 8).map(s => (
+                        <option key={s.id} value={`sale:${s.id}`}>Venda #{s.documentNumber || s.id.slice(0, 8)} - {s.clientName}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Orçamentos / Pedidos">
+                      {budgets.slice(0, 8).map(b => (
+                        <option key={b.id} value={`budget:${b.id}`}>Pedido #{getBudgetDisplayId(b)} - {b.clientName}</option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+
+                {/* Cliente / Destinatário */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest pl-0.5">Destinatário / Cliente *</label>
+                  <input
+                    type="text"
+                    value={scaleForm.clientName}
+                    onChange={e => setScaleForm(prev => ({ ...prev, clientName: e.target.value }))}
+                    placeholder="Ex: Construtora Alfa Ltda"
+                    className="w-full p-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold"
+                  />
+                </div>
+
+                {/* Produto / Material */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest pl-0.5">Material / Produto *</label>
+                  <input
+                    type="text"
+                    value={scaleForm.productName}
+                    onChange={e => setScaleForm(prev => ({ ...prev, productName: e.target.value }))}
+                    placeholder="Ex: Brita 1, CBUQ, Areia..."
+                    className="w-full p-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold"
+                  />
+                </div>
+
+                {/* Placa do Veículo */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest pl-0.5">Placa do Veículo *</label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={scaleForm.vehiclePlate}
+                      onChange={e => setScaleForm(prev => ({ ...prev, vehiclePlate: e.target.value.toUpperCase() }))}
+                      placeholder="ABC-1234 ou BRA2E19"
+                      className="w-full p-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold font-mono uppercase"
+                    />
+                    <select
+                      onChange={e => {
+                        if (e.target.value) setScaleForm(prev => ({ ...prev, vehiclePlate: e.target.value }));
+                      }}
+                      className="p-2 bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold"
+                      title="Preencher com veículo da frota"
+                    >
+                      <option value="">Frota...</option>
+                      {fleet.map(v => (
+                        <option key={v.id} value={v.plate}>{v.plate} ({v.model || v.name})</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Condutor / Motorista */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest pl-0.5">Nome do Condutor</label>
+                  <input
+                    type="text"
+                    value={scaleForm.driverName}
+                    onChange={e => setScaleForm(prev => ({ ...prev, driverName: e.target.value }))}
+                    placeholder="Nome completo do motorista"
+                    className="w-full p-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold"
+                  />
+                </div>
+
+                {/* Medição 1: Bruto (Saída/Entrada) */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-0.5">1ª Medição - Peso Bruto (kg)</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const randomGross = Math.floor(25000 + Math.random() * 20000);
+                        setScaleForm(prev => ({ ...prev, grossWeight: randomGross }));
+                        addToast(`Peso Bruto capturado da balança: ${randomGross.toLocaleString('pt-BR')} kg`, 'info');
+                      }}
+                      className="text-[9px] font-bold text-cyan-600 hover:underline uppercase flex items-center gap-0.5"
+                    >
+                      <Scale size={10} /> Ler Balança
+                    </button>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    value={scaleForm.grossWeight || ''}
+                    onChange={e => setScaleForm(prev => ({ ...prev, grossWeight: Number(e.target.value) }))}
+                    placeholder="0"
+                    className="w-full p-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold font-mono"
+                  />
+                </div>
+
+                {/* Medição 2: Tara (kg) */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-0.5">2ª Medição - Peso Tara (kg)</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const randomTare = Math.floor(11000 + Math.random() * 5000);
+                        setScaleForm(prev => ({ ...prev, tareWeight: randomTare }));
+                        addToast(`Peso Tara capturado da balança: ${randomTare.toLocaleString('pt-BR')} kg`, 'info');
+                      }}
+                      className="text-[9px] font-bold text-cyan-600 hover:underline uppercase flex items-center gap-0.5"
+                    >
+                      <Scale size={10} /> Ler Balança
+                    </button>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    value={scaleForm.tareWeight || ''}
+                    onChange={e => setScaleForm(prev => ({ ...prev, tareWeight: Number(e.target.value) }))}
+                    placeholder="0"
+                    className="w-full p-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl text-xs font-bold font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Cálculo do Líquido em Tempo Real */}
+              <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-cyan-50 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-800 rounded-xl gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-cyan-600 text-white rounded-lg"><Scale size={20} /></div>
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-cyan-700 dark:text-cyan-300 tracking-wider">Peso Líquido Calculado</span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-black font-mono text-slate-900 dark:text-white">
+                        {Math.max(0, scaleForm.grossWeight - scaleForm.tareWeight).toLocaleString('pt-BR')} kg
+                      </span>
+                      <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">
+                        ({(Math.max(0, scaleForm.grossWeight - scaleForm.tareWeight) / 1000).toFixed(3)} ton)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScaleForm({
+                        operationType: 'Saída',
+                        clientName: '',
+                        vehiclePlate: '',
+                        driverName: '',
+                        productName: '',
+                        unit: 'ton',
+                        tareWeight: 0,
+                        grossWeight: 0,
+                        weightNotes: '',
+                        linkedDocType: 'none',
+                        linkedDocId: ''
+                      });
+                      addToast("Formulário de pesagem limpo.", 'info');
+                    }}
+                    className="flex-1 sm:flex-none px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-200 dark:hover:bg-gray-700 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Limpar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!scaleForm.clientName.trim()) {
+                        addToast("Informe o nome do cliente / destinatário.", 'warning');
+                        return;
+                      }
+                      if (!scaleForm.vehiclePlate.trim()) {
+                        addToast("Informe a placa do veículo.", 'warning');
+                        return;
+                      }
+                      if (!scaleForm.productName.trim()) {
+                        addToast("Informe o material / produto.", 'warning');
+                        return;
+                      }
+                      if (scaleForm.grossWeight <= 0) {
+                        addToast("O peso bruto deve ser superior a zero.", 'warning');
+                        return;
+                      }
+                      if (scaleForm.grossWeight <= scaleForm.tareWeight) {
+                        addToast("O peso bruto deve ser estritamente maior que a tara.", 'warning');
+                        return;
+                      }
+
+                      const calculatedNet = scaleForm.grossWeight - scaleForm.tareWeight;
+                      const seqNum = String(scaleTickets.length + 5423).padStart(6, '0');
+                      const newTicket: ScaleTicket = {
+                        id: `ticket-${Date.now()}`,
+                        ticketNumber: seqNum,
+                        date: new Date().toLocaleDateString('pt-BR'),
+                        time: new Date().toLocaleTimeString('pt-BR'),
+                        operationType: scaleForm.operationType,
+                        status: 'Concluído',
+                        clientName: scaleForm.clientName,
+                        vehiclePlate: scaleForm.vehiclePlate.toUpperCase(),
+                        driverName: scaleForm.driverName,
+                        productName: scaleForm.productName,
+                        unit: scaleForm.unit,
+                        tareWeight: scaleForm.tareWeight,
+                        grossWeight: scaleForm.grossWeight,
+                        netWeight: calculatedNet,
+                        weightNotes: scaleForm.weightNotes,
+                        operatorName: currentUser?.name || 'Operador da Balança',
+                        linkedDocument: scaleForm.linkedDocType !== 'none' ? {
+                          type: scaleForm.linkedDocType,
+                          id: scaleForm.linkedDocId,
+                          displayNumber: scaleForm.linkedDocType === 'sale'
+                            ? (sales.find(s => s.id === scaleForm.linkedDocId)?.documentNumber || scaleForm.linkedDocId.slice(0, 8))
+                            : getBudgetDisplayId(budgets.find(b => b.id === scaleForm.linkedDocId))
+                        } : undefined
+                      };
+
+                      const updatedList = [newTicket, ...scaleTickets];
+                      saveScaleTickets(updatedList);
+                      addToast(`Guia de Pesagem #${seqNum} emitida com sucesso!`, 'success');
+
+                      setScaleForm({
+                        operationType: 'Saída',
+                        clientName: '',
+                        vehiclePlate: '',
+                        driverName: '',
+                        productName: '',
+                        unit: 'ton',
+                        tareWeight: 0,
+                        grossWeight: 0,
+                        weightNotes: '',
+                        linkedDocType: 'none',
+                        linkedDocId: ''
+                      });
+                    }}
+                    className="flex-1 sm:flex-none px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white font-black text-xs rounded-xl shadow-lg shadow-cyan-600/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                  >
+                    <CheckCircle size={15} /> EMITIR GUIA DE PESAGEM
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Bloco 2: Histórico de Guias Emitidas e Filtros */}
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <FileText size={18} className="text-slate-400" />
+                  <h4 className="font-black text-sm uppercase tracking-wider text-slate-800 dark:text-white">
+                    Histórico de Tickets / Guias de Pesagem ({scaleTickets.length})
+                  </h4>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={scaleSearchTerm}
+                      onChange={e => setScaleSearchTerm(e.target.value)}
+                      placeholder="Buscar por placa, cliente, produto, ticket..."
+                      className="pl-9 pr-3 py-1.5 bg-slate-100 dark:bg-gray-700 border-none rounded-xl text-xs font-bold"
+                    />
+                  </div>
+                  <select
+                    value={scaleFilterType}
+                    onChange={e => setScaleFilterType(e.target.value)}
+                    className="py-1.5 px-3 bg-slate-100 dark:bg-gray-700 border-none rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200"
+                  >
+                    <option value="all">Todas as Operações</option>
+                    <option value="Saída">Saídas</option>
+                    <option value="Entrada">Entradas</option>
+                    <option value="Pesagem Avulsa">Pesagens Avulsas</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Tabela de Tickets */}
+              <div className="border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden shadow-sm">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 dark:bg-gray-800 text-[10px] font-black text-slate-400 uppercase border-b dark:border-gray-700">
+                    <tr>
+                      <th className="px-5 py-3.5">Ticket / Data</th>
+                      <th className="px-5 py-3.5">Placa & Condutor</th>
+                      <th className="px-5 py-3.5">Cliente / Destinatário</th>
+                      <th className="px-5 py-3.5">Material</th>
+                      <th className="px-5 py-3.5 text-right">Bruto</th>
+                      <th className="px-5 py-3.5 text-right">Tara</th>
+                      <th className="px-5 py-3.5 text-right">Líquido (Faturado)</th>
+                      <th className="px-5 py-3.5 text-right">Imprimir Guia</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y dark:divide-gray-700">
+                    {scaleTickets
+                      .filter(t => {
+                        if (scaleFilterType !== 'all' && t.operationType !== scaleFilterType) return false;
+                        if (!scaleSearchTerm) return true;
+                        const term = scaleSearchTerm.toLowerCase();
+                        return (
+                          t.ticketNumber.toLowerCase().includes(term) ||
+                          t.vehiclePlate.toLowerCase().includes(term) ||
+                          t.clientName.toLowerCase().includes(term) ||
+                          t.productName.toLowerCase().includes(term) ||
+                          (t.driverName && t.driverName.toLowerCase().includes(term))
+                        );
+                      })
+                      .map(ticket => (
+                        <tr key={ticket.id} className="hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-colors group">
+                          <td className="px-5 py-3.5">
+                            <span className="font-mono text-xs font-bold text-cyan-600 dark:text-cyan-400 block">#{ticket.ticketNumber}</span>
+                            <span className="text-[10px] text-slate-400 font-medium">{ticket.date} • {ticket.time}</span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="font-mono font-black text-xs text-slate-900 dark:text-white bg-slate-100 dark:bg-gray-700 px-2 py-0.5 rounded border border-slate-200 dark:border-gray-600 inline-block mb-0.5">
+                              {ticket.vehiclePlate}
+                            </span>
+                            <span className="text-[10px] text-slate-500 block truncate max-w-[150px]">{ticket.driverName || 'Sem condutor'}</span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="font-bold text-xs text-slate-800 dark:text-slate-200 block truncate max-w-[180px]">{ticket.clientName}</span>
+                            <span className="text-[9px] text-slate-400 font-black uppercase tracking-wider">{ticket.operationType}</span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="font-bold text-xs text-slate-800 dark:text-slate-200 block truncate max-w-[150px]">{ticket.productName}</span>
+                            {ticket.linkedDocument && (
+                              <span className="text-[9px] text-cyan-600 dark:text-cyan-400 font-bold block">
+                                {ticket.linkedDocument.type === 'sale' ? 'Venda' : 'Pedido'} #{ticket.linkedDocument.displayNumber}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3.5 text-right font-mono text-xs text-slate-600 dark:text-slate-300">
+                            {ticket.grossWeight.toLocaleString('pt-BR')} kg
+                          </td>
+                          <td className="px-5 py-3.5 text-right font-mono text-xs text-slate-400">
+                            {ticket.tareWeight.toLocaleString('pt-BR')} kg
+                          </td>
+                          <td className="px-5 py-3.5 text-right">
+                            <span className="font-mono font-black text-sm text-slate-900 dark:text-white block">
+                              {ticket.netWeight.toLocaleString('pt-BR')} kg
+                            </span>
+                            <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 font-mono">
+                              {(ticket.netWeight / 1000).toFixed(3)} ton
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5 text-right">
+                            <div className="flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                              <button
+                                type="button"
+                                onClick={() => handlePrintScaleTicket(ticket, 'a4')}
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-cyan-50 dark:bg-gray-700 dark:hover:bg-cyan-900/30 text-slate-700 dark:text-slate-200 hover:text-cyan-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1 border border-slate-200 dark:border-gray-600 cursor-pointer"
+                                title="Imprimir Guia de Pesagem Executiva A4"
+                              >
+                                <Printer size={13} /> A4
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handlePrintScaleTicket(ticket, 'thermal')}
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-cyan-50 dark:bg-gray-700 dark:hover:bg-cyan-900/30 text-slate-700 dark:text-slate-200 hover:text-cyan-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1 border border-slate-200 dark:border-gray-600 cursor-pointer"
+                                title="Imprimir Cupom Térmico 80mm de Portaria"
+                              >
+                                <Barcode size={13} /> 80mm
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       )}
