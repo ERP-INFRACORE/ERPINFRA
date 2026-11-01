@@ -2875,6 +2875,14 @@ const Sales = () => {
     const tareTons = (ticket.tareWeight / 1000).toFixed(3);
     const grossTons = (ticket.grossWeight / 1000).toFixed(3);
 
+    const client = clients?.find(c => c.name?.trim().toLowerCase() === ticket.clientName?.trim().toLowerCase());
+    const clientDoc = client?.document || '';
+    const vehicle = fleet?.find(v => v.plate?.toUpperCase() === ticket.vehiclePlate?.toUpperCase());
+    const vehicleModel = vehicle?.model || vehicle?.type || '';
+    const docRef = ticket.linkedDocument
+      ? `${ticket.linkedDocument.type === 'sale' ? 'Venda' : 'Orçamento'} #${ticket.linkedDocument.displayNumber}`
+      : '';
+
     if (format === 'thermal') {
       const htmlThermal = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -2884,7 +2892,7 @@ const Sales = () => {
   <style>
     @page {
       size: 80mm auto;
-      margin: 3mm;
+      margin: 3mm 4mm;
     }
     * {
       box-sizing: border-box;
@@ -2892,69 +2900,178 @@ const Sales = () => {
       print-color-adjust: exact !important;
     }
     body {
-      font-family: 'Courier New', Courier, monospace;
+      font-family: 'Consolas', 'Courier New', 'Lucida Console', Monaco, monospace;
       color: #000;
       background: #fff;
       margin: 0;
       padding: 0;
       font-size: 11px;
-      line-height: 1.25;
-      width: 74mm;
+      line-height: 1.35;
+      width: 72mm;
+      letter-spacing: -0.2px;
     }
     .center { text-align: center; }
     .bold { font-weight: bold; }
-    .divider { border-top: 1px dashed #000; margin: 4px 0; }
-    .double-divider { border-top: 2px solid #000; margin: 5px 0; }
-    .row { display: flex; justify-content: space-between; margin: 2px 0; }
-    .box-weights {
-      border: 1px solid #000;
-      padding: 5px;
-      margin: 5px 0;
-      background: #fafafa;
+    .uppercase { text-transform: uppercase; }
+    .divider {
+      border-top: 1px dashed #000;
+      margin: 6px 0;
     }
-    .signature {
+    .two-col {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 2px;
+      font-size: 10.5px;
+    }
+    .two-col > div:first-child {
+      flex: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .two-col > div:last-child {
+      flex: 1.1;
+      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .highlight-net {
+      margin: 8px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 13px;
+      font-weight: bold;
+    }
+    .field-row {
+      margin: 2px 0;
+      font-size: 11px;
+      word-break: break-word;
+    }
+    .weight-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 2px 0;
+      font-size: 11px;
+    }
+    .weight-row .label {
+      flex: 1.3;
+    }
+    .weight-row .val {
+      flex: 1;
+      text-align: right;
+      font-weight: bold;
+    }
+    .weight-row .time {
+      flex: 1.3;
+      text-align: right;
+      font-size: 9.5px;
+    }
+    .signatures {
       margin-top: 25px;
-      text-align: center;
+    }
+    .sig-line {
       border-top: 1px solid #000;
-      padding-top: 3px;
+      margin-top: 20px;
+      padding-top: 2px;
+      text-align: center;
       font-size: 9px;
+    }
+    .footer-tag {
+      margin-top: 10px;
+      font-size: 8.5px;
+      text-align: center;
+      color: #333;
     }
   </style>
 </head>
 <body>
-  <div class="center bold" style="font-size: 13px;">${company.tradeName || company.companyName}</div>
-  <div class="center" style="font-size: 9px;">CNPJ: ${company.document}</div>
-  <div class="center" style="font-size: 9px;">${company.phone}</div>
-  <div class="double-divider"></div>
-  <div class="center bold" style="font-size: 12px;">TICKET DE PESAGEM RODOVIÁRIA</div>
-  <div class="center bold" style="font-size: 13px;">Nº ${ticket.ticketNumber}</div>
-  <div class="divider"></div>
-  <div class="row"><span>DATA/HORA:</span><span>${ticket.date} ${ticket.time}</span></div>
-  <div class="row"><span>TIPO OPERAÇÃO:</span><span class="bold">${ticket.operationType.toUpperCase()}</span></div>
-  <div class="row"><span>PLACA VEÍCULO:</span><span class="bold">${ticket.vehiclePlate}</span></div>
-  <div class="row"><span>MOTORISTA:</span><span>${ticket.driverName || 'Não Informado'}</span></div>
-  <div class="row"><span>CLIENTE/DEST.:</span><span>${ticket.clientName}</span></div>
-  <div class="row"><span>PRODUTO/CARGA:</span><span class="bold">${ticket.productName}</span></div>
-  ${ticket.linkedDocument ? `<div class="row"><span>DOC. VINCULADO:</span><span>${ticket.linkedDocument.type === 'sale' ? 'Venda' : 'Orçamento'} #${ticket.linkedDocument.displayNumber}</span></div>` : ''}
-  <div class="double-divider"></div>
-  <div class="box-weights">
-    <div class="row" style="font-size: 12px;"><span>PESO BRUTO (1ª):</span><span class="bold">${ticket.grossWeight.toLocaleString('pt-BR')} kg</span></div>
-    <div class="row" style="font-size: 12px;"><span>PESO TARA  (2ª):</span><span class="bold">${ticket.tareWeight.toLocaleString('pt-BR')} kg</span></div>
-    <div class="divider"></div>
-    <div class="row" style="font-size: 14px; font-weight: bold;">
-      <span>LÍQUIDO:</span>
-      <span>${ticket.netWeight.toLocaleString('pt-BR')} kg</span>
-    </div>
-    <div class="center bold" style="font-size: 11px; margin-top: 2px;">
-      (${netWeightTons} TONELADAS)
-    </div>
+  <!-- Cabeçalho da Balança -->
+  <div class="center bold uppercase" style="font-size: 13px; margin-bottom: 3px;">
+    ${company.tradeName || company.companyName || 'BALANÇA RODOVIÁRIA'}
   </div>
-  ${ticket.weightNotes ? `<div style="font-size: 9px; margin-top: 4px;"><strong>OBS:</strong> ${ticket.weightNotes}</div>` : ''}
+  <div class="center" style="font-size: 10px;">${company.document || '00.000.000/0001-00'}</div>
+  ${company.address ? `<div class="center" style="font-size: 9.5px;">${company.address}</div>` : ''}
+  
   <div class="divider"></div>
-  <div class="row" style="font-size: 9px;"><span>OPERADOR:</span><span>${ticket.operatorName}</span></div>
-  <div class="signature">ASSINATURA DO MOTORISTA</div>
-  <div class="signature" style="margin-top: 18px;">VISTO DO BALANCEIRO</div>
-  <div class="center" style="font-size: 8px; margin-top: 10px;">InfraCore ERP • Balança Rodoviária Integrada</div>
+
+  <!-- Duas Colunas: Romanelo / Placa / Operador / Motorista -->
+  <div class="two-col">
+    <div>Romanelo..: <strong>${ticket.ticketNumber}</strong></div>
+    <div>Placa: <strong>${ticket.vehiclePlate}</strong></div>
+  </div>
+  <div class="two-col">
+    <div>Operador..: ${ticket.operatorName || 'Vilamar'}</div>
+    <div>Veiculo Modelo.: ${vehicleModel || ''}</div>
+  </div>
+  <div class="two-col">
+    <div>Emitido em: ${ticket.date} as ${ticket.time}</div>
+    <div>Motorista.: <strong>${ticket.driverName || 'HENRIQUE'}</strong></div>
+  </div>
+
+  <!-- Destaque Peso Líquido -->
+  <div class="highlight-net">
+    <span>Peso LÍQUIDO...............:</span>
+    <span>${ticket.netWeight.toLocaleString('pt-BR')} Kg</span>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Dados da Carga / Destinatário -->
+  <div class="field-row">Fornecedor/Cliente.: <strong>${ticket.clientName}</strong></div>
+  <div class="field-row">CNPJ / CPF Forn-Cli: ${clientDoc || ''}</div>
+  <div class="field-row">Cod. Prod : Produto: <strong>${ticket.productName}</strong></div>
+  <div class="field-row">Tipo Transação.....: ${ticket.operationType.toUpperCase()}</div>
+  <div class="field-row">Documento Nr.......: ${docRef || ''}</div>
+  <div class="field-row">Transportador......: PROPRIO / FOB</div>
+
+  <div class="divider"></div>
+
+  <!-- Bloco de Pesagens -->
+  <div class="weight-row">
+    <span class="label">ENTRADA.......:</span>
+    <span class="val">${ticket.grossWeight.toLocaleString('pt-BR')} Kg</span>
+    <span class="time">${ticket.date} ${ticket.time}</span>
+  </div>
+  <div class="weight-row">
+    <span class="label">SAÍDA.........:</span>
+    <span class="val">${ticket.tareWeight > 0 ? `${ticket.tareWeight.toLocaleString('pt-BR')} Kg` : '      Kg'}</span>
+    <span class="time"></span>
+  </div>
+  <div class="weight-row bold">
+    <span class="label">BRUTO.........:</span>
+    <span class="val">${ticket.grossWeight.toLocaleString('pt-BR')} Kg</span>
+    <span class="time"></span>
+  </div>
+  <div class="weight-row">
+    <span class="label">TARA..........:</span>
+    <span class="val">${ticket.tareWeight > 0 ? `${ticket.tareWeight.toLocaleString('pt-BR')} Kg` : '      Kg'}</span>
+    <span class="time"></span>
+  </div>
+  <div class="weight-row bold">
+    <span class="label">LÍQUIDO.......:</span>
+    <span class="val">${ticket.netWeight.toLocaleString('pt-BR')} Kg</span>
+    <span class="time"></span>
+  </div>
+
+  <div class="field-row" style="margin-top: 4px;">
+    Peso Informado: ${(ticket.netWeight / 1000).toFixed(3)} Ton
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="field-row">
+    Obs...........: ${ticket.weightNotes || ''}
+  </div>
+
+  <!-- Assinaturas -->
+  <div class="signatures">
+    <div class="sig-line">ASSINATURA DO MOTORISTA</div>
+    <div class="sig-line">VISTO DO BALANCEIRO</div>
+  </div>
+
+  <div class="footer-tag">InfraCore ERP • Balança Rodoviária Integrada</div>
 </body>
 </html>`;
       printDocument(`Ticket_Pesagem_${ticket.ticketNumber}_Termico`, htmlThermal);
