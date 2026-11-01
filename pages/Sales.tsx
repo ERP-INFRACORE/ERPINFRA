@@ -885,12 +885,13 @@ const Sales = () => {
       addToast('O peso bruto deve ser superior a zero.', 'warning');
       return;
     }
-    if (gross <= tare) {
+    if (tare > 0 && gross <= tare) {
       addToast('O peso bruto deve ser estritamente maior que a tara.', 'warning');
       return;
     }
 
-    const calculatedNet = gross - tare;
+    // Quando não for informado a saída ou tara, o peso líquido deve zerar:
+    const calculatedNet = tare > 0 ? Math.max(0, gross - tare) : 0;
     const updatedTickets = scaleTickets.map(t => {
       if (t.id === editingScaleTicket.id) {
         return {
@@ -952,12 +953,13 @@ const Sales = () => {
       addToast("O peso bruto deve ser superior a zero.", 'warning');
       return;
     }
-    if (scaleForm.grossWeight <= scaleForm.tareWeight) {
+    if (scaleForm.tareWeight > 0 && scaleForm.grossWeight <= scaleForm.tareWeight) {
       addToast("O peso bruto deve ser estritamente maior que a tara.", 'warning');
       return;
     }
 
-    const calculatedNet = scaleForm.grossWeight - scaleForm.tareWeight;
+    // Quando não for informado a saída ou tara, o peso líquido deve zerar:
+    const calculatedNet = scaleForm.tareWeight > 0 ? Math.max(0, scaleForm.grossWeight - scaleForm.tareWeight) : 0;
     const seqNum = String(scaleTickets.length + 5423).padStart(6, '0');
     const newTicket: ScaleTicket = {
       id: `ticket-${Date.now()}`,
@@ -2871,9 +2873,12 @@ const Sales = () => {
       address: 'Av. Industrial, 1200 - Distrito Industrial, São Paulo - SP'
     } as AppSettings;
 
-    const netWeightTons = (ticket.netWeight / 1000).toFixed(3);
-    const tareTons = (ticket.tareWeight / 1000).toFixed(3);
-    const grossTons = (ticket.grossWeight / 1000).toFixed(3);
+    // Quando não for informada a saída ou tara, deve zerar o peso líquido:
+    const hasTareOrExit = Boolean(ticket.tareWeight && Number(ticket.tareWeight) > 0);
+    const calculatedNetWeight = hasTareOrExit ? Math.max(0, Number(ticket.grossWeight || 0) - Number(ticket.tareWeight || 0)) : 0;
+    const netWeightTons = (calculatedNetWeight / 1000).toFixed(3);
+    const tareTons = hasTareOrExit ? (Number(ticket.tareWeight) / 1000).toFixed(3) : '0.000';
+    const grossTons = (Number(ticket.grossWeight || 0) / 1000).toFixed(3);
 
     const client = clients?.find(c => c.name?.trim().toLowerCase() === ticket.clientName?.trim().toLowerCase());
     const clientDoc = client?.document || '';
@@ -3010,10 +3015,10 @@ const Sales = () => {
     <div>Motorista.: <strong>${ticket.driverName || 'HENRIQUE'}</strong></div>
   </div>
 
-  <!-- Destaque Peso Líquido -->
+  <!-- Destaque Peso Líquido (Zera quando não houver saída ou tara informada) -->
   <div class="highlight-net">
     <span>Peso LÍQUIDO...............:</span>
-    <span>${ticket.netWeight.toLocaleString('pt-BR')} Kg</span>
+    <span>${hasTareOrExit ? `${calculatedNetWeight.toLocaleString('pt-BR')} Kg` : '0 Kg'}</span>
   </div>
 
   <div class="divider"></div>
@@ -3028,7 +3033,7 @@ const Sales = () => {
 
   <div class="divider"></div>
 
-  <!-- Bloco de Pesagens -->
+  <!-- Bloco de Pesagens (Entrada / Saída / Bruto / Tara / Líquido) -->
   <div class="weight-row">
     <span class="label">ENTRADA.......:</span>
     <span class="val">${ticket.grossWeight.toLocaleString('pt-BR')} Kg</span>
@@ -3036,7 +3041,7 @@ const Sales = () => {
   </div>
   <div class="weight-row">
     <span class="label">SAÍDA.........:</span>
-    <span class="val">${ticket.tareWeight > 0 ? `${ticket.tareWeight.toLocaleString('pt-BR')} Kg` : '      Kg'}</span>
+    <span class="val">${hasTareOrExit ? `${Number(ticket.tareWeight).toLocaleString('pt-BR')} Kg` : '      Kg'}</span>
     <span class="time"></span>
   </div>
   <div class="weight-row bold">
@@ -3046,17 +3051,13 @@ const Sales = () => {
   </div>
   <div class="weight-row">
     <span class="label">TARA..........:</span>
-    <span class="val">${ticket.tareWeight > 0 ? `${ticket.tareWeight.toLocaleString('pt-BR')} Kg` : '      Kg'}</span>
+    <span class="val">${hasTareOrExit ? `${Number(ticket.tareWeight).toLocaleString('pt-BR')} Kg` : '      Kg'}</span>
     <span class="time"></span>
   </div>
   <div class="weight-row bold">
     <span class="label">LÍQUIDO.......:</span>
-    <span class="val">${ticket.netWeight.toLocaleString('pt-BR')} Kg</span>
+    <span class="val">${hasTareOrExit ? `${calculatedNetWeight.toLocaleString('pt-BR')} Kg` : '0 Kg'}</span>
     <span class="time"></span>
-  </div>
-
-  <div class="field-row" style="margin-top: 4px;">
-    Peso Informado: ${(ticket.netWeight / 1000).toFixed(3)} Ton
   </div>
 
   <div class="divider"></div>
@@ -3308,7 +3309,7 @@ const Sales = () => {
 
       <div class="weight-item highlight">
         <div class="weight-label" style="color: #0891b2;">PESO LÍQUIDO FATURADO</div>
-        <div class="weight-value">${ticket.netWeight.toLocaleString('pt-BR')} kg</div>
+        <div class="weight-value">${calculatedNetWeight.toLocaleString('pt-BR')} kg</div>
         <div class="weight-sub" style="font-size: 11px; font-weight: 800; color: #0891b2;">(${netWeightTons} TONELADAS)</div>
       </div>
     </div>
@@ -5957,10 +5958,10 @@ const Sales = () => {
                     <span className="text-[10px] font-black uppercase text-cyan-700 dark:text-cyan-300 tracking-wider">Peso Líquido Calculado</span>
                     <div className="flex items-baseline gap-2">
                       <span className="text-2xl font-black font-mono text-slate-900 dark:text-white">
-                        {Math.max(0, scaleForm.grossWeight - scaleForm.tareWeight).toLocaleString('pt-BR')} kg
+                        {(scaleForm.tareWeight > 0 ? Math.max(0, scaleForm.grossWeight - scaleForm.tareWeight) : 0).toLocaleString('pt-BR')} kg
                       </span>
                       <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">
-                        ({(Math.max(0, scaleForm.grossWeight - scaleForm.tareWeight) / 1000).toFixed(3)} ton)
+                        ({(scaleForm.tareWeight > 0 ? (Math.max(0, scaleForm.grossWeight - scaleForm.tareWeight) / 1000).toFixed(3) : '0.000')} ton)
                       </span>
                     </div>
                   </div>
@@ -6116,10 +6117,10 @@ const Sales = () => {
                           </td>
                           <td className="px-5 py-3.5 text-right whitespace-nowrap">
                             <span className="font-mono font-black text-sm text-slate-900 dark:text-white block">
-                              {ticket.netWeight.toLocaleString('pt-BR')} kg
+                              {(ticket.tareWeight > 0 ? ticket.netWeight : 0).toLocaleString('pt-BR')} kg
                             </span>
                             <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 font-mono">
-                              {(ticket.netWeight / 1000).toFixed(3)} ton
+                              {(ticket.tareWeight > 0 ? (ticket.netWeight / 1000).toFixed(3) : '0.000')} ton
                             </span>
                           </td>
                           <td className="px-5 py-3.5 text-center whitespace-nowrap bg-slate-50/70 dark:bg-gray-800/50">
@@ -6371,8 +6372,8 @@ const Sales = () => {
                       Peso Líquido Calculado
                     </label>
                     <div className="px-3 py-2 bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800/40 rounded-xl text-xs font-mono font-black text-cyan-800 dark:text-cyan-200 flex items-center justify-between">
-                      <span>{Math.max(0, Number(editScaleForm.grossWeight || 0) - Number(editScaleForm.tareWeight || 0)).toLocaleString('pt-BR')} kg</span>
-                      <span className="text-[10px] font-bold">{(Math.max(0, Number(editScaleForm.grossWeight || 0) - Number(editScaleForm.tareWeight || 0)) / 1000).toFixed(3)} ton</span>
+                      <span>{(Number(editScaleForm.tareWeight || 0) > 0 ? Math.max(0, Number(editScaleForm.grossWeight || 0) - Number(editScaleForm.tareWeight || 0)) : 0).toLocaleString('pt-BR')} kg</span>
+                      <span className="text-[10px] font-bold">{(Number(editScaleForm.tareWeight || 0) > 0 ? (Math.max(0, Number(editScaleForm.grossWeight || 0) - Number(editScaleForm.tareWeight || 0)) / 1000).toFixed(3) : '0.000')} ton</span>
                     </div>
                   </div>
                 </div>
