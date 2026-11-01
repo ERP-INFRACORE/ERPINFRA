@@ -5985,6 +5985,16 @@ const Sales = () => {
                               >
                                 <Barcode size={13} /> 80mm
                               </button>
+                              {isAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditScaleTicket(ticket)}
+                                  className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded-lg text-xs font-bold transition-all flex items-center gap-1 border border-amber-200 dark:border-amber-800/50 cursor-pointer"
+                                  title="Editar Guia de Pesagem e Opções de Exclusão (Admin)"
+                                >
+                                  <Edit3 size={13} /> Editar
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -5993,6 +6003,259 @@ const Sales = () => {
                 </table>
               </div>
             </div>
+
+      {/* ======================================================== */}
+      {/* MODAL DE EDIÇÃO E EXCLUSÃO DE GUIA DE PESAGEM (ADMIN)    */}
+      {/* ======================================================== */}
+      {editingScaleTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-200 dark:border-gray-700 overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header do Modal */}
+            <div className="px-6 py-4 bg-slate-50 dark:bg-gray-900/80 border-b border-slate-200 dark:border-gray-700 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-xl">
+                  <Edit3 size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                    Editar Guia de Pesagem #{editingScaleTicket.ticketNumber}
+                    <span className="text-[10px] bg-amber-500 text-white font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                      Alçada Admin
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">Edição controlada de tickets emitidos com auditoria.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingScaleTicket(null)}
+                className="w-8 h-8 rounded-full bg-slate-200 dark:bg-gray-700 text-slate-500 hover:text-slate-800 dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Conteúdo do Formulário */}
+            <div className="p-6 overflow-y-auto space-y-4 flex-1 custom-scrollbar">
+              {/* Alerta de Edição Admin de Data e Hora */}
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                <span className="font-bold flex items-center gap-1.5">
+                  <AlertTriangle size={14} /> Permissão Exclusiva de Administrador:
+                </span>
+                <p className="text-[11px] leading-relaxed opacity-90">
+                  Como Administrador, você pode retificar os registros oficiais de <strong>Data</strong> e <strong>Horário</strong> da pesagem caso tenha ocorrido divergência de apontamento.
+                </p>
+              </div>
+
+              {/* Data, Horário e Tipo de Operação */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 mb-1">
+                    Data da Pesagem *
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-cyan-500 outline-none"
+                    placeholder="DD/MM/AAAA"
+                    value={editScaleForm.date || ''}
+                    onChange={e => setEditScaleForm({ ...editScaleForm, date: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 mb-1">
+                    Horário da Pesagem *
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-cyan-500 outline-none"
+                    placeholder="HH:MM:SS"
+                    value={editScaleForm.time || ''}
+                    onChange={e => setEditScaleForm({ ...editScaleForm, time: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 mb-1">
+                    Tipo de Operação
+                  </label>
+                  <select
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-cyan-500 outline-none cursor-pointer"
+                    value={editScaleForm.operationType || 'Saída'}
+                    onChange={e => setEditScaleForm({ ...editScaleForm, operationType: e.target.value as any })}
+                  >
+                    <option value="Saída">Saída (Expedição)</option>
+                    <option value="Entrada">Entrada (Recebimento)</option>
+                    <option value="Pesagem Avulsa">Pesagem Avulsa</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Placa e Motorista */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 mb-1">
+                    Placa do Veículo *
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl text-xs font-mono font-black text-slate-800 dark:text-slate-100 uppercase focus:ring-2 focus:ring-cyan-500 outline-none"
+                    maxLength={8}
+                    value={editScaleForm.vehiclePlate || ''}
+                    onChange={e => setEditScaleForm({ ...editScaleForm, vehiclePlate: e.target.value.toUpperCase() })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 mb-1">
+                    Motorista / Condutor
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-cyan-500 outline-none"
+                    placeholder="Nome completo do condutor"
+                    value={editScaleForm.driverName || ''}
+                    onChange={e => setEditScaleForm({ ...editScaleForm, driverName: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Cliente e Produto */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 mb-1">
+                    Cliente / Destinatário / Fornecedor *
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-cyan-500 outline-none"
+                    value={editScaleForm.clientName || ''}
+                    onChange={e => setEditScaleForm({ ...editScaleForm, clientName: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 mb-1">
+                    Material / Produto *
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-cyan-500 outline-none"
+                    value={editScaleForm.productName || ''}
+                    onChange={e => setEditScaleForm({ ...editScaleForm, productName: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Pesagens (Tara, Bruto e Líquido calculado) */}
+              <div className="p-4 bg-slate-50 dark:bg-gray-900/50 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 space-y-3">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                  Pesagens e Balança
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      Peso Bruto (kg) *
+                    </label>
+                    <input
+                      type="number"
+                      className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl text-xs font-mono font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                      value={editScaleForm.grossWeight || ''}
+                      onChange={e => setEditScaleForm({ ...editScaleForm, grossWeight: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      Tara do Veículo (kg)
+                    </label>
+                    <input
+                      type="number"
+                      className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl text-xs font-mono font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                      value={editScaleForm.tareWeight || ''}
+                      onChange={e => setEditScaleForm({ ...editScaleForm, tareWeight: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-cyan-600 dark:text-cyan-400 uppercase mb-1">
+                      Peso Líquido Calculado
+                    </label>
+                    <div className="px-3 py-2 bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800/40 rounded-xl text-xs font-mono font-black text-cyan-800 dark:text-cyan-200 flex items-center justify-between">
+                      <span>{Math.max(0, Number(editScaleForm.grossWeight || 0) - Number(editScaleForm.tareWeight || 0)).toLocaleString('pt-BR')} kg</span>
+                      <span className="text-[10px] font-bold">{(Math.max(0, Number(editScaleForm.grossWeight || 0) - Number(editScaleForm.tareWeight || 0)) / 1000).toFixed(3)} ton</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Observações */}
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 mb-1">
+                  Observações da Carga
+                </label>
+                <textarea
+                  className="w-full p-3 bg-slate-50 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl text-xs font-medium text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-cyan-500 outline-none"
+                  rows={2}
+                  placeholder="Ex: Carga amarrada, lona conferida, número de lacres..."
+                  value={editScaleForm.weightNotes || ''}
+                  onChange={e => setEditScaleForm({ ...editScaleForm, weightNotes: e.target.value })}
+                />
+              </div>
+
+              {/* Botões Rápidos de Impressão Direto do Modal */}
+              <div className="p-3 bg-slate-100/70 dark:bg-gray-900/60 rounded-xl border border-slate-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                  <Printer size={14} className="text-cyan-600" /> Opções de Impressão:
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handlePrintScaleTicket(editingScaleTicket, 'a4')}
+                    className="px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 text-slate-700 dark:text-slate-200 hover:text-cyan-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1 border border-slate-200 dark:border-gray-600 cursor-pointer shadow-2xs"
+                  >
+                    <Printer size={13} /> Imprimir A4
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePrintScaleTicket(editingScaleTicket, 'thermal')}
+                    className="px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 text-slate-700 dark:text-slate-200 hover:text-cyan-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1 border border-slate-200 dark:border-gray-600 cursor-pointer shadow-2xs"
+                  >
+                    <Barcode size={13} /> Cupom Térmico (80mm)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Rodapé com Botão de Excluir para Admin e Salvar */}
+            <div className="px-6 py-4 bg-slate-50 dark:bg-gray-900/80 border-t border-slate-200 dark:border-gray-700 flex items-center justify-between">
+              <div>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteScaleTicket(editingScaleTicket.id)}
+                    className="px-4 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 border border-rose-200 dark:border-rose-900/50 cursor-pointer"
+                    title="Excluir Ticket de Pesagem Permanentemente (Apenas Administrador)"
+                  >
+                    <Trash2 size={14} /> Excluir Ticket
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingScaleTicket(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 dark:hover:bg-gray-700 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEditedScaleTicket}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Save size={14} /> Salvar Alterações
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
           </div>
         </div>
       )}
