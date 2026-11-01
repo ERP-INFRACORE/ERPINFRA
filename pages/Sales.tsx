@@ -838,6 +838,92 @@ const Sales = () => {
     }
   };
 
+  // Funções de Gestão de Ticket de Pesagem (Admin)
+  const handleOpenEditScaleTicket = (ticket: ScaleTicket) => {
+    if (!isAdmin) {
+      addToast('Apenas administradores podem editar guias de pesagem emitidas.', 'warning');
+      return;
+    }
+    setEditingScaleTicket(ticket);
+    setEditScaleForm({
+      ...ticket
+    });
+  };
+
+  const handleSaveEditedScaleTicket = () => {
+    if (!isAdmin) {
+      addToast('Permissão negada. Apenas administradores podem salvar alterações na pesagem.', 'error');
+      return;
+    }
+    if (!editingScaleTicket) return;
+
+    if (!editScaleForm.clientName?.trim()) {
+      addToast('Informe o nome do cliente / destinatário.', 'warning');
+      return;
+    }
+    if (!editScaleForm.vehiclePlate?.trim()) {
+      addToast('Informe a placa do veículo.', 'warning');
+      return;
+    }
+    if (!editScaleForm.productName?.trim()) {
+      addToast('Informe o produto / material.', 'warning');
+      return;
+    }
+    const gross = Number(editScaleForm.grossWeight || 0);
+    const tare = Number(editScaleForm.tareWeight || 0);
+    if (gross <= 0) {
+      addToast('O peso bruto deve ser superior a zero.', 'warning');
+      return;
+    }
+    if (gross <= tare) {
+      addToast('O peso bruto deve ser estritamente maior que a tara.', 'warning');
+      return;
+    }
+
+    const calculatedNet = gross - tare;
+    const updatedTickets = scaleTickets.map(t => {
+      if (t.id === editingScaleTicket.id) {
+        return {
+          ...t,
+          clientName: editScaleForm.clientName!.trim(),
+          vehiclePlate: editScaleForm.vehiclePlate!.toUpperCase().trim(),
+          driverName: editScaleForm.driverName || '',
+          productName: editScaleForm.productName!.trim(),
+          operationType: editScaleForm.operationType || t.operationType,
+          status: editScaleForm.status || t.status,
+          unit: editScaleForm.unit || t.unit,
+          grossWeight: gross,
+          tareWeight: tare,
+          netWeight: calculatedNet,
+          weightNotes: editScaleForm.weightNotes || '',
+          date: editScaleForm.date?.trim() || t.date,
+          time: editScaleForm.time?.trim() || t.time
+        };
+      }
+      return t;
+    });
+
+    saveScaleTickets(updatedTickets);
+    addToast(`Guia de Pesagem #${editingScaleTicket.ticketNumber} atualizada com sucesso!`, 'success');
+    setEditingScaleTicket(null);
+  };
+
+  const handleDeleteScaleTicket = (ticketId: string) => {
+    if (!isAdmin) {
+      addToast('Apenas administradores têm permissão para excluir tickets de pesagem.', 'error');
+      return;
+    }
+    const ticket = scaleTickets.find(t => t.id === ticketId);
+    if (!ticket) return;
+
+    if (window.confirm(`ATENÇÃO ADMIN:\n\nTem certeza que deseja EXCLUIR permanentemente a Guia de Pesagem #${ticket.ticketNumber} (Placa: ${ticket.vehiclePlate})?\n\nEsta ação é irreversível.`)) {
+      const updatedTickets = scaleTickets.filter(t => t.id !== ticketId);
+      saveScaleTickets(updatedTickets);
+      addToast(`Guia de Pesagem #${ticket.ticketNumber} excluída com sucesso pelo Administrador.`, 'info');
+      setEditingScaleTicket(null);
+    }
+  };
+
   // Formulário de Nova Guia de Pesagem
   const [scaleForm, setScaleForm] = useState({
     operationType: 'Saída' as 'Saída' | 'Entrada' | 'Pesagem Avulsa',
@@ -855,6 +941,10 @@ const Sales = () => {
 
   const [scaleSearchTerm, setScaleSearchTerm] = useState('');
   const [scaleFilterType, setScaleFilterType] = useState<string>('all');
+
+  // Estado para Modal de Edição / Exclusão de Guia de Pesagem (Admin)
+  const [editingScaleTicket, setEditingScaleTicket] = useState<ScaleTicket | null>(null);
+  const [editScaleForm, setEditScaleForm] = useState<Partial<ScaleTicket>>({});
 
   // Quick Client Registration Modal State
   const [isQuickClientOpen, setIsQuickClientOpen] = useState(false);
