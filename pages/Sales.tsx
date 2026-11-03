@@ -882,16 +882,16 @@ const Sales = () => {
     const gross = Number(editScaleForm.grossWeight || 0);
     const tare = Number(editScaleForm.tareWeight || 0);
     if (gross <= 0) {
-      addToast('O peso bruto deve ser superior a zero.', 'warning');
+      addToast('O peso da 1ª medição deve ser superior a zero.', 'warning');
       return;
     }
-    if (tare > 0 && gross <= tare) {
-      addToast('O peso bruto deve ser estritamente maior que a tara.', 'warning');
+    if (tare > 0 && gross === tare) {
+      addToast('A 1ª e a 2ª medição não podem ser idênticas.', 'warning');
       return;
     }
 
-    // Quando não for informado a saída ou tara, o peso líquido deve zerar:
-    const calculatedNet = tare > 0 ? Math.max(0, gross - tare) : 0;
+    // Aceita peso inicial menor que final (saída) ou maior (entrada): peso líquido é a diferença absoluta
+    const calculatedNet = tare > 0 ? Math.abs(gross - tare) : 0;
     const updatedTickets = scaleTickets.map(t => {
       if (t.id === editingScaleTicket.id) {
         return {
@@ -950,16 +950,16 @@ const Sales = () => {
       return;
     }
     if (scaleForm.grossWeight <= 0) {
-      addToast("O peso bruto deve ser superior a zero.", 'warning');
+      addToast("O peso da 1ª medição deve ser superior a zero.", 'warning');
       return;
     }
-    if (scaleForm.tareWeight > 0 && scaleForm.grossWeight <= scaleForm.tareWeight) {
-      addToast("O peso bruto deve ser estritamente maior que a tara.", 'warning');
+    if (scaleForm.tareWeight > 0 && scaleForm.grossWeight === scaleForm.tareWeight) {
+      addToast("A 1ª e a 2ª medição não podem ser idênticas (peso líquido zerado).", 'warning');
       return;
     }
 
-    // Quando não for informado a saída ou tara, o peso líquido deve zerar:
-    const calculatedNet = scaleForm.tareWeight > 0 ? Math.max(0, scaleForm.grossWeight - scaleForm.tareWeight) : 0;
+    // Aceita peso inicial menor que final (saída) ou maior (entrada): peso líquido é a diferença absoluta
+    const calculatedNet = scaleForm.tareWeight > 0 ? Math.abs(scaleForm.grossWeight - scaleForm.tareWeight) : 0;
     const seqNum = String(scaleTickets.length + 5423).padStart(6, '0');
     const newTicket: ScaleTicket = {
       id: `ticket-${Date.now()}`,
@@ -1031,6 +1031,11 @@ const Sales = () => {
   // Estado para Modal de Edição / Exclusão de Guia de Pesagem (Admin)
   const [editingScaleTicket, setEditingScaleTicket] = useState<ScaleTicket | null>(null);
   const [editScaleForm, setEditScaleForm] = useState<Partial<ScaleTicket>>({});
+
+  // Modal de Seleção de Ticket de Pesagem para o Carrinho
+  const [isScalePickerOpen, setIsScalePickerOpen] = useState(false);
+  const [scalePickerTargetItemId, setScalePickerTargetItemId] = useState<string | null>(null);
+  const [scalePickerSearch, setScalePickerSearch] = useState('');
 
   // Quick Client Registration Modal State
   const [isQuickClientOpen, setIsQuickClientOpen] = useState(false);
@@ -1387,7 +1392,8 @@ const Sales = () => {
 
     setCart(prev => prev.map(item => {
       if (item.id === id) {
-        const newQty = Math.max(1, item.quantity + delta);
+        const step = ['ton', 'm³', 'm3'].includes(item.unit.toLowerCase()) ? 0.5 : 1;
+        const newQty = Math.max(0.001, parseFloat((item.quantity + (delta * step)).toFixed(3)));
         if (delta > 0 && targetProduct && targetProduct.quantity > 0 && newQty > targetProduct.quantity) {
           addToast(`Atenção: Quantidade (${newQty}) excede o estoque disponível (${targetProduct.quantity} ${item.unit}).`, 'warning', 2500);
         }
@@ -1395,6 +1401,82 @@ const Sales = () => {
       }
       return item;
     }));
+  };
+
+  const setDirectQuantity = (id: string, val: number) => {
+    if (isNaN(val) || val <= 0) return;
+    const targetProduct = (inventory || []).find(p => p.id === id);
+    const validQty = parseFloat(val.toFixed(3));
+
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        if (targetProduct && targetProduct.quantity > 0 && validQty > targetProduct.quantity) {
+          addToast(`Atenção: Quantidade (${validQty}) excede o estoque disponível (${targetProduct.quantity} ${item.unit}).`, 'warning', 2500);
+        }
+        return { ...item, quantity: validQty };
+      }
+      return item;
+    }));
+  };
+
+  // Aplica dados de um Ticket de Pesagem selecionado ao Carrinho
+  const handleApplyScaleTicketToCart = (ticket: ScaleTicket, targetItemId?: string | null) => {
+    const netTons = parseFloat((ticket.netWeight / 1000).toFixed(3));
+
+    // 1. Atualiza dados de transporte / pesagem no checkout se disponíveis
+    if (ticket.vehiclePlate) {
+      const matchedVeh = fleet.find(v => v.plate.toUpperCase() === ticket.vehiclePlate.toUpperCase());
+      if (matchedVeh) setSelectedVehicle(matchedVeh.id);
+    }
+    if (ticket.driverName) setDriverName(ticket.driverName);
+    if (ticket.clientName && !selectedClient) {
+      const matchedCli = (clients || []).find(c => c.name.toLowerCase().includes(ticket.clientName.toLowerCase()));
+      if (matchedCli) setSelectedClient(matchedCli.id);
+    }
+    if (ticket.tareWeight) setTareWeight(ticket.tareWeight);
+    if (ticket.grossWeight) setGrossWeight(ticket.grossWeight);
+    setRequiresWeighing(true);
+    setWeightTicket(ticket.ticketNumber);
+    if (ticket.weightNotes) setWeightNotes(`[Ticket #${ticket.ticketNumber}] ${ticket.weightNotes}`);
+
+    // 2. Se houver item alvo específico, aplica o peso diretamente a ele
+    if (targetItemId) {
+      setCart(prev => prev.map(item => {
+        if (item.id === targetItemId) {
+          let newQty = netTons;
+          const unitLower = item.unit.toLowerCase();
+          if (unitLower === 'kg') newQty = ticket.netWeight;
+          else if (['m³', 'm3'].includes(unitLower)) {
+            const density = item.weight ? item.weight / 1000 : 1;
+            newQty = parseFloat((netTons / density).toFixed(3));
+          }
+          return { ...item, quantity: newQty };
+        }
+        return item;
+      }));
+      addToast(`Ticket #${ticket.ticketNumber} aplicado ao item: ${ticket.netWeight.toLocaleString('pt-BR')} kg (${netTons} ton)`, 'success');
+    } else {
+      // Se não houver item alvo, tenta encontrar o item correspondente por unidade ou primeiro granel
+      let itemApplied = false;
+      setCart(prev => prev.map(item => {
+        if (!itemApplied && ['ton', 'm³', 'm3', 'kg'].includes(item.unit.toLowerCase())) {
+          itemApplied = true;
+          let newQty = netTons;
+          const unitLower = item.unit.toLowerCase();
+          if (unitLower === 'kg') newQty = ticket.netWeight;
+          else if (['m³', 'm3'].includes(unitLower)) {
+            const density = item.weight ? item.weight / 1000 : 1;
+            newQty = parseFloat((netTons / density).toFixed(3));
+          }
+          return { ...item, quantity: newQty };
+        }
+        return item;
+      }));
+      addToast(`Ticket #${ticket.ticketNumber} vinculado: ${ticket.netWeight.toLocaleString('pt-BR')} kg (${netTons} ton) carregados no pedido.`, 'success');
+    }
+
+    setIsScalePickerOpen(false);
+    setScalePickerTargetItemId(null);
   };
 
   const handleReadScale = (id: string) => {
@@ -2873,9 +2955,9 @@ const Sales = () => {
       address: 'Av. Industrial, 1200 - Distrito Industrial, São Paulo - SP'
     } as AppSettings;
 
-    // Quando não for informada a saída ou tara, deve zerar o peso líquido:
+    // Quando não for informada a 2ª medição, deve zerar o peso líquido; caso contrário diferença absoluta (saída ou entrada):
     const hasTareOrExit = Boolean(ticket.tareWeight && Number(ticket.tareWeight) > 0);
-    const calculatedNetWeight = hasTareOrExit ? Math.max(0, Number(ticket.grossWeight || 0) - Number(ticket.tareWeight || 0)) : 0;
+    const calculatedNetWeight = hasTareOrExit ? Math.abs(Number(ticket.grossWeight || 0) - Number(ticket.tareWeight || 0)) : 0;
     const netWeightTons = (calculatedNetWeight / 1000).toFixed(3);
     const tareTons = hasTareOrExit ? (Number(ticket.tareWeight) / 1000).toFixed(3) : '0.000';
     const grossTons = (Number(ticket.grossWeight || 0) / 1000).toFixed(3);
@@ -2992,12 +3074,10 @@ const Sales = () => {
   </style>
 </head>
 <body>
-  <!-- Cabeçalho da Balança -->
-  <div class="center bold uppercase" style="font-size: 13px; margin-bottom: 3px;">
-    ${company.tradeName || company.companyName || 'BALANÇA RODOVIÁRIA'}
+  <!-- Cabeçalho da Balança Rodoviária (Sem dados cadastrais corporativos) -->
+  <div class="center bold uppercase" style="font-size: 14px; margin-bottom: 3px; letter-spacing: 0.5px;">
+    BALANÇA RODOVIÁRIA
   </div>
-  <div class="center" style="font-size: 10px;">${company.document || '00.000.000/0001-00'}</div>
-  ${company.address ? `<div class="center" style="font-size: 9.5px;">${company.address}</div>` : ''}
   
   <div class="divider"></div>
 
@@ -3033,29 +3113,19 @@ const Sales = () => {
 
   <div class="divider"></div>
 
-  <!-- Bloco de Pesagens (Entrada / Saída / Bruto / Tara / Líquido) -->
+  <!-- Bloco de Pesagens (1ª Medição / 2ª Medição / Líquido) -->
   <div class="weight-row">
-    <span class="label">ENTRADA.......:</span>
+    <span class="label">1ª MEDIÇÃO....:</span>
     <span class="val">${ticket.grossWeight.toLocaleString('pt-BR')} Kg</span>
     <span class="time">${ticket.date} ${ticket.time}</span>
   </div>
   <div class="weight-row">
-    <span class="label">SAÍDA.........:</span>
+    <span class="label">2ª MEDIÇÃO....:</span>
     <span class="val">${hasTareOrExit ? `${Number(ticket.tareWeight).toLocaleString('pt-BR')} Kg` : '      Kg'}</span>
     <span class="time"></span>
   </div>
   <div class="weight-row bold">
-    <span class="label">BRUTO.........:</span>
-    <span class="val">${ticket.grossWeight.toLocaleString('pt-BR')} Kg</span>
-    <span class="time"></span>
-  </div>
-  <div class="weight-row">
-    <span class="label">TARA..........:</span>
-    <span class="val">${hasTareOrExit ? `${Number(ticket.tareWeight).toLocaleString('pt-BR')} Kg` : '      Kg'}</span>
-    <span class="time"></span>
-  </div>
-  <div class="weight-row bold">
-    <span class="label">LÍQUIDO.......:</span>
+    <span class="label">PESO LÍQUIDO..:</span>
     <span class="val">${hasTareOrExit ? `${calculatedNetWeight.toLocaleString('pt-BR')} Kg` : '0 Kg'}</span>
     <span class="time"></span>
   </div>
@@ -3296,13 +3366,13 @@ const Sales = () => {
     </div>
     <div class="weights-grid">
       <div class="weight-item">
-        <div class="weight-label">1ª Medição (Bruto Entrada/Saída)</div>
+        <div class="weight-label">1ª Medição (Peso Inicial)</div>
         <div class="weight-value">${ticket.grossWeight.toLocaleString('pt-BR')} kg</div>
         <div class="weight-sub">(${grossTons} ton)</div>
       </div>
 
       <div class="weight-item">
-        <div class="weight-label">2ª Medição (Tara Veículo)</div>
+        <div class="weight-label">2ª Medição (Peso Final)</div>
         <div class="weight-value">${ticket.tareWeight.toLocaleString('pt-BR')} kg</div>
         <div class="weight-sub">(${tareTons} ton)</div>
       </div>
@@ -3351,6 +3421,135 @@ const Sales = () => {
 
   return (
     <div className="flex flex-col min-h-[calc(100vh-8rem)] lg:h-[calc(100vh-8rem)] gap-4">
+      {/* Modal Seletor de Guia de Pesagem para o Carrinho */}
+      {isScalePickerOpen && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-2xl border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-5 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/80 dark:bg-slate-900/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-cyan-600 rounded-xl text-white shadow-lg shadow-cyan-600/20">
+                  <Scale size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-slate-900 dark:text-white">Selecionar Guia de Pesagem</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {scalePickerTargetItemId
+                      ? `Aplicando peso ao produto: ${(cart.find(i => i.id === scalePickerTargetItemId)?.name || 'Item selecionado')}`
+                      : 'Escolha uma pesagem para carregar o peso líquido faturado no pedido'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsScalePickerOpen(false);
+                  setScalePickerTargetItemId(null);
+                }}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors text-slate-400"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-4 border-b dark:border-slate-700 bg-white dark:bg-slate-800">
+              <div className="relative">
+                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={scalePickerSearch}
+                  onChange={e => setScalePickerSearch(e.target.value)}
+                  placeholder="Buscar ticket por placa, cliente, material ou número..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scrollbar">
+              {scaleTickets
+                .filter(t => {
+                  if (t.status === 'Cancelado') return false;
+                  if (!scalePickerSearch) return true;
+                  const term = scalePickerSearch.toLowerCase();
+                  return (
+                    t.ticketNumber.toLowerCase().includes(term) ||
+                    t.vehiclePlate.toLowerCase().includes(term) ||
+                    t.clientName.toLowerCase().includes(term) ||
+                    t.productName.toLowerCase().includes(term) ||
+                    (t.driverName && t.driverName.toLowerCase().includes(term))
+                  );
+                })
+                .map(ticket => {
+                  const netTons = (ticket.netWeight / 1000).toFixed(3);
+                  return (
+                    <div
+                      key={ticket.id}
+                      onClick={() => handleApplyScaleTicketToCart(ticket, scalePickerTargetItemId)}
+                      className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-cyan-500 dark:hover:border-cyan-500 bg-white dark:bg-slate-800/80 hover:bg-cyan-50/40 dark:hover:bg-cyan-950/20 transition-all cursor-pointer shadow-sm group flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div className="space-y-1 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs font-black text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/30 px-2 py-0.5 rounded">
+                            Ticket #{ticket.ticketNumber}
+                          </span>
+                          <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
+                            {ticket.vehiclePlate}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {ticket.date} • {ticket.time}
+                          </span>
+                          <span className="text-[9px] font-black uppercase text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                            {ticket.operationType}
+                          </span>
+                        </div>
+                        <p className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                          {ticket.clientName}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          <strong>Material:</strong> {ticket.productName} {ticket.driverName ? `• Condutor: ${ticket.driverName}` : ''}
+                        </p>
+                      </div>
+
+                      <div className="flex sm:flex-col items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 dark:border-slate-700 shrink-0">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase sm:text-right">Peso Líquido</span>
+                        <div className="text-right">
+                          <span className="text-lg font-black font-mono text-slate-900 dark:text-white block leading-tight">
+                            {ticket.netWeight.toLocaleString('pt-BR')} kg
+                          </span>
+                          <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400 font-mono">
+                            {netTons} toneladas
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {scaleTickets.filter(t => t.status !== 'Cancelado').length === 0 && (
+                <div className="py-12 text-center text-slate-400 space-y-2">
+                  <Scale size={36} className="mx-auto text-slate-300" />
+                  <p className="text-xs font-bold">Nenhuma guia de pesagem disponível no histórico.</p>
+                  <p className="text-[10px]">Acesse a aba 'Balança Rodoviária' para emitir uma nova pesagem.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsScalePickerOpen(false);
+                  setScalePickerTargetItemId(null);
+                }}
+                className="px-5 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Quick Client Modal */}
       {isQuickClientOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm overflow-y-auto">
@@ -4892,11 +5091,28 @@ const Sales = () => {
                       <p className="text-xs text-slate-400 font-medium">Itens no pedido: {cart.length}</p>
                     </div>
                   </div>
-                  {cart.length > 0 && (
-                    <button onClick={() => { setCart([]); addToast("Carrinho limpo.", 'info'); }} className="px-3 py-1.5 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2">
-                      <Trash2 size={14} /> Limpar Pedido
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {cart.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setScalePickerTargetItemId(null);
+                          setScalePickerSearch('');
+                          setIsScalePickerOpen(true);
+                        }}
+                        className="px-3 py-1.5 text-xs font-bold bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 hover:bg-cyan-100 rounded-xl transition-all border border-cyan-200 dark:border-cyan-800 flex items-center gap-1.5 shadow-sm active:scale-95"
+                        title="Vincular Guia de Pesagem da Balança ao Pedido"
+                      >
+                        <Scale size={14} className="text-cyan-600" />
+                        <span className="hidden sm:inline">Vincular</span> Guia de Pesagem
+                      </button>
+                    )}
+                    {cart.length > 0 && (
+                      <button onClick={() => { setCart([]); addToast("Carrinho limpo.", 'info'); }} className="px-3 py-1.5 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2">
+                        <Trash2 size={14} /> Limpar Pedido
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Lista Rolável de Itens do Carrinho com Barra de Rolagem à Direita */}
@@ -4937,18 +5153,30 @@ const Sales = () => {
                             <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 dark:border-gray-700/60">
                               <div className="inline-flex items-center bg-slate-50 dark:bg-gray-900 rounded-lg p-0.5 border border-slate-200 dark:border-gray-700">
                                 <button
+                                  type="button"
                                   onClick={() => updateQuantity(item.id, -1)}
                                   className="w-7 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-gray-700 rounded text-slate-500 hover:text-cyan-600 transition-colors"
+                                  title="Diminuir quantidade"
                                 >
                                   <Minus size={13} />
                                 </button>
-                                <div className="flex items-center gap-1 px-2 min-w-[42px] justify-center">
-                                  <span className="text-xs font-black text-slate-800 dark:text-white">{item.quantity}</span>
-                                  <span className="text-[9px] text-slate-400 uppercase font-bold">{item.unit}</span>
+                                <div className="flex items-center px-1 min-w-[55px] justify-center">
+                                  <input
+                                    type="number"
+                                    step={['ton', 'm³', 'm3'].includes(item.unit.toLowerCase()) ? "0.001" : "1"}
+                                    min="0.001"
+                                    value={item.quantity}
+                                    onChange={(e) => setDirectQuantity(item.id, parseFloat(e.target.value) || 0)}
+                                    className="w-12 text-center text-xs font-black text-slate-800 dark:text-white bg-transparent outline-none p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    title="Clique para digitar a quantidade diretamente"
+                                  />
+                                  <span className="text-[9px] text-slate-400 uppercase font-bold ml-0.5">{item.unit}</span>
                                 </div>
                                 <button
+                                  type="button"
                                   onClick={() => updateQuantity(item.id, 1)}
                                   className="w-7 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-gray-700 rounded text-slate-500 hover:text-cyan-600 transition-colors"
+                                  title="Aumentar quantidade"
                                 >
                                   <Plus size={13} />
                                 </button>
@@ -4960,13 +5188,26 @@ const Sales = () => {
                               </div>
                             </div>
 
-                            {isScaleConnected && (['ton', 'm³', 'm3', 'kg'].includes(item.unit.toLowerCase())) && (
-                              <div className="flex justify-end gap-2 pt-1 border-t border-slate-100 dark:border-gray-700/40">
-                                <button onClick={() => handleReadScale(item.id)} className="text-[9px] bg-slate-900 text-white px-2 py-1 rounded hover:bg-cyan-600 flex items-center gap-1 font-bold">
-                                  <Scale size={10} /> Ler Peso
+                            {['ton', 'm³', 'm3', 'kg'].includes(item.unit.toLowerCase()) && (
+                              <div className="flex justify-end gap-1.5 pt-1 border-t border-slate-100 dark:border-gray-700/40">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setScalePickerTargetItemId(item.id);
+                                    setScalePickerSearch('');
+                                    setIsScalePickerOpen(true);
+                                  }}
+                                  className="text-[9px] bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 px-2 py-1 rounded-lg hover:bg-cyan-100 flex items-center gap-1 font-bold transition-colors cursor-pointer"
+                                  title="Escolher Guia de Pesagem da Balança Rodoviária"
+                                >
+                                  <Scale size={11} className="text-cyan-600" /> Vincular Guia de Pesagem
                                 </button>
                                 {item.weight && (
-                                  <button onClick={() => toggleUnit(item.id)} className="text-[9px] bg-cyan-100 text-cyan-700 px-2 py-1 rounded hover:bg-cyan-200 flex items-center gap-1 font-bold">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleUnit(item.id)}
+                                    className="text-[9px] bg-slate-100 text-slate-700 dark:bg-gray-700 dark:text-slate-300 px-2 py-1 rounded hover:bg-slate-200 flex items-center gap-1 font-bold transition-colors cursor-pointer"
+                                  >
                                     <ArrowLeftRight size={10} /> Converter
                                   </button>
                                 )}
@@ -5001,19 +5242,58 @@ const Sales = () => {
                                   </div>
                                 </td>
                                 <td className="p-4 text-center">
-                                  <div className="inline-flex items-center bg-slate-50 dark:bg-gray-900 rounded-lg p-1 border dark:border-gray-600">
-                                    <button onClick={() => updateQuantity(item.id, -1)} className="p-1.5 hover:bg-white dark:hover:bg-gray-700 rounded text-slate-400 hover:text-cyan-600 transition-colors"><Minus size={14} /></button>
-                                    <div className="flex flex-col items-center px-2 min-w-[30px]">
-                                      <span className="text-sm font-black text-slate-800 dark:text-white">{item.quantity}</span>
-                                      <span className="text-[9px] text-slate-400 uppercase leading-none">{item.unit}</span>
+                                  <div className="inline-flex items-center bg-slate-50 dark:bg-gray-900 rounded-lg p-1 border dark:border-gray-600 shadow-inner">
+                                    <button
+                                      type="button"
+                                      onClick={() => updateQuantity(item.id, -1)}
+                                      className="p-1.5 hover:bg-white dark:hover:bg-gray-700 rounded text-slate-400 hover:text-cyan-600 transition-colors"
+                                      title="Diminuir quantidade"
+                                    >
+                                      <Minus size={14} />
+                                    </button>
+                                    <div className="flex items-center px-1.5 min-w-[70px] justify-center">
+                                      <input
+                                        type="number"
+                                        step={['ton', 'm³', 'm3'].includes(item.unit.toLowerCase()) ? "0.001" : "1"}
+                                        min="0.001"
+                                        value={item.quantity}
+                                        onChange={(e) => setDirectQuantity(item.id, parseFloat(e.target.value) || 0)}
+                                        className="w-14 text-center text-sm font-black text-slate-800 dark:text-white bg-transparent outline-none p-0 focus:text-cyan-600 focus:font-extrabold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        title="Digite a quantidade diretamente ou use os botões ao lado"
+                                      />
+                                      <span className="text-[9px] text-slate-400 uppercase leading-none font-bold ml-1">{item.unit}</span>
                                     </div>
-                                    <button onClick={() => updateQuantity(item.id, 1)} className="p-1.5 hover:bg-white dark:hover:bg-gray-700 rounded text-slate-400 hover:text-cyan-600 transition-colors"><Plus size={14} /></button>
+                                    <button
+                                      type="button"
+                                      onClick={() => updateQuantity(item.id, 1)}
+                                      className="p-1.5 hover:bg-white dark:hover:bg-gray-700 rounded text-slate-400 hover:text-cyan-600 transition-colors"
+                                      title="Aumentar quantidade"
+                                    >
+                                      <Plus size={14} />
+                                    </button>
                                   </div>
-                                  {isScaleConnected && (['ton', 'm³', 'm3', 'kg'].includes(item.unit.toLowerCase())) && (
-                                    <div className="flex justify-center gap-2 mt-2">
-                                      <button onClick={() => handleReadScale(item.id)} className="text-[9px] bg-slate-900 text-white px-2 py-1 rounded hover:bg-cyan-600 flex items-center gap-1 font-bold"><Scale size={10} /> Ler Peso</button>
+                                  {['ton', 'm³', 'm3', 'kg'].includes(item.unit.toLowerCase()) && (
+                                    <div className="flex justify-center gap-1.5 mt-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setScalePickerTargetItemId(item.id);
+                                          setScalePickerSearch('');
+                                          setIsScalePickerOpen(true);
+                                        }}
+                                        className="text-[9px] bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 px-2 py-1 rounded-lg hover:bg-cyan-100 flex items-center gap-1 font-bold transition-colors cursor-pointer shadow-sm"
+                                        title="Escolher Guia de Pesagem da Balança Rodoviária"
+                                      >
+                                        <Scale size={11} className="text-cyan-600" /> Guia de Pesagem
+                                      </button>
                                       {item.weight && (
-                                        <button onClick={() => toggleUnit(item.id)} className="text-[9px] bg-cyan-100 text-cyan-700 px-2 py-1 rounded hover:bg-cyan-200 flex items-center gap-1 font-bold"><ArrowLeftRight size={10} /> Converter</button>
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleUnit(item.id)}
+                                          className="text-[9px] bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded hover:bg-slate-200 flex items-center gap-1 font-bold transition-colors cursor-pointer"
+                                        >
+                                          <ArrowLeftRight size={10} /> Converter
+                                        </button>
                                       )}
                                     </div>
                                   )}
@@ -5897,16 +6177,16 @@ const Sales = () => {
                   />
                 </div>
 
-                {/* Medição 1: Bruto (Saída/Entrada) */}
+                {/* Medição 1: Peso Inicial (kg) */}
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-0.5">1ª Medição - Peso Bruto (kg)</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-0.5">1ª Medição - Peso Inicial (kg)</label>
                     <button
                       type="button"
                       onClick={() => {
                         const randomGross = Math.floor(25000 + Math.random() * 20000);
                         setScaleForm(prev => ({ ...prev, grossWeight: randomGross }));
-                        addToast(`Peso Bruto capturado da balança: ${randomGross.toLocaleString('pt-BR')} kg`, 'info');
+                        addToast(`1ª Medição capturada da balança: ${randomGross.toLocaleString('pt-BR')} kg`, 'info');
                       }}
                       className="text-[9px] font-bold text-cyan-600 hover:underline uppercase flex items-center gap-0.5"
                     >
@@ -5923,16 +6203,16 @@ const Sales = () => {
                   />
                 </div>
 
-                {/* Medição 2: Tara (kg) */}
+                {/* Medição 2: Peso Final / Tara (kg) */}
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-0.5">2ª Medição - Peso Tara (kg)</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-0.5">2ª Medição - Peso Final / Tara (kg)</label>
                     <button
                       type="button"
                       onClick={() => {
                         const randomTare = Math.floor(11000 + Math.random() * 5000);
                         setScaleForm(prev => ({ ...prev, tareWeight: randomTare }));
-                        addToast(`Peso Tara capturado da balança: ${randomTare.toLocaleString('pt-BR')} kg`, 'info');
+                        addToast(`2ª Medição capturada da balança: ${randomTare.toLocaleString('pt-BR')} kg`, 'info');
                       }}
                       className="text-[9px] font-bold text-cyan-600 hover:underline uppercase flex items-center gap-0.5"
                     >
@@ -5958,10 +6238,10 @@ const Sales = () => {
                     <span className="text-[10px] font-black uppercase text-cyan-700 dark:text-cyan-300 tracking-wider">Peso Líquido Calculado</span>
                     <div className="flex items-baseline gap-2">
                       <span className="text-2xl font-black font-mono text-slate-900 dark:text-white">
-                        {(scaleForm.tareWeight > 0 ? Math.max(0, scaleForm.grossWeight - scaleForm.tareWeight) : 0).toLocaleString('pt-BR')} kg
+                        {(scaleForm.tareWeight > 0 && scaleForm.grossWeight > 0 ? Math.abs(scaleForm.grossWeight - scaleForm.tareWeight) : 0).toLocaleString('pt-BR')} kg
                       </span>
                       <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">
-                        ({(scaleForm.tareWeight > 0 ? (Math.max(0, scaleForm.grossWeight - scaleForm.tareWeight) / 1000).toFixed(3) : '0.000')} ton)
+                        ({(scaleForm.tareWeight > 0 && scaleForm.grossWeight > 0 ? (Math.abs(scaleForm.grossWeight - scaleForm.tareWeight) / 1000).toFixed(3) : '0.000')} ton)
                       </span>
                     </div>
                   </div>
@@ -6063,8 +6343,8 @@ const Sales = () => {
                       <th className="px-5 py-3.5 whitespace-nowrap">Placa & Condutor</th>
                       <th className="px-5 py-3.5 whitespace-nowrap">Cliente / Destinatário</th>
                       <th className="px-5 py-3.5 whitespace-nowrap">Material</th>
-                      <th className="px-5 py-3.5 text-right whitespace-nowrap">Bruto</th>
-                      <th className="px-5 py-3.5 text-right whitespace-nowrap">Tara</th>
+                      <th className="px-5 py-3.5 text-right whitespace-nowrap">1ª Medição</th>
+                      <th className="px-5 py-3.5 text-right whitespace-nowrap">2ª Medição</th>
                       <th className="px-5 py-3.5 text-right whitespace-nowrap">Líquido (Faturado)</th>
                       <th className="px-5 py-3.5 text-center min-w-[260px] whitespace-nowrap bg-slate-100/90 dark:bg-gray-800 font-black text-slate-700 dark:text-slate-200">
                         Ações & Impressão
@@ -6347,7 +6627,7 @@ const Sales = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                      Peso Bruto (kg) *
+                      1ª Medição / Peso Inicial (kg) *
                     </label>
                     <input
                       type="number"
@@ -6358,7 +6638,7 @@ const Sales = () => {
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                      Tara do Veículo (kg)
+                      2ª Medição / Peso Final (kg)
                     </label>
                     <input
                       type="number"
@@ -6372,8 +6652,8 @@ const Sales = () => {
                       Peso Líquido Calculado
                     </label>
                     <div className="px-3 py-2 bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800/40 rounded-xl text-xs font-mono font-black text-cyan-800 dark:text-cyan-200 flex items-center justify-between">
-                      <span>{(Number(editScaleForm.tareWeight || 0) > 0 ? Math.max(0, Number(editScaleForm.grossWeight || 0) - Number(editScaleForm.tareWeight || 0)) : 0).toLocaleString('pt-BR')} kg</span>
-                      <span className="text-[10px] font-bold">{(Number(editScaleForm.tareWeight || 0) > 0 ? (Math.max(0, Number(editScaleForm.grossWeight || 0) - Number(editScaleForm.tareWeight || 0)) / 1000).toFixed(3) : '0.000')} ton</span>
+                      <span>{(Number(editScaleForm.tareWeight || 0) > 0 && Number(editScaleForm.grossWeight || 0) > 0 ? Math.abs(Number(editScaleForm.grossWeight || 0) - Number(editScaleForm.tareWeight || 0)) : 0).toLocaleString('pt-BR')} kg</span>
+                      <span className="text-[10px] font-bold">{(Number(editScaleForm.tareWeight || 0) > 0 && Number(editScaleForm.grossWeight || 0) > 0 ? (Math.abs(Number(editScaleForm.grossWeight || 0) - Number(editScaleForm.tareWeight || 0)) / 1000).toFixed(3) : '0.000')} ton</span>
                     </div>
                   </div>
                 </div>
